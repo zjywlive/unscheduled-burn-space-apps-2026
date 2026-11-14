@@ -592,7 +592,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     } else {
       // north of 80°S: the global LOLA terrain around the point, its skyline computed out to 180 km
       const ctx = await siteCtx.context(site);
-      sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline;
+      sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; c.patch = ctx.patch;
     }
     // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
     const pts = ellipsePoints(c.xKm, c.yKm, { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
@@ -610,7 +610,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
       if (plan.ok) budget = plan.budget;
     } catch { budget = null; }
     const figs = figures({ t, sky, psrShare, psrNote, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, earthWindow: win?.earth ?? true, battH, limitDeg: limit, resKm, stayDays });
-    return { site, landingMs, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, distKm: S.pick ? distanceBearing(S.pick, c).km : 0 };
+    return { site, landingMs, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, patch: c.patch ?? null, distKm: S.pick ? distanceBearing(S.pick, c).km : 0 };
   }
 
   function setBody(html) { body.innerHTML = html; }
@@ -621,8 +621,8 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     const cell = (f) => (f ? `<td class="r g-${G[f.grade]}">${esc(f.text.split(' (')[0].split(' · ')[0])}</td>` : '<td class="r">—</td>');
     body.innerHTML = `
       <div class="pl-point"><b>${esc(c.name)}</b> · ${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}${c.distKm ? ` · ${c.distKm.toFixed(1)} km from your point` : ''}<br><span class="muted">landing ${new Date(c.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC (first lit window)</span></div>
-      <p class="pl-badge ${c.resKm > 0.04 ? 'coarse' : ''}">Terrain ${Math.round(c.resKm * 1000)} m · skyline ${c.polar ? 'polar 480 m' : 'computed from the global LOLA terrain'} · ${c.resKm > 0.1 ? 'lander-scale hazards not resolved' : c.resKm > 0.04 ? 'slopes at ~100 m scale, rocks not resolved' : 'lander-scale slopes resolved, rocks not'}</p>
-      ${c.polar ? '' : `<p class="note pl-fetch">No fine patch here: run <code>node tools/fetch-hires.mjs --at ${c.latDeg.toFixed(3)},${c.lonDeg.toFixed(3)}</code> to fetch one (SLDEM2015 ~59 m between 60°S and 60°N, LOLA polar products near the poles).</p>`}
+      <p class="pl-badge ${c.resKm > 0.04 ? 'coarse' : ''}">Terrain ${Math.round(c.resKm * 1000)} m${c.patch ? ' (SLDEM2015 patch)' : ''} · skyline ${c.polar ? 'polar 480 m' : 'computed from the global LOLA terrain'} · ${c.resKm > 0.1 ? 'lander-scale hazards not resolved' : c.resKm > 0.04 ? 'slopes at ~100 m scale, rocks not resolved' : 'lander-scale slopes resolved, rocks not'}</p>
+      ${c.polar || c.patch ? '' : `<p class="note pl-fetch">No fine patch here: run <code>node tools/fetch-hires.mjs --at ${c.latDeg.toFixed(3)},${c.lonDeg.toFixed(3)}</code> to fetch one (SLDEM2015 ~59 m between 60°S and 60°N, LOLA polar products near the poles).</p>`}
       <p class="pl-verdict g-${c.verdict.grade}">${esc(c.verdict.text)}</p>
       <ul class="pl-figs">${c.figs.map((f) => `<li class="g-${G[f.grade]}"><div class="pl-f-h"><span>${esc(f.label)}</span><span class="pl-g">${f.grade}</span></div><div class="pl-f-v"><b>${esc(f.text)}</b><span class="muted">limit ${esc(f.limit)}</span></div><small>${esc(f.note)}</small></li>`).join('')}</ul>
       <button class="btn primary pl-land">Land here: plan the mission to ${esc(c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name)}</button>

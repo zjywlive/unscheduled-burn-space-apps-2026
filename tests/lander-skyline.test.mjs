@@ -80,3 +80,27 @@ test('skyline: polar map scale, slopes in ground metres, great-circle helpers an
   assert.ok(GAZETTEER.length >= 25 && GAZETTEER.every((f) => f.lonDeg >= 0 && f.lonDeg < 360 && Math.abs(f.latDeg) <= 90 && f.url.startsWith('https://planetarynames.wr.usgs.gov/Feature/')));
   assert.equal(new Set(GAZETTEER.map((f) => f.name)).size, GAZETTEER.length);
 });
+
+test('skyline: a fetched SLDEM2015 patch (Apollo 11, 59 m) samples where it should and agrees with the 474 m terrain', async () => {
+  const { equirectSampler } = await import('../demo/src/lander/globalsite.js');
+  const { decodePack } = await import('../demo/src/globe-terrain.js');
+  // a 2 × 2 patch at 1 px/deg: pixel centres at lat 9.5 / 8.5, lon 20.5 / 21.5
+  const f = equirectSampler({ width: 2, height: 2, ppd: 1, latMax: 10, lonMin: 20, dnToMeters: 0.5 }, Int16Array.from([0, 200, 400, 600]));
+  assert.equal(f(9.5, 20.5), 0); assert.equal(f(8.5, 21.5), 300); assert.equal(f(9, 21), 150);
+  assert.ok(Number.isNaN(f(12, 20.5)), 'outside');
+  assert.equal(f(9.5, 20.5 - 360), 0, 'longitude wraps');
+  const manifest = JSON.parse(readFileSync(`${demo}data/hires.json`, 'utf8'));
+  const e = manifest.patches?.apollo11;
+  if (!e) return;   // no patch fetched in this checkout
+  assert.equal(e.projection, 'equirect');
+  const s = equirectSampler(e, await decodePack(pack(e.pack), e.width));
+  const g = createGlobeTerrain({ load: async (n) => pack(n) });
+  await g.init(); await g.need(G2, -1, 2, 22, 25);
+  const d = [];
+  for (let i = 0; i < 20; i++) for (let j = 0; j < 20; j++) {
+    const lat = e.latMin + ((e.latMax - e.latMin) * (i + 0.5)) / 20, lon = e.lonMin + ((e.lonMax - e.lonMin) * (j + 0.5)) / 20;
+    d.push(s(lat, lon) - g.heightAt(lat, lon));
+  }
+  d.sort((a, b) => a - b);
+  assert.ok(Math.abs(d[d.length >> 1]) < 10, `median difference ${d[d.length >> 1].toFixed(1)} m from LOLA 474 m`);
+});

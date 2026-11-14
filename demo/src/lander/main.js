@@ -68,7 +68,7 @@ export function boot() {
   // high-resolution patches (5/10/20 m) around the listed sites; only the selected site's pack is loaded
   const hires = createHiresSet(json('data-hires'), (name) => loadData(name, { timeoutMs: 60000 }));
   // skyline, height and terrain per site: polar pyramid south of 80°S, global LOLA terrain elsewhere
-  const siteCtx = createSiteContexts({ load: (name) => loadData(name, { timeoutMs: 90000 }), getDem: () => S.dem });
+  const siteCtx = createSiteContexts({ load: (name) => loadData(name, { timeoutMs: 90000 }), getDem: () => S.dem, manifest: json('data-hires') });
   const q = new URLSearchParams(location.search);
   const start0 = startingPoint(q, readMission(), sites, eph);
   let choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
@@ -190,7 +190,8 @@ export function boot() {
       // polar sites: the polar pyramid and the fine patches; elsewhere the global LOLA terrain around the site
       const ctx = S.ctx;
       const terr = ctx && !ctx.polar
-        ? { sample: ctx.sampleXY, resAt: ctx.resAtXY, levelsKm: [ctx.resKm], finestKm: ctx.resKm, bounds: null, hires: null, fine: null, global: ctx.label }
+        ? { sample: ctx.sampleXY, resAt: ctx.resAtXY, levelsKm: ctx.patch ? [ctx.resKm, 0.474] : [ctx.resKm], finestKm: ctx.resKm, bounds: null, hires: null, global: ctx.label, patch: ctx.patch,
+          fine: ctx.patch ? { stepM: Math.round(ctx.resKm * 1000), halfM: Math.floor(Math.min(200 * ctx.resKm, ctx.patch.halfKm * 0.7) * 1000 / Math.round(ctx.resKm * 1000)) * Math.round(ctx.resKm * 1000) } : null }
         : await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => { status(m); loading.set(0.55 + 0.1 * k++, m); } });
       if (token !== S.token) return;
       status('Building the descent terrain…');
@@ -206,7 +207,9 @@ export function boot() {
       const m = (k) => `${Math.round(k * 1000)} m`;
       const shift = S.scenes.surface.terrainInfo()?.offsetM ?? 0;
       S.terrainNote = terr.global
-        ? `Descent terrain: ${terr.global} global LOLA terrain around the site (no polar data north of 80°S); the skyline is ${S.ctx.skyline}. Lander-scale hazards (rocks, small craters, slopes under about 1 km) are not resolved at this resolution. No fine patch here: run node tools/fetch-hires.mjs --at ${plan.site.latDeg.toFixed(3)},${plan.site.lonDeg.toFixed(3)} to fetch one.`
+        ? (terr.patch
+          ? `Descent terrain: ${terr.global} around the site (no polar data north of 80°S); the skyline is ${S.ctx.skyline}. At ${Math.round(terr.patch.kmPerPixel * 1000)} m, slopes over ~100 m are resolved; rocks and small craters are not.`
+          : `Descent terrain: ${terr.global} global LOLA terrain around the site (no polar data north of 80°S); the skyline is ${S.ctx.skyline}. Lander-scale hazards (rocks, small craters, slopes under about 1 km) are not resolved at this resolution. No fine patch here: run node tools/fetch-hires.mjs --at ${plan.site.latDeg.toFixed(3)},${plan.site.lonDeg.toFixed(3)} to fetch one.`)
         : `Descent terrain: LOLA DEM at ${terr.levelsKm.map(m).join(' / ')} around the site (finest first), with lunar curvature.`
         + (terr.hires ? ` The ${m(terr.hires.kmPerPixel)} patch covers ${Math.round(terr.hires.sizeKm)} × ${Math.round(terr.hires.sizeKm)} km around the site; the mesh uses its full resolution within ${(terr.fine?.halfM ?? 0) / 1000} km of the target and coarsens outward.` : ' No high-resolution patch here.')
         + (Math.abs(shift) >= 0.5 ? ` The terrain is shifted ${shift > 0 ? 'up' : 'down'} ${Math.abs(shift).toFixed(1)} m so the site matches the 480 m DEM height the trajectory was planned to.` : '');
