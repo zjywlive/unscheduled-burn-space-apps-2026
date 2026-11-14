@@ -29,7 +29,7 @@ export function startGlobe() {
   const sites = readJson('data-sites') ?? [];
   // high-resolution patches around the sites (5 / 10 / 20 m), loaded as the camera comes close
   const hires = createHiresSet(readJson('data-hires'), (name) => load(name), { onLoad: () => invalidateSouth() });
-  // the mission's steps (mission-flow.js): this page is step 4
+  // the mission's steps (mission-flow.js): this page is step 3
   const stagesSlot = document.getElementById('stages');
   if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, '3d'));
   let inflight = 0;

@@ -1,7 +1,7 @@
 // Entry of demo/lander.html (bundled by tools/build-lander.mjs). Reads the inlined JSON data, plans the mission,
 // builds the three linked scenes and runs the timeline. Deep link: lander.html?site=<id | lat,lon>&t=<ISO time>.
 // Step 2 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
-// stores the site and landing time it plans, and after touchdown it links on to the rover route (step 3).
+// stores the site and landing time it plans, and after touchdown it links on to the rover route (step 2).
 import { createEphemeris } from '../ephemeris.js';
 import { createDem, skylineFor, TERRAIN_MAX_LAT } from '../terrain.js';
 import { hasData, readData, loadData } from '../data-loader.js';
@@ -86,7 +86,7 @@ export function boot() {
   // site picker
   $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
   $('#site').value = S.site.id;
-  // the mission's steps across the pages; this page is step 2
+  // the mission's steps across the pages; this page is step 1
   const stages = stageBar(document, 'landing');
   $('#stages').replaceChildren(stages);
   const roverUrl = () => stageUrl('rover', readMission());

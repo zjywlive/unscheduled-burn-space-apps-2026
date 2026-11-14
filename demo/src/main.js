@@ -1613,7 +1613,7 @@ function start() {
   });
 
   render();
-  // step 3 of the mission (mission-flow.js): arriving with plan=1 opens the Route tool with the landing site as
+  // step 2 of the mission (mission-flow.js): arriving with plan=1 opens the Route tool with the landing site as
   // the start; done after the first full render, once the timeline and the map exist
   function openPlanAtSite() {
     if (!routePlanCard || !state.site || !(state.site.latDeg <= TERRAIN_MAX_LAT)) return;

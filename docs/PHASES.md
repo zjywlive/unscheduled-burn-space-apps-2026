@@ -179,7 +179,8 @@ to land we can just plan further", and "high resolution 3D depth map so we would
 down".
 
 - **One mission across the pages** (`demo/src/mission-flow.js`): the chosen site, landing time and stay are kept
-  in localStorage and carried in the links; every page has the same stage bar, 1 Site (navigator) → 2 Landing
+  in localStorage and carried in the links; every page has the same stage bar (since changed, at the team's request, to 1 Landing (lander) → 2 Rover
+  (navigator) → 3 3D (globe); first version: 1 Site (navigator) → 2 Landing
   (lander) → 3 Rover (navigator, route card opened with the landing site as the start) → 4 3D (globe, at the site,
   or the planned route). The navigator also shows "Plan the landing / Plan the rover route / See it in 3D" under the
   site inspector.

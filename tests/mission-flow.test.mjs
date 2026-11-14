@@ -25,7 +25,7 @@ test('stage links carry the site and landing time to each page', () => {
   assert.match(stageUrl('3d', m), /^globe\.html#lat=-88\.5000&lon=293\.3000&dist=45/);
   assert.equal(stageUrl('3d', m, { route: true }), 'globe.html#route=1');
   assert.equal(stageUrl('landing', null), 'lander.html');
-  assert.equal(STAGES.map((s) => s.id).join(' '), 'site landing rover 3d');
+  assert.equal(STAGES.map((s) => `${s.n} ${s.id}`).join(', '), '1 landing, 2 rover, 3 3d');
 });
 
 test('a custom site (no id) goes as coordinates', () => {

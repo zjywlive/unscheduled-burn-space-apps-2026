@@ -1,6 +1,7 @@
 // One mission across the pages (navigator, lander, 3D globe): the chosen landing site and time travel from
 // step to step, and every page shows the same stage bar
-//   1 Site (index.html) → 2 Landing (lander.html) → 3 Rover (index.html, route card) → 4 3D (globe.html).
+//   1 Landing (lander.html: site, time, descent) → 2 Rover (index.html: site analysis and the route card)
+//   → 3 3D (globe.html).
 // The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
 // small DOM builder with no dependencies, so any page can use it.
 //
@@ -9,10 +10,9 @@
 export const MISSION_KEY = 'lsn-mission';
 export const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
 export const STAGES = Object.freeze([
-  { id: 'site', n: 1, label: 'Site', title: 'Choose the landing site and date (navigator)' },
-  { id: 'landing', n: 2, label: 'Landing', title: 'Fly the lander from Earth orbit to the site (lander)' },
-  { id: 'rover', n: 3, label: 'Rover', title: 'Plan the rover route from the landing site (navigator, route card)' },
-  { id: '3d', n: 4, label: '3D', title: 'See the site and the route on the 3D Moon (globe)' },
+  { id: 'landing', n: 1, label: 'Landing', title: 'Choose the site and time and fly the lander down (lander)' },
+  { id: 'rover', n: 2, label: 'Rover', title: 'Check the site and plan the rover route from it (navigator, route card)' },
+  { id: '3d', n: 3, label: '3D', title: 'See the site and the route on the 3D Moon (globe)' },
 ]);
 
 const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
@@ -107,7 +107,8 @@ export function stageBar(doc, current, { getMission = () => readMission(), compa
   return nav;
 }
 
-// The next steps after a stage as a row of links (for a page's own panel): e.g. after 'site', "Plan the landing",
+// The next steps after a stage as a row of links (for a page's own panel): e.g. from the navigator's site panel
+// (after 'site', which is not a stage, so every stage is listed), "Plan the landing",
 // "Plan the rover route", "See in 3D". Links are rebuilt from the stored mission when used.
 export const NEXT_LABELS = Object.freeze({ landing: 'Plan the landing', rover: 'Plan the rover route', '3d': 'See it in 3D' });
 export function nextSteps(doc, after, { getMission = () => readMission(), className = 'lsn-next' } = {}) {

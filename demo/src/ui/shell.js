@@ -128,8 +128,8 @@ export function createShell(root, { sites, state, onChange }) {
   const topbar = h('header', { class: 'topbar' },
     h('div', { class: 'topbar-brand' }, brand('brand-top'),
       h('div', { class: 'site-picker' }, h('label', { class: 'sr-only', for: siteSelect.id }, 'Landing site'), siteSelect),
-      // the mission's steps across the pages (mission-flow.js): this page is step 1 (and 3, the route card)
-      h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'site', { compact: true }) : null)),
+      // the mission's steps across the pages (mission-flow.js): this page is step 2, the rover (with the site analysis)
+      h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'rover', { compact: true }) : null)),
     h('div', { class: 'topbar-nav' },
       h('nav', { class: 'views', 'aria-label': 'Views' }, viewButtons),
       topModes,

@@ -59,9 +59,9 @@ sunniest), then for the chosen one:
 - *Contingency:* the nearest safe haven (sunlit for a day, Earth in view, reachable with the battery left) from
   every 2 km of the route, and a comms-denied heading using the Sun and Earth.
 
-**One mission, four steps.** Every page carries the same stage bar: 1 Site → 2 Landing → 3 Rover → 4 3D. The site and
-landing date chosen in the navigator go with you to the lander, then back to the route card with the landing site as
-the start, then to the 3D globe.
+**One mission, three steps.** Every page carries the same stage bar: 1 Landing → 2 Rover → 3 3D. The site and landing
+time chosen for the landing (in the lander, or checked in the navigator's site analysis) go with you to the route card,
+with the landing site as the start, then to the 3D globe.
 
 **3D (`demo/globe.html`).** A globe of the whole Moon from LOLA elevation at several levels of detail, down to
 20 m at the south pole and 5–20 m around the landing sites. "Fly along in 3D" puts the planned route on it and plays the simulated rover along it.
