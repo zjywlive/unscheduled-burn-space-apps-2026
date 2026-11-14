@@ -51,7 +51,7 @@ served by us.
 
 **Status (14 Nov).** Built and checked:
 - `tools/fetch-global.mjs` and `tools/build-global.mjs` run as planned. G0, G1 and the north cap are committed
-  (31 MB of packs); G2 is about 330 MB, so it is gitignored and built locally with `--g2`.
+  (about 40 MB of packs on disk); G2 is about 425 MB on disk, so it is gitignored and built locally with `--g2`.
 - `demo/src/globe-terrain.js` `heightAt()`. Tests: it equals the raw LDEM_16 and LDEM_64 values at
   their pixel centres; the overlapping levels agree to within about 120 m (median); the known extremes
   (+10.5 km, −9.1 km) are right.
