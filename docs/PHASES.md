@@ -256,3 +256,9 @@ minimap.
   (azimuth / elevation, subsolar latitude from the 1.54° axis tilt, sub-Earth point from libration, Earth range)
   and Sun / Earth / shadow arrows at the view centre. Built in slices after a gesture; 130–300 ms per full picture
   at 1440 × 900 in headless Chrome. Tests: `tests/terrain-style.test.mjs`.
+- **Action bars** (all pages): actions moved out of the side panels into one bar over the map or the view; side
+  panels keep the inputs and the data. Navigator: `ui/actionbar.js`, a bar each panel fills by kind (point: Sky
+  dial, Details, Plan the landing / rover route, See it in 3D; route: Plan routes, the route chooser with lengths,
+  Self-driving and Use this path, the departure time with its menu of good departures, Fly along in 3D, 3D preview,
+  Save mission; coordinates: Apply, Pick, Add vertex). It sits in the free span between the docked panels and
+  shortens its labels (short names, then two rows, then icons) to fit. Globe: Fly to, waypoints, mapped areas.

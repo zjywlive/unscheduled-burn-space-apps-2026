@@ -2,12 +2,13 @@
 // the same shape objects as drawing on the map (map/shapes.js), from typed latitudes, longitudes and km.
 // Every field uses coords.js, so it accepts −89.45 / 89.45S and 222.6 / 137.4W like the Route plan rows.
 //
-// createShapeEntry(cb) → { el, update(params) }
+// createShapeEntry(cb) → { el, update(params), setBar(open) }
 // cb: {
 //   onShape(shape, slot)        Apply on Rectangle, Circle or Polygon: { type: 'rect', x0, y0, x1, y1 } |
 //                               { type: 'circle', cx, cy, rKm } | { type: 'polygon', points } in map km, for the
 //                               region slot shown ('A' | 'B'), exactly as the drawing tools produce them
 //   onPoint([xKm, yKm], { latDeg, lonDeg })   Apply on Point (the Select tool): pick that point
+//   actionBar                   the action bar (actionbar.js): Apply and Add vertex show there while setBar(true)
 //   onOpenRoutePlan()           the Route tool's "Open Route plan" button (the route rows live in that card)
 // }
 // params (every key optional; a missing key keeps what the form shows):
@@ -105,10 +106,20 @@ export function createShapeEntry(cb = {}) {
   const body = h('div', { class: 'se-body' });
   const errorLine = h('p', { class: 'field-error se-form-error', role: 'alert', hidden: true });
   const status = h('p', { class: 'se-status', role: 'status', 'aria-live': 'polite' });
-  const applyBtn = h('button', { type: 'submit', class: 'btn btn-primary se-apply' }, 'Apply');
-  const actions = h('div', { class: 'se-actions' }, applyBtn);
+  // Apply and Add vertex are buttons of the action bar (actionbar.js) while this form is open; Enter in a field applies
   const form = h('form', { class: 'se-form', novalidate: true, 'aria-labelledby': `${id}-title`, onsubmit: (e) => { e.preventDefault(); apply(); } },
-    body, errorLine, actions, status);
+    body, errorLine, status);
+  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches?.('input')) { e.preventDefault(); apply(); } });
+  let barOn = false;
+  function renderBar() {
+    const bar = cb.actionBar;
+    if (!bar) return;
+    const open = barOn && tool !== 'route';
+    const apply1 = { id: 'apply', label: tool === 'point' ? 'Pick this point' : `Apply to region ${slot}`, short: tool === 'point' ? 'Pick' : 'Apply', icon: 'apply', primary: true, title: 'Make the typed point or shape (Enter in a field does the same)', onClick: () => apply() };
+    const add1 = { id: 'add', label: forms.polygon.rows.length >= MAX_POLYGON ? `At most ${MAX_POLYGON} vertices` : 'Add vertex', short: 'Vertex', icon: 'add', disabled: forms.polygon.rows.length >= MAX_POLYGON, hint: 'The polygon is full', onClick: () => add() };
+    bar.set('point', 'coords', open && tool === 'point' ? [apply1] : []);
+    bar.set('region', 'coords', open && tool !== 'point' ? (tool === 'polygon' ? [apply1, add1] : [apply1]) : []);
+  }
   const el = h('section', { class: 'shape-entry', 'aria-labelledby': `${id}-title` }, h('div', { class: 'se-head' }, title, sub), form);
 
   function readInputs() {
@@ -148,7 +159,6 @@ export function createShapeEntry(cb = {}) {
     clear(body);
     body.className = `se-body is-${tool}`;
     title.textContent = TITLES[tool];
-    actions.hidden = tool === 'route';
     const regionLine = `Applies to region ${slot}.`;
     if (tool === 'point') {
       sub.textContent = 'Pick a point by its coordinates.';
@@ -175,12 +185,13 @@ export function createShapeEntry(cb = {}) {
           iconBtn('×', `Remove vertex ${tag}`, rows.length <= MIN_POLYGON, () => remove(i)))));
       });
       body.append(colsHead('Vertex'), list,
-        h('div', { class: 'se-add-row' }, h('button', { type: 'button', class: 'btn se-add', disabled: rows.length >= MAX_POLYGON, onclick: () => add() }, rows.length >= MAX_POLYGON ? `At most ${MAX_POLYGON} vertices` : 'Add vertex')));
+        null);
     } else {
       sub.textContent = 'Route points are typed in the Route plan section, with the slope limit.';
       body.append(h('button', { type: 'button', class: 'btn se-open-route', onclick: () => cb.onOpenRoutePlan?.() }, 'Open Route plan'));
     }
     showErrors();
+    renderBar();
     if (focusKey) body.querySelector(`[data-key="${focusKey}"]`)?.focus({ preventScroll: true });
   }
 
@@ -262,5 +273,7 @@ export function createShapeEntry(cb = {}) {
   }
 
   render();
-  return { el, update };
+  // the form is open (its fold): its actions show in the bar
+  function setBar(on) { barOn = !!on; renderBar(); }
+  return { el, update, setBar };
 }

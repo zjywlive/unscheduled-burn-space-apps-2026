@@ -4,7 +4,8 @@
 // Phase 5 (G, docs/phase4/mock/structure.html): in the big layout the modes and the Layers menu (filters,
 // overlays, weights) sit in the top bar; the right panel is an inspector that follows the selected object
 // (point / route / region); the status line, legend and scale bar go to the time dock (main.js mounts them).
-import { nextSteps } from '../mission-flow.js';
+import { STAGES, NEXT_LABELS, stageUrl, readMission, hasRoute } from '../mission-flow.js';
+import { createActionBar } from './actionbar.js';
 import { h, s, clear } from './dom.js';
 import { panelIcon, closeX } from './shell.js';
 import { createMapFrame, keepFocus } from './mapframe.js';
@@ -41,8 +42,6 @@ function readLocal(key) { try { return JSON.parse(localStorage.getItem(key) ?? '
 function writeLocal(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage off: in memory only */ } }
 // 16 px line icons for the inspector's buttons (currentColor)
 const icon16 = (...kids) => s('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round', 'aria-hidden': 'true' }, ...kids);
-const dialIcon = () => icon16(s('circle', { cx: 8, cy: 8, r: 5.5 }), s('circle', { cx: 8, cy: 8, r: 1.2, fill: 'currentColor', stroke: 'none' }), s('path', { d: 'M8 1v2M8 13v2M1 8h2M13 8h2' }));
-const outIcon = () => icon16(s('path', { d: 'M6 4h6v6M12 4l-7 7' }));
 const layersIcon = () => icon16(s('path', { d: 'M8 2.5 14 6 8 9.5 2 6z' }), s('path', { d: 'M2 9l6 3.5L14 9' }));
 const closeIcon = () => icon16(s('path', { d: 'M4.5 4.5l7 7M11.5 4.5l-7 7' }));
 
@@ -407,8 +406,17 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   // the official products.
   // phase 5 (owner: every closable or toggled thing has a visible label, a tooltip and a name): the sky dial
   // is a labelled toggle; the site name opens the site list
-  const dialBtn = h('button', { type: 'button', class: 'insp-btn dial-btn', 'aria-pressed': 'true', title: 'Show or hide the sky dial on the map (K)', onclick: () => cb.onDial?.(dialBtn.getAttribute('aria-pressed') !== 'true') }, dialIcon(), 'Sky dial');
-  const detailsBtn = h('button', { type: 'button', class: 'insp-btn details-btn', 'data-action': 'details', 'aria-haspopup': 'dialog', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', onclick: () => cb.onDetails?.() }, 'Details', outIcon());
+  // the point's actions (Sky dial, Details, the next steps of the mission) are in the action bar (actionbar.js)
+  const actionBar = createActionBar(document, { parent: shellParts.app, avoid: () => [shellParts.app?.querySelector('.sidebar'), tools.tools, profileDock, pointCol, rightReopen] });
+  let dialPressed = true;
+  function syncPointBar() {
+    actionBar.set('point', 'site', [
+      { id: 'dial', label: 'Sky dial', short: 'Sky dial', icon: 'sun', pressed: dialPressed, title: 'Show or hide the sky dial on the map (K)', cls: 'dial-btn', onClick: () => cb.onDial?.(!dialPressed) },
+      { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
+      { type: 'divider' },
+      ...STAGES.slice(STAGES.findIndex((st) => st.id === 'site') + 1).map((st) => ({ id: `next-${st.id}`, label: `${NEXT_LABELS[st.id] ?? st.label} →`, short: NEXT_LABELS[st.id]?.split(' ').pop() ?? st.label, icon: 'go', title: st.title, attrs: { 'data-stage': st.id }, href: () => stageUrl(st.id, readMission(), { route: st.id === '3d' && hasRoute() }) })),
+    ]);
+  }
   const pName = h('button', { type: 'button', class: 'point-name insp-name-btn', title: 'Show the site list', 'aria-controls': 'lsn-sidebar', onclick: () => openSites() });
   const pSub = h('p', { class: 'point-coords num' });
   const liveNow = h('span', { class: 'insp-val num' }, DASH);
@@ -418,9 +426,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const btnGroup = h('div', { class: 'insp-btns' });
   const pointHead = h('div', { class: 'insp-head-block' },
     h('div', { class: 'insp-title-row' }, h('div', { class: 'insp-title' }, pName, pSub), btnGroup),
-    h('div', { class: 'insp-actions' }, dialBtn, detailsBtn),
-    // the mission's next steps for this site and date (mission-flow.js)
-    typeof document !== 'undefined' ? nextSteps(document, 'site', { className: 'insp-next' }) : null);
+    null);
   const pointTable = h('div', { class: 'insp-table' });
   // phase 6 A (mock personas.html?s=verdict): the verdict and the way out above the hours table, the live
   // rows under it, then the official products. setVerdict fills them without a re-render (the way out
@@ -485,7 +491,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   function setLive({ now, countdown, dialOn } = {}) {
     if (now !== undefined && liveNow.textContent !== now) liveNow.textContent = now;
     if (countdown !== undefined && liveCount.textContent !== countdown) { liveCount.textContent = countdown; countRow.hidden = !countdown; }
-    if (dialOn !== undefined) dialBtn.setAttribute('aria-pressed', String(!!dialOn));
+    if (dialOn !== undefined && dialPressed !== !!dialOn) { dialPressed = !!dialOn; syncPointBar(); }
   }
 
   function renderBest(best) {
@@ -541,6 +547,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     renderSun();
     swPsr.set(params.showPsr);
     swDial.set(params.dialOn);
+    if (params.dialOn !== undefined && dialPressed !== !!params.dialOn) { dialPressed = !!params.dialOn; syncPointBar(); }
     weightsSec.hidden = params.mode !== 'score';
     weights.update({ weights: params.weights });
     const nFilters = (params.filters?.maxSlope != null ? 1 : 0) + (params.filters?.maxDark != null ? 1 : 0);
@@ -570,8 +577,11 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const kindClose = h('button', { type: 'button', class: 'insp-icon', 'aria-label': 'Close and go back to the selected point', title: 'Close and go back to the selected point', onclick: () => cb.onKind?.('point') }, closeIcon());
   const kindHead = h('div', { class: 'insp-head' }, kindTitle, kindClose);
   let kind = 'point';
+  syncPointBar();
+  actionBar.activate('point');
   function setKind(k) {
     if (pointCol) pointCol.dataset.kind = k;
+    actionBar.activate(k);
     if (k === kind) return;
     kind = k;
     kindTitle.textContent = KIND_TITLE[k] ?? '';
@@ -753,6 +763,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     // the playhead's Sun and Earth, for the readout and the arrows on the map
     setLight(l) { light = l; frame.setLight(l); renderSun(); },
     terrainEl,
+    actionBar,
     setProfileAt(profileAt) { frame.redrawShapes({ profileAt }); },
     openFilters,
     // phase 4: the workflow cards in the folds

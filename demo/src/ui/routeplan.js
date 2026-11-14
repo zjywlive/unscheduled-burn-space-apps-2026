@@ -349,8 +349,6 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   const roverRow = h('div', { class: 'rp-rover' },
     roverInput('descentDeg', 'Descent', '°', 1, 45, 1), roverInput('crossDeg', 'Across', '°', 1, 45, 1), roverInput('speedKmh', 'Speed', 'km/h', 0.05, 20, 0.05));
 
-  const planBtn = h('button', { type: 'submit', class: 'btn btn-primary rp-plan' }, 'Plan routes');   // stays enabled: planning again restarts
-  const cancelBtn = h('button', { type: 'button', class: 'btn rp-cancel', hidden: true, onclick: () => callbacks.onCancel?.() }, 'Cancel');
   const formError = h('p', { class: 'field-error rp-form-error', id: `${id}-form-error`, hidden: true });
 
   // fix R8 (replaces G's closed "Points and slope limit" disclosure): points, Add point, slope limit and
@@ -365,41 +363,30 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       roverRow,
       powerRow,
       stationRow),
-    formError,
-    h('div', { class: 'rp-actions' }, planBtn, cancelBtn));
+    formError);
+  // the actions (Plan routes, the route chooser, Self-driving, Fly along, 3D preview, Save mission) are in the
+  // action bar over the map (actionbar.js); Enter in a field still plans
+  form.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches?.('input[type="text"], input[type="number"]')) { e.preventDefault(); submit(); }
+  });
 
   const status = h('div', { class: 'rp-status', role: 'status', 'aria-live': 'polite' });
   const results = h('div', { class: 'rp-results' });
   const notes = h('ul', { class: 'rp-notes fold-more-body' });
 
   // ---------- self-driving planner (route-rrt.js): Run, progress, the flowchart's steps, the figures ----------
-  const autoRun = h('button', { type: 'button', class: 'btn rp-auto-run', onclick: () => submit(true) }, 'Run');
-  const autoCancel = h('button', { type: 'button', class: 'btn rp-auto-cancel', hidden: true, onclick: () => callbacks.onAutoCancel?.() }, 'Cancel');
-  const autoOffer = h('button', { type: 'button', class: 'btn rp-auto-offer', hidden: true, onclick: () => submit(true) }, 'Try the self-driving planner (it moves blocked waypoints)');
-  const autoFill = h('span'), autoPct = h('span', { class: 'num' });
-  const autoProg = h('p', { class: 'region-progress', hidden: true }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, autoFill), autoPct);
   const autoTrace = h('ol', { class: 'rp-trace', 'aria-label': 'Planner steps' });
   const autoFigs = h('ul', { class: 'rp-energy rp-auto-figs' });
-  const autoUse = h('button', { type: 'button', class: 'btn btn-primary rp-auto-use', onclick: () => callbacks.onAutoUse?.() }, 'Use this path');
   const treesBox = h('input', { type: 'checkbox', id: `${id}-auto-trees`, checked: true });
   treesBox.addEventListener('change', () => callbacks.onAutoTrees?.(treesBox.checked));
-  const autoFoot = h('div', { class: 'rp-auto-foot', hidden: true }, autoUse, h('label', { class: 'rp-auto-trees', for: `${id}-auto-trees` }, treesBox, h('span', null, 'Show search trees')));
+  const autoFoot = h('div', { class: 'rp-auto-foot', hidden: true }, h('label', { class: 'rp-auto-trees', for: `${id}-auto-trees` }, treesBox, h('span', null, 'Show search trees')));
   const autoBox = h('section', { class: 'rp-auto', 'aria-label': 'Self-driving planner' },
     h('p', { class: 'rp-rover-title' }, 'Self-driving planner (B-RRT*)'),
     h('p', { class: 'rp-note-inline' }, 'Grows two random trees over the terrain, leg by leg, and drives the cheapest path they find. It moves a waypoint it cannot reach.'),
-    autoOffer, h('div', { class: 'rp-actions' }, autoRun, autoCancel), autoProg, autoTrace, autoFigs, autoFoot);
+    autoTrace, autoFigs, autoFoot);
   let autoShown = null, autoFlags = '';
   function renderAuto() {
     const r = auto?.result ?? null, run = !!auto?.running;
-    autoOffer.hidden = run || running || !(plan && !plan.ok && (plan.blocked || /^No route/.test(plan.error ?? '')));
-    autoCancel.hidden = !run;
-    autoProg.hidden = !run;
-    if (run) {
-      const pr = Math.max(0, Math.min(1, auto.progress ?? 0));
-      autoFill.style.transform = `scaleX(${pr.toFixed(3)})`;
-      const text = `Planning… ${Math.floor(pr * 10) * 10}%`;
-      if (autoPct.textContent !== text) autoPct.textContent = text;
-    }
     const stale = !!r && !planMatches(r, validPoints ?? lastPoints, limit, mobility);
     const flags = `${stale}|${auto?.used}|${selected}|${run}`;
     if (r === autoShown && flags === autoFlags) return;
@@ -412,15 +399,70 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     if (r && !run) for (const l of autoLines(r)) autoFigs.append(h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text));
     if (stale && !run) autoFigs.append(h('li', { class: 'rp-stale' }, 'Points or limit changed. Run again to update.'));
     autoFoot.hidden = !(r?.ok && !run);
-    const inUse = !!auto?.used && selected === 'auto';
-    autoUse.disabled = inUse || stale;
-    autoUse.textContent = inUse ? 'Using this path' : 'Use this path';
     if (treesBox.checked !== (auto?.showTrees !== false)) treesBox.checked = auto?.showTrees !== false;
   }
 
-  const mission = createMissionFile({ getRecord: () => callbacks.onMissionRecord?.() ?? null, onLoad: (r) => callbacks.onMissionLoad?.(r) });
+  const mission = createMissionFile({ getRecord: () => callbacks.onMissionRecord?.() ?? null, onLoad: (r) => callbacks.onMissionLoad?.(r), onNote: (t) => { barNote = t ?? ''; renderBar(); } });
   const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results, autoBox, mission.el,
     h('details', { class: 'fold-more rp-notes-box' }, h('summary', null, 'Notes'), notes));
+
+  // ---------- the action bar (actionbar.js): this card's actions, while the Route panel is active ----------
+  const SHORT = { short: 'Short', flat: 'Flat', sunny: 'Sun', auto: 'Auto' };
+  let barNote = '';
+  const insetOn = () => { try { return !!callbacks.insetOpen?.(); } catch { return false; } };   // the window is made after the card
+  // the drive's time: departure and arrival (or where the battery runs out), and the departure choices
+  function timeItem(route) {
+    const drive = route && energy && energy.routeId === route.id ? energy.drive : null;
+    const base = { type: 'popover', id: 'time', label: 'Departure time', icon: 'clock', title: 'When the rover leaves: the timeline time, or the best of the departures found', hint: 'Choose a route first' };
+    if (!drive) return { ...base, text: 'Departure', short: 'Time', disabled: true };
+    const day = (ms) => when(ms).replace(' UTC', '');
+    const text = drive.reason === 'ephemeris' ? 'Outside the ephemeris'
+      : drive.ok ? `Leave ${when(drive.departMs)} → arrive ${day(drive.arriveMs)}`
+      : drive.reason === 'empty' ? `Leave ${day(drive.departMs)} → battery out at km ${kmFmt.format(drive.emptyAt.km)}`
+      : `Leave ${day(drive.departMs)} → does not work`;
+    const scan = departures && departures.routeId === route.id ? departures.scan : null;
+    return { ...base, text, short: drive.departMs ? day(drive.departMs) : 'Time',
+      content: [
+        { type: 'button', label: 'Leave at the timeline time', onClick: () => callbacks.onDepartNow?.() },
+        { type: 'button', label: 'Find good departure times', keepOpen: true, onClick: () => callbacks.onFindDepartures?.() },
+        ...(scan ? [{ type: 'text', text: departuresLine(scan) },
+          { type: 'rows', rows: scan.best.map((b) => ({ id: String(b.departMs), label: when(b.departMs), sub: `lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`, selected: drive.departMs === b.departMs, onClick: () => callbacks.onUseDeparture?.(b.departMs) })) }] : [])] };
+  }
+  function barItems() {
+    const run = !!auto?.running;
+    const planned = !!plan?.ok && !running;
+    const route = planned ? plan.routes.find((r) => r.id === selected) : null;
+    const r0 = auto?.result ?? null;
+    const stale = !!r0 && !planMatches(r0, validPoints ?? lastPoints, limit, mobility);
+    const offer = !run && !running && !!plan && !plan.ok && (!!plan.blocked || /^No route/.test(plan.error ?? ''));
+    const items = [{ id: 'plan', label: 'Plan routes', short: 'Plan', icon: 'route', primary: true, title: 'Plan the routes between the points (Enter in a field does the same)', onClick: () => submit() }];
+    if (running) items.push({ type: 'progress', id: 'plan-progress', pct: progress ?? 0, text: `Planning… ${Math.floor(Math.max(0, Math.min(1, progress ?? 0)) * 10) * 10}%`, onCancel: () => callbacks.onCancel?.() });
+    else {
+      items.push({ type: 'segmented', id: 'choose', label: 'Route', value: selected, hint: 'Plan routes first',
+        options: planned ? plan.routes.map((r) => ({ id: r.id, label: names[r.id] ?? r.label, short: SHORT[r.id], sub: r.unavailable ? '' : `${routeFigures(r).length} km`, disabled: !!r.unavailable || !r.points?.length, title: r.unavailable ?? undefined })) : [],
+        onChange: (rid) => pick(rid) });
+    }
+    if (run) items.push({ type: 'progress', id: 'auto-progress', pct: auto.progress ?? 0, text: `Self-driving… ${Math.floor(Math.max(0, Math.min(1, auto.progress ?? 0)) * 10) * 10}%`, onCancel: () => callbacks.onAutoCancel?.() });
+    else {
+      items.push({ id: 'auto', label: 'Self-driving', short: 'Auto', icon: 'car', primary: offer, title: offer ? 'Try the self-driving planner: it moves blocked waypoints' : 'Run the self-driving planner (B-RRT*)', onClick: () => submit(true) });
+      if (r0?.ok) {
+        const inUse = !!auto?.used && selected === 'auto';
+        items.push({ id: 'auto-use', label: inUse ? 'Using this path' : 'Use this path', short: inUse ? 'In use' : 'Use', icon: 'use', primary: !inUse, disabled: inUse || stale, hint: inUse ? '' : 'Points or limit changed. Run again.', onClick: () => callbacks.onAutoUse?.() });
+      }
+    }
+    items.push(timeItem(route));
+    const canRoute = !!route?.profile;
+    items.push({ type: 'divider' },
+      { id: 'fly', label: 'Fly along in 3D', short: 'Fly', icon: 'fly', disabled: !canRoute, hint: 'Choose a route first', onClick: () => callbacks.onFly3d?.() },
+      { id: 'inset', label: '3D preview', short: '3D', icon: 'cube', pressed: insetOn(), disabled: !canRoute && !insetOn(), hint: 'Choose a route first', title: 'Show or hide the 3D preview window', onClick: () => { callbacks.onInset3d?.(); renderBar(); } },
+      { id: 'save', label: 'Save mission', short: 'Save', icon: 'save', disabled: !mission.ready(), hint: 'Choose a route first', onClick: () => mission.save() },
+      { type: 'status', id: 'note', text: barNote });
+    return items;
+  }
+  function renderBar() { deps.actionBar?.set('route', 'plan', barItems()); }
+  // the preview window has its own close button: re-read its state when the bar is reached
+  deps.actionBar?.el.addEventListener('pointerenter', () => renderBar(), true);
+  deps.actionBar?.el.addEventListener('focusin', () => renderBar());
 
   // ---------- points ----------
   function validate(showErrors) {
@@ -543,6 +585,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       formError.hidden = false;
       formError.textContent = r.errors.length === 1 ? 'Fix the highlighted point.' : `Fix the ${r.errors.length} highlighted entries.`;
       const first = r.errors[0];
+      callbacks.onReveal?.();   // the card may be folded: the errors are in it
       list.querySelector(`[data-focus="${first.index}:${first.field}"]`)?.focus();
       return;
     }
@@ -570,7 +613,6 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   const progLine = h('p', { class: 'region-progress' }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, progFill), progText);
 
   function renderStatus(stale) {
-    cancelBtn.hidden = !running;
     if (running) {
       const pr = Math.max(0, Math.min(1, progress ?? 0));
       if (statusKey !== 'running') { statusKey = 'running'; clear(status); status.append(progLine); }
@@ -635,6 +677,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     syncRows();
     renderRover();
     renderAuto();
+    renderBar();
   }
 
   // phase 2: the selected route's rover figures under the rows
@@ -670,18 +713,12 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
         const hl = havenLines(hv, drive);
         return hl.length ? [h('p', { class: 'rp-rover-sub' }, 'If something goes wrong'), h('ul', { class: 'rp-energy rp-havens' }, ...hl.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text)))] : [];
       })(),
-      drive ? h('div', { class: 'rp-depart-row' },
-        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
-        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times'),
-        h('button', { type: 'button', class: 'btn btn-primary rp-depart rp-fly3d', onclick: () => callbacks.onFly3d?.() }, 'Fly along in 3D'),
-        (() => { const b = h('button', { type: 'button', class: 'btn rp-depart rp-inset3d', 'aria-pressed': String(!!callbacks.insetOpen?.()), onclick: () => b.setAttribute('aria-pressed', String(!!callbacks.onInset3d?.())) }, '3D preview'); return b; })()) : null,
       ...(() => {
         const scan = departures && departures.routeId === r.id ? departures.scan : null;
         if (!scan) return [];
         return [h('p', { class: 'rp-dep-line' }, departuresLine(scan)),
           scan.best.length ? h('ul', { class: 'rp-dep-list' }, ...scan.best.map((b) => h('li', null,
-            h('span', null, `${when(b.departMs)} · lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`),
-            h('button', { type: 'button', class: 'btn rp-dep-use', onclick: () => callbacks.onUseDeparture?.(b.departMs) }, 'Use')))) : null];
+            h('span', null, `${when(b.departMs)} · lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`)))) : null];
       })(),
       h('ul', null, ...lines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))));
     if (!roverBox.isConnected || roverBox.parentNode !== results) results.append(roverBox);
@@ -778,6 +815,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     if ('auto' in p) auto = p.auto ?? null;
     const baseBefore = notes.dataset.base;
     mission.setReady(!!plan?.ok && !!selected && !running);
+    if (running && p.running) barNote = '';
     renderResults();
     if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }
   }

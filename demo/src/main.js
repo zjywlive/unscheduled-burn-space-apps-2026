@@ -270,6 +270,7 @@ function start() {
   let sheet = null, dock = null, settingsSheet = null;
   let storyMode = null;   // phase 6 B (ui/storymode.js), made once the commands and the dock exist
   let hashFrozen = false;  // phase 6 B: while a story runs the address bar keeps the visitor's own state (written again on exit)
+  let onCoordsFold = () => {};   // the Coordinates fold opened or closed: its form's actions show in the action bar
   const mapView = plan ? createMapView({
     mapCard: shell.regions.mapCard, pointCard: shell.regions.pointCard, filtersCard: shell.regions.filtersCard,
     regionCard: shell.regions.regionCard, routeCard: shell.regions.routeCard,
@@ -286,6 +287,7 @@ function start() {
     },
     onMode: (mapMode) => update({ mapMode }),
     onPicking: (picking) => update({ picking }),
+    onFold: (name, open) => { if (name === 'coords') onCoordsFold(open); },
     onTool: (tool) => { kind = tool === 'route' ? 'route' : tool === 'select' ? 'point' : 'region'; update({ tool }); entryFold(tool); },
     onKind: (k) => { kind = k; update(k === 'point' ? { tool: 'select' } : {}); },
     onSlot: (slot) => update({ slot }),
@@ -332,8 +334,11 @@ function start() {
     onShape: (shape, slot) => { if (slot !== state.slot) state = { ...state, slot }; api.setRegion(slot, shape); },
     onPoint: (xy, { latDeg, lonDeg }) => pickOnMap({ point: { latDeg: Math.round(latDeg * 1e4) / 1e4, lonDeg: Math.round(lonDeg * 1e4) / 1e4 } }),
     onOpenRoutePlan: () => mapView.setFold('plan', true),
+    actionBar: mapView.actionBar,
   }) : null;
   if (shapeEntry) mapView.mountFold('coords', shapeEntry.el);
+  onCoordsFold = (open) => shapeEntry?.setBar(open);
+  onCoordsFold(mapView?.foldOpen('coords'));
   let entryShapes = { A: shapes.A, B: shapes.B };   // a new object only when a region changes (it refills the form)
   function syncEntry() {
     if (!shapeEntry) return;
@@ -385,7 +390,7 @@ function start() {
   // fix L5: a planned route in the hash is planned again once the first heat map is in
   let rpRestore = state.routePlan?.selected ? { ...state.routePlan } : null;
   function persistRoutePlan() { persist({ routePlan: cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null) }); }
-  const routePlanCard = mapView ? createRoutePlanCard({}, {
+  const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar }, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
     onPlan: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility, departMs: null }; routePlanCard.update({ departures: null }); runPlan(points, maxSlopeDeg).catch(() => {}); },
@@ -414,6 +419,7 @@ function start() {
     onMissionLoad: (rec) => { loadMission(rec).catch(() => {}); },
     onStation: (st) => { rp = { ...rp, station: st, stationOff: !st, coverage: null }; updateComms(); },
     onCancel: () => rpAbort?.abort(),
+    onReveal: () => mapView?.setFold('plan', true),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
   }) : null;

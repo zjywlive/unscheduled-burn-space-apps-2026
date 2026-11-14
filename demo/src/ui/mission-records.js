@@ -6,10 +6,11 @@
 // summaryOf({ route, plan, drive, comms }) → record summary (null where unknown)
 // recordInputs(record) → { points, maxSlopeDeg, mobility, power, station, departMs, routeId, siteName }
 // listText(item) → { title, sub }
-// createMissionFile(callbacks) → { el, refresh(), setReady(bool) }
+// createMissionFile(callbacks) → { el, refresh(), setReady(bool), save(), ready() }   (Save mission is a button of the action bar)
 // callbacks: {
 //   getRecord() → record | null        the record of the selected route as it is now (not stored)
 //   onLoad(record)                     Load pressed (or a file imported)
+//   onNote(text)                       the section's status line changed (the action bar shows it too)
 // }
 import { h, clear } from './dom.js';
 import { toXY } from '../terrain.js';
@@ -71,8 +72,7 @@ export function createMissionFile(callbacks = {}) {
   const id = `lsn-mf-${++uid}`;
   let ready = false;
   const note = h('p', { class: 'mf-note', role: 'status', 'aria-live': 'polite' });
-  const say = (t) => { note.textContent = t ?? ''; };
-  const save = h('button', { type: 'button', class: 'btn mf-btn', onclick: () => doSave() }, 'Save mission');
+  const say = (t) => { note.textContent = t ?? ''; callbacks.onNote?.(t ?? ''); };
   const dl = (label, ext, make, mime) => h('button', { type: 'button', class: 'btn mf-btn', onclick: () => {
     const rec = callbacks.getRecord?.();
     if (!rec) return say('Select a route first.');
@@ -98,7 +98,7 @@ export function createMissionFile(callbacks = {}) {
   const summary = h('summary', null, 'Mission file ', count);
   const el = h('details', { class: 'fold-more rp-file', id }, summary,
     h('div', { class: 'mf-body' },
-      h('div', { class: 'mf-actions' }, save, h('span', { class: 'mf-sep', 'aria-hidden': 'true' }), ...downloads),
+      h('div', { class: 'mf-actions' }, ...downloads),
       note,
       h('p', { class: 'rp-rover-sub' }, 'Saved missions'),
       list,
@@ -133,7 +133,6 @@ export function createMissionFile(callbacks = {}) {
 
   function setReady(on) {
     ready = !!on;
-    save.disabled = !ready;
     for (const b of downloads) b.disabled = !ready;
   }
 
@@ -141,5 +140,5 @@ export function createMissionFile(callbacks = {}) {
   window.addEventListener('storage', (e) => { if (e.key === RECORDS_KEY || e.key === null) refresh(); });
   setReady(false);
   refresh();
-  return { el, refresh, setReady };
+  return { el, refresh, setReady, save: doSave, ready: () => ready };
 }

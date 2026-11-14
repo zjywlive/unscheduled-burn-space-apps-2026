@@ -2564,6 +2564,97 @@ html[data-reduce-motion="true"] :is(.story-card, .app[data-story="on"] *) { tran
 .sky-text.sky-shadow { fill: #fff; }
 .sky-note { fill: rgba(255, 255, 255, 0.7); font-size: 10px; font-weight: 400; stroke: rgba(0, 0, 0, 0.8); stroke-width: 3px; stroke-linejoin: round; }
 
+/* styles/phase9-actionbar.css */
+/* ---------- the action bar (ui/actionbar.js): the open panel's actions, one frosted row at the top centre of the map ----------
+   Floats over the map (it does not push it), below the top bar, clear of the tool rail and the inspector.
+   Same glass, control height and radii as the other map chrome; the variables come from .is-bigmap. */
+.ab-wrap {
+  position: fixed; z-index: 16; top: calc(var(--big-top, 56px) + 12px); left: 12px; right: 12px;   /* left and right are set by the bar (actionbar.js) */
+  display: flex; justify-content: center; pointer-events: none;
+}
+.ab-wrap[hidden] { display: none; }
+.app[data-doc="open"] .ab-wrap, .is-bigmap[data-ui="hidden"] .ab-wrap { display: none; }
+.ab {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 6px; max-width: 100%; pointer-events: auto;
+  padding: var(--pad1, 6px); border-radius: var(--r1, 14px);
+  background: var(--glass, rgba(24, 24, 26, 0.78)); -webkit-backdrop-filter: var(--glass-fx, blur(14px)); backdrop-filter: var(--glass-fx, blur(14px));
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, 0 8px 24px rgba(0, 0, 0, 0.35));
+  --muted: #c6c6c6; --faint: #bebebe;
+}
+.ab-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--ctl, 32px); min-width: var(--ctl, 32px); padding: 0 10px;
+  border: 0; border-radius: var(--r2, 8px); background: none; color: var(--muted); font: inherit; font-size: var(--fs-value, 13px); font-weight: 500;
+  white-space: nowrap; text-decoration: none; cursor: pointer;
+}
+.ab-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.ab-btn:active { scale: 0.97; }
+.ab-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.ab-btn.ab-primary { background: var(--text); color: var(--ground); }
+.ab-btn.ab-primary:hover { background: var(--muted); }
+.ab-btn.is-disabled, .ab-opt.is-disabled { color: var(--faint); opacity: 0.55; cursor: not-allowed; }
+.ab-btn.is-disabled:hover, .ab-opt.is-disabled:hover { background: none; color: var(--faint); }
+.ab-btn:focus-visible, .ab-opt:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.ab-icon { flex: none; }
+.ab-short { display: none; }
+.ab-div { align-self: stretch; width: 1px; margin: 4px 2px; background: var(--hair, rgba(255, 255, 255, 0.14)); }
+/* the chooser */
+.ab-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); border-radius: var(--r2, 8px); }
+.ab-opt {
+  display: inline-flex; align-items: baseline; gap: 6px; height: calc(var(--ctl, 32px) - 8px); padding: 0 10px; border: 0; border-radius: calc(var(--r2, 8px) - 2px);
+  background: none; color: var(--muted); font: inherit; font-size: var(--fs-value, 13px); font-weight: 500; line-height: calc(var(--ctl, 32px) - 8px); white-space: nowrap; cursor: pointer;
+}
+.ab-opt:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.ab-opt[aria-pressed="true"] { background: rgba(255, 255, 255, 0.2); color: var(--text); }
+.ab-opt-sub { color: var(--faint); font-size: var(--fs-label, 12px); font-weight: 400; }
+.ab-opt[aria-pressed="true"] .ab-opt-sub { color: var(--muted); }
+.ab-opt-short { display: none; }
+.ab-seg.is-empty { padding: 0 10px; border-style: dashed; height: calc(var(--ctl, 32px) - 4px); }
+.ab-hint { color: var(--faint); font-size: var(--fs-label, 12px); white-space: nowrap; }
+/* the popover under a bar button */
+.ab-pop {
+  position: absolute; top: calc(100% + 6px); width: min(340px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; display: grid; gap: 6px; pointer-events: auto;
+  padding: var(--pad1, 6px); border-radius: var(--r1, 14px); color: var(--text); z-index: 1;
+  background: var(--glass-panel, rgba(24, 24, 26, 0.9)); -webkit-backdrop-filter: var(--glass-fx, blur(14px)); backdrop-filter: var(--glass-fx, blur(14px));
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, 0 8px 24px rgba(0, 0, 0, 0.35)); --muted: #c6c6c6; --faint: #bebebe;
+}
+.ab-pop-btn { justify-content: flex-start; width: 100%; background: rgba(255, 255, 255, 0.07); }
+.ab-pop-text { margin: 0; padding: 2px 6px; color: var(--muted); font-size: var(--fs-label, 12px); line-height: 16px; }
+.ab-pop-text.is-warn { color: var(--text); }
+.ab-pop-label { margin: 4px 6px 0; color: var(--faint); font-size: var(--fs-label, 12px); }
+.ab-pop-rows { display: grid; gap: 2px; }
+.ab-pop-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; min-height: var(--ctl, 32px); padding: 0 10px; border: 0; border-radius: var(--r2, 8px);
+  background: none; color: var(--muted); font: inherit; font-size: var(--fs-value, 13px); text-align: left; cursor: pointer;
+}
+.ab-pop-row:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.ab-pop-row[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.ab-pop-row:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.ab-pop-sub { color: var(--faint); font-size: var(--fs-label, 12px); }
+.ab-pop-row[aria-pressed="true"] .ab-pop-sub { color: var(--muted); }
+.ab-pop-mark { color: var(--muted); font-size: 11px; }
+.ab-pop-trigger { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+/* progress and messages */
+.ab-prog { display: inline-flex; align-items: center; gap: 8px; padding: 0 4px; color: var(--muted); font-size: var(--fs-label, 12px); }
+.ab-prog-bar { display: block; width: 72px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.ab-prog-bar > span { display: block; height: 100%; background: var(--text); transform-origin: left; transform: scaleX(0); transition: transform 0.2s linear; }
+.ab-live { min-width: 9ch; white-space: nowrap; }
+.ab-cancel { height: calc(var(--ctl, 32px) - 6px); font-size: var(--fs-label, 12px); }
+.ab-status { padding: 0 6px; color: var(--muted); font-size: var(--fs-label, 12px); max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ab-status[hidden] { display: none; }
+/* labels shorten by the width the bar has (actionbar.js), not by the window: names, then icons only */
+.ab-wrap.is-short .ab-btn .ab-label, .ab-wrap.is-short .ab-opt-name, .ab-wrap.is-icons .ab-btn .ab-label, .ab-wrap.is-icons .ab-opt-name { display: none; }
+.ab-wrap.is-short .ab-btn .ab-short, .ab-wrap.is-short .ab-opt-short, .ab-wrap.is-icons .ab-opt-short { display: inline; }
+.ab-wrap.is-icons .ab-opt-sub { display: none; }
+.ab-wrap.is-icons .ab-pop-trigger .ab-short { display: inline; }   /* the departure stays readable */
+.ab-wrap.is-icons .ab-pop-trigger { padding: 0 8px; }
+.ab-wrap.is-short .ab-btn, .ab-wrap.is-short .ab-opt, .ab-wrap.is-icons .ab-btn, .ab-wrap.is-icons .ab-opt { padding: 0 6px; }
+.ab-wrap.is-short .ab-opt, .ab-wrap.is-icons .ab-opt { gap: 4px; }
+.ab-wrap.is-short .ab, .ab-wrap.is-icons .ab { gap: 4px; }
+.ab-wrap.is-icons .ab-btn:not(.ab-cancel) { padding: 0; }
+.ab-wrap.is-icons .ab-prog-bar, .ab-wrap.is-short .ab-prog-bar { width: 40px; }
+@media (max-width: 1100px) { .ab-wrap { top: calc(var(--big-top, 56px) + 8px); } }
+@media (prefers-reduced-motion: reduce) { .ab-prog-bar > span { transition: none; } }
+
 </style>
 </head>
 <body>
@@ -7098,6 +7189,306 @@ function createShell(root, { sites, state, onChange }) {
 
 return { SLIPS, panelIcon, closeX, createShell };
 })();
+__m['ui/actionbar.js'] = (() => {
+// The action bar: one frosted row at the top centre of the map. The side panel keeps the inputs and the
+// data; every action of the active panel is here, so none of them needs a scroll to reach.
+//
+// createActionBar(doc) → { el, set(kind, source, items), activate(kind), active() }
+//   kind     'point' | 'region' | 'route' (the same `kind` the side panel follows); the bar shows the items of the
+//            active kind only and hides when it has none. It never hides while the kind is active and has items.
+//   source   a panel's own name; several sources can fill one kind (they are separated by a divider, in the
+//            order they were first set)
+//   items    plain objects, in order (set() replaces all items of that source, nodes are reused so focus stays):
+//     { id, label, short?, icon?, title?, primary?, pressed?, disabled?, hint?, onClick?, href?, attrs? }
+//        a button (or a link when `href`; `cls` adds a class once); `pressed` boolean makes it a toggle (aria-pressed); `disabled` keeps
+//        it focusable (aria-disabled) and `hint` says why in its tooltip; `short` is a shorter label for narrow
+//        widths, otherwise the label hides and only the icon stays (the name stays as aria-label and tooltip)
+//     { type: 'segmented', id, label, options: [{ id, label, short?, sub?, title?, disabled? }], value, hint?, onChange }
+//        a chooser: the selected option is highlighted (aria-pressed); with no options it shows `hint` instead
+//     { type: 'popover', id, label, text, short?, icon?, title?, disabled?, hint?, content: [...] }
+//        a button showing `text` (a compact summary) that opens a small panel under the bar; Escape, a click outside
+//        and a choice close it. content: { type: 'text', text, warn? } | { type: 'button', label, onClick, keepOpen?, disabled? } |
+//        { type: 'rows', label, empty?, rows: [{ id, label, sub?, selected?, onClick }] }
+//     { type: 'progress', id, text, pct, onCancel? }   a progress line (aria-live) with a Cancel button
+//     { type: 'status', id, text }                       a short live message
+//     { type: 'divider' }
+const { h, s, clear } = __m['ui/dom.js'];
+
+const ICONS = {
+  route: 'M3 13h2a3 3 0 0 0 0-6H4a3 3 0 0 1 0-6h9M12 3l1.5-1.5M12 3l1.5 1.5',
+  car: 'M2 10V8l1.5-3.5h9L14 8v2M2 10h12M2 10v2h2v-2M14 10v2h-2v-2',
+  cube: 'M8 1.5l6 3v7l-6 3-6-3v-7zM2 4.5l6 3 6-3M8 7.5v7',
+  fly: 'M1.5 8l13-5-5 13-2.5-5.5z',
+  save: 'M3 2h8l2 2v10H3zM5 2v4h5V2M5 14v-4h6v4',
+  sun: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3',
+  details: 'M6 4h6v6M12 4l-7 7',
+  plan: 'M2.5 8.5l3 3 8-8',
+  apply: 'M2.5 8.5l3 3 8-8',
+  add: 'M8 3v10M3 8h10',
+  use: 'M2.5 8.5l3 3 8-8',
+  clock: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 5v3.2l2 1.3',
+  go: 'M3 8h10M9 4l4 4-4 4',
+  x: 'M4 4l8 8M12 4l-8 8',
+};
+const icon = (name) => (ICONS[name]
+  ? s('svg', { class: 'ab-icon', width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, s('path', { d: ICONS[name] }))
+  : null);
+
+function createActionBar(doc = document, { parent, avoid = () => [] } = {}) {
+  const bar = h('div', { class: 'ab', role: 'toolbar', 'aria-label': 'Actions for the open panel' });
+  const wrap = h('div', { class: 'ab-wrap', hidden: true }, bar);
+  (parent ?? doc.querySelector('.app') ?? doc.body).append(wrap);
+  const sources = new Map();   // kind → Map(source → items)
+  const nodes = new Map();     // `${source}:${id}` → { type, el, ... }
+  let kind = null;
+
+  const guard = (fn) => (e) => { if (e.currentTarget.getAttribute('aria-disabled') === 'true') { e.preventDefault(); return; } fn?.(e); };
+
+  function makeButton(it) {
+    const el = it.href !== undefined ? h('a', { class: 'ab-btn' }) : h('button', { type: 'button', class: 'ab-btn' });
+    const label = h('span', { class: 'ab-label' }), short = h('span', { class: 'ab-short' });
+    el.append(label, short);
+    const n = { type: 'button', el, label, short, ic: null, icName: null, fn: null };
+    if (it.cls) el.classList.add(...it.cls.split(' '));
+    el.addEventListener('click', guard((e) => n.fn?.(e)));
+    return n;
+  }
+  function patchButton(n, it) {
+    const { el } = n;
+    n.fn = it.onClick ?? null;
+    if (it.icon !== n.icName) { n.ic?.remove(); n.ic = it.icon ? icon(it.icon) : null; n.icName = it.icon; if (n.ic) el.prepend(n.ic); }
+    if (n.label.textContent !== it.label) n.label.textContent = it.label;
+    const short = it.short ?? (it.icon ? '' : it.label);
+    if (n.short.textContent !== short) n.short.textContent = short;
+    el.classList.toggle('ab-primary', !!it.primary);
+    el.classList.toggle('is-disabled', !!it.disabled);
+    el.classList.toggle('is-icon-only', !it.short && !!it.icon);
+    if (it.disabled) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled');
+    el.setAttribute('aria-label', it.label + (it.disabled && it.hint ? `. ${it.hint}` : ''));
+    el.title = it.disabled && it.hint ? `${it.label}: ${it.hint}` : (it.title ?? it.label);
+    if (it.pressed === undefined) el.removeAttribute('aria-pressed'); else el.setAttribute('aria-pressed', String(!!it.pressed));
+    if (it.href !== undefined) el.setAttribute('href', typeof it.href === 'function' ? it.href() : it.href);
+    for (const [k, v] of Object.entries(it.attrs ?? {})) el.setAttribute(k, v);
+    n.hrefFn = typeof it.href === 'function' ? it.href : null;
+  }
+
+  function makeSegmented() {
+    const el = h('div', { class: 'ab-seg', role: 'group' });
+    return { type: 'segmented', el, hint: h('span', { class: 'ab-hint' }), btns: new Map(), fn: null };
+  }
+  function patchSegmented(n, it) {
+    const { el } = n;
+    n.fn = it.onChange ?? null;
+    el.setAttribute('aria-label', it.label);
+    const opts = it.options ?? [];
+    el.classList.toggle('is-empty', !opts.length);
+    if (!opts.length) {
+      if (n.btns.size) { n.btns.clear(); clear(el); }
+      n.hint.textContent = it.hint ?? '';
+      el.title = it.hint ?? '';
+      el.setAttribute('aria-disabled', 'true');
+      if (n.hint.parentNode !== el) el.append(n.hint);
+      return;
+    }
+    el.removeAttribute('aria-disabled'); el.removeAttribute('title');
+    n.hint.remove();
+    const keep = new Set(opts.map((o) => o.id));
+    for (const [id, b] of n.btns) if (!keep.has(id)) { b.el.remove(); n.btns.delete(id); }
+    opts.forEach((o, i) => {
+      let b = n.btns.get(o.id);
+      if (!b) {
+        const name = h('span', { class: 'ab-opt-name' }), shortN = h('span', { class: 'ab-opt-short' }), sub = h('span', { class: 'ab-opt-sub num' });
+        const bEl = h('button', { type: 'button', class: 'ab-opt' }, name, shortN, sub);
+        bEl.addEventListener('click', guard(() => n.fn?.(o.id)));
+        b = { el: bEl, name, shortN, sub };
+        n.btns.set(o.id, b);
+      }
+      if (b.name.textContent !== o.label) b.name.textContent = o.label;
+      const sh = o.short ?? o.label;
+      if (b.shortN.textContent !== sh) b.shortN.textContent = sh;
+      const sub = o.sub ?? '';
+      if (b.sub.textContent !== sub) b.sub.textContent = sub;
+      b.el.setAttribute('aria-pressed', String(o.id === it.value));
+      b.el.classList.toggle('is-disabled', !!o.disabled);
+      if (o.disabled) b.el.setAttribute('aria-disabled', 'true'); else b.el.removeAttribute('aria-disabled');
+      b.el.setAttribute('aria-label', `${o.label}${sub ? `, ${sub}` : ''}${o.disabled && o.title ? `. ${o.title}` : ''}`);
+      b.el.title = o.title ?? `${o.label}${sub ? ` ${sub}` : ''}`;
+      if (el.children[i] !== b.el) el.insertBefore(b.el, el.children[i] ?? null);
+    });
+  }
+
+  // ---------- popover: a trigger in the bar and a panel under it ----------
+  let openNode = null;
+  function closePop(focus = false) {
+    if (!openNode) return;
+    const n = openNode; openNode = null;
+    n.panel.remove(); n.trigger.setAttribute('aria-expanded', 'false');
+    if (focus) n.trigger.focus();
+  }
+  function placePop(n) {
+    const w = wrap.getBoundingClientRect(), tr = n.trigger.getBoundingClientRect(), pw = n.panel.offsetWidth || 320;
+    const left = Math.max(0, Math.min(tr.left - w.left, w.width - pw));
+    n.panel.style.left = `${Math.round(left)}px`;
+  }
+  function fillPop(n) {
+    const c = n.cur.content ?? [];
+    const sig = JSON.stringify(c, (k, v) => (typeof v === 'function' ? undefined : v));
+    if (sig === n.sig) return;
+    n.sig = sig;
+    const had = n.panel.contains(doc.activeElement) ? doc.activeElement.dataset.k : null;
+    clear(n.panel);
+    c.forEach((b, i) => {
+      if (b.type === 'text') n.panel.append(h('p', { class: `ab-pop-text${b.warn ? ' is-warn' : ''}` }, b.text));
+      else if (b.type === 'button') {
+        const el = h('button', { type: 'button', class: 'ab-btn ab-pop-btn', 'data-k': `b${i}` }, b.label);
+        if (b.disabled) { el.classList.add('is-disabled'); el.setAttribute('aria-disabled', 'true'); }
+        el.addEventListener('click', () => { const x = n.cur.content?.[i]; if (!x || el.getAttribute('aria-disabled') === 'true') return; if (!x.keepOpen) closePop(true); x.onClick?.(); });
+        n.panel.append(el);
+      } else if (b.type === 'rows') {
+        if (b.label) n.panel.append(h('p', { class: 'ab-pop-label' }, b.label));
+        if (!b.rows?.length) { if (b.empty) n.panel.append(h('p', { class: 'ab-pop-text' }, b.empty)); return; }
+        const list = h('div', { class: 'ab-pop-rows', role: 'group', 'aria-label': b.label ?? n.cur.label });
+        b.rows.forEach((r, j) => {
+          const el = h('button', { type: 'button', class: 'ab-pop-row', 'aria-pressed': String(!!r.selected), 'data-k': `r${i}.${j}` }, h('span', null, r.label), r.sub ? h('span', { class: 'ab-pop-sub num' }, r.sub) : null, r.selected ? h('span', { class: 'ab-pop-mark' }, 'chosen') : null);
+          el.addEventListener('click', () => { const x = n.cur.content?.[i]?.rows?.[j]; closePop(true); x?.onClick?.(); });
+          list.append(el);
+        });
+        n.panel.append(list);
+      }
+    });
+    if (had) n.panel.querySelector(`[data-k="${had}"]`)?.focus();
+  }
+  function makePopover() {
+    const trigger = h('button', { type: 'button', class: 'ab-btn ab-pop-trigger', 'aria-haspopup': 'true', 'aria-expanded': 'false' });
+    const label = h('span', { class: 'ab-label' }), short = h('span', { class: 'ab-short' });
+    trigger.append(label, short);
+    const panel = h('div', { class: 'ab-pop', role: 'dialog' });
+    const n = { type: 'popover', el: trigger, trigger, label, short, panel, ic: null, icName: null, cur: null, sig: null };
+    trigger.addEventListener('click', () => {
+      if (trigger.getAttribute('aria-disabled') === 'true') return;
+      if (openNode === n) { closePop(); return; }
+      closePop();
+      openNode = n; trigger.setAttribute('aria-expanded', 'true'); n.sig = null; fillPop(n); wrap.append(panel); placePop(n);
+      (panel.querySelector('button') ?? trigger).focus();
+    });
+    return n;
+  }
+  function patchPopover(n, it) {
+    n.cur = it;
+    const { trigger } = n;
+    if (it.icon !== n.icName) { n.ic?.remove(); n.ic = it.icon ? icon(it.icon) : null; n.icName = it.icon; if (n.ic) trigger.prepend(n.ic); }
+    if (n.label.textContent !== it.text) n.label.textContent = it.text ?? '';
+    const sh = it.short ?? '';
+    if (n.short.textContent !== sh) n.short.textContent = sh;
+    trigger.classList.toggle('is-disabled', !!it.disabled);
+    if (it.disabled) { trigger.setAttribute('aria-disabled', 'true'); if (openNode === n) closePop(); } else trigger.removeAttribute('aria-disabled');
+    trigger.setAttribute('aria-label', `${it.label}: ${it.text ?? ''}${it.disabled && it.hint ? `. ${it.hint}` : ''}`);
+    trigger.title = it.disabled && it.hint ? `${it.label}: ${it.hint}` : (it.title ?? it.label);
+    n.panel.setAttribute('aria-label', it.label);
+    if (openNode === n) { fillPop(n); placePop(n); }
+  }
+  doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openNode) { e.preventDefault(); e.stopPropagation(); closePop(true); } }, true);
+  doc.addEventListener('pointerdown', (e) => { if (openNode && !openNode.panel.contains(e.target) && !openNode.trigger.contains(e.target)) closePop(); });
+
+  function makeProgress() {
+    const fill = h('span'), text = h('span', { class: 'num ab-prog-text' });
+    const cancel = h('button', { type: 'button', class: 'ab-btn ab-cancel' }, 'Cancel');
+    const n = { type: 'progress', fill, text, cancel, fn: null };
+    cancel.addEventListener('click', () => n.fn?.());
+    n.el = h('span', { class: 'ab-prog' }, h('span', { class: 'ab-prog-bar', 'aria-hidden': 'true' }, fill), h('span', { class: 'ab-live', role: 'status', 'aria-live': 'polite' }, text), cancel);
+    return n;
+  }
+  function patchProgress(n, it) {
+    n.fn = it.onCancel ?? null;
+    n.cancel.hidden = !it.onCancel;
+    n.fill.style.transform = `scaleX(${Math.max(0, Math.min(1, it.pct ?? 0)).toFixed(3)})`;
+    if (n.text.textContent !== it.text) n.text.textContent = it.text ?? '';
+  }
+
+  function makeStatus() { const el = h('span', { class: 'ab-status', role: 'status', 'aria-live': 'polite' }); return { type: 'status', el }; }
+  function patchStatus(n, it) { if (n.el.textContent !== (it.text ?? '')) n.el.textContent = it.text ?? ''; n.el.hidden = !it.text; }
+
+  const make = { button: makeButton, segmented: makeSegmented, popover: makePopover, progress: makeProgress, status: makeStatus, divider: () => ({ type: 'divider', el: h('span', { class: 'ab-div', 'aria-hidden': 'true' }) }) };
+  const patch = { button: patchButton, segmented: patchSegmented, popover: patchPopover, progress: patchProgress, status: patchStatus, divider: () => {} };
+
+  function render() {
+    const map = kind ? sources.get(kind) : null;
+    const flat = [];
+    let n = 0;
+    for (const [source, items] of map ?? []) {
+      if (!items.length) continue;
+      if (flat.length) flat.push({ key: `div:${n++}`, it: { type: 'divider' } });
+      for (const it of items) flat.push({ key: `${kind}:${source}:${it.id ?? it.type}`, it });
+    }
+    wrap.hidden = !flat.length;
+    layoutSoon();
+    const live = new Set(flat.map((f) => f.key));
+    for (const [k, node] of nodes) if (!live.has(k)) { if (openNode === node) closePop(); node.el.remove(); nodes.delete(k); }
+    flat.forEach(({ key, it }, i) => {
+      const type = it.type ?? 'button';
+      let node = nodes.get(key);
+      if (!node || node.type !== type) { node?.el.remove(); node = make[type](it); nodes.set(key, node); }
+      patch[type](node, it);
+      if (bar.children[i] !== node.el) bar.insertBefore(node.el, bar.children[i] ?? null);
+    });
+  }
+
+  // ---------- where it sits: the free span of the map between the panels ----------
+  // Its left edge is 12 px past whatever is docked on the left in the bar's band (tool rail, site list, route
+  // profile), its right edge 12 px before whatever is on the right (the inspector); it is centred in that span and
+  // shortens its labels (short names, then two rows of them, then icons only) to fit. Re-done when a panel appears, goes or
+  // resizes, and when the window does.
+  const GAP = 12;
+  const watched = new Set();
+  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => layout()) : null;
+  let raf = 0;
+  function layout() {
+    if (wrap.hidden) return;
+    const vw = doc.documentElement.clientWidth || window.innerWidth;
+    const top = wrap.getBoundingClientRect().top, band = Math.max(bar.offsetHeight, 46);
+    let left = GAP, right = GAP;
+    for (const el of avoid()) {
+      if (!el) continue;
+      if (ro && !watched.has(el)) { watched.add(el); ro.observe(el); }
+      if (!el.getClientRects().length) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.bottom <= top || r.top >= top + band) continue;
+      if (r.left + r.width / 2 < vw / 2) left = Math.max(left, r.right + GAP); else right = Math.max(right, vw - r.left + GAP);
+    }
+    wrap.style.left = `${Math.round(left)}px`; wrap.style.right = `${Math.round(right)}px`;
+    // full names on one row, else short names on one row, else short names on two rows (labels read better than
+    // bare icons), else icons on one row
+    for (const [level, maxH] of [['', 50], ['is-short', 50], ['is-short', 96], ['is-icons', 50]]) {
+      wrap.classList.remove('is-short', 'is-icons');
+      if (level) wrap.classList.add(level);
+      if (bar.offsetHeight <= maxH) break;
+    }
+  }
+  function layoutSoon() { cancelAnimationFrame(raf); raf = requestAnimationFrame(layout); }
+  window.addEventListener('resize', layoutSoon);
+  doc.addEventListener('transitionend', layoutSoon);
+  if (ro) ro.observe(bar);
+
+  // a link's address is made when it is used (the mission it points at can change)
+  bar.addEventListener('pointerenter', refreshLinks, true);
+  bar.addEventListener('focusin', refreshLinks);
+  function refreshLinks() { for (const n of nodes.values()) if (n.hrefFn) n.el.setAttribute('href', n.hrefFn()); }
+
+  return {
+    el: wrap,
+    layout: layoutSoon,
+    set(k, source, items) {
+      if (!sources.has(k)) sources.set(k, new Map());
+      sources.get(k).set(source, items ?? []);
+      if (k === kind) render();
+    },
+    activate(k) { if (k === kind) return; closePop(); kind = k; render(); },
+    active: () => kind,
+  };
+}
+
+return { createActionBar };
+})();
 __m['map/layers.js'] = (() => {
 // Canvas layers of the south-pole map (spec phase 2 §4.2, phase 3 §5.3): a low-contrast hillshade from
 // a DEM, and a heat layer drawn per grid cell in the data colours of the existing tokens. Without the
@@ -8888,10 +9279,11 @@ __m['ui/mission-records.js'] = (() => {
 // summaryOf({ route, plan, drive, comms }) → record summary (null where unknown)
 // recordInputs(record) → { points, maxSlopeDeg, mobility, power, station, departMs, routeId, siteName }
 // listText(item) → { title, sub }
-// createMissionFile(callbacks) → { el, refresh(), setReady(bool) }
+// createMissionFile(callbacks) → { el, refresh(), setReady(bool), save(), ready() }   (Save mission is a button of the action bar)
 // callbacks: {
 //   getRecord() → record | null        the record of the selected route as it is now (not stored)
 //   onLoad(record)                     Load pressed (or a file imported)
+//   onNote(text)                       the section's status line changed (the action bar shows it too)
 // }
 const { h, clear } = __m['ui/dom.js'];
 const { toXY } = __m['terrain.js'];
@@ -8953,8 +9345,7 @@ function createMissionFile(callbacks = {}) {
   const id = `lsn-mf-${++uid}`;
   let ready = false;
   const note = h('p', { class: 'mf-note', role: 'status', 'aria-live': 'polite' });
-  const say = (t) => { note.textContent = t ?? ''; };
-  const save = h('button', { type: 'button', class: 'btn mf-btn', onclick: () => doSave() }, 'Save mission');
+  const say = (t) => { note.textContent = t ?? ''; callbacks.onNote?.(t ?? ''); };
   const dl = (label, ext, make, mime) => h('button', { type: 'button', class: 'btn mf-btn', onclick: () => {
     const rec = callbacks.getRecord?.();
     if (!rec) return say('Select a route first.');
@@ -8980,7 +9371,7 @@ function createMissionFile(callbacks = {}) {
   const summary = h('summary', null, 'Mission file ', count);
   const el = h('details', { class: 'fold-more rp-file', id }, summary,
     h('div', { class: 'mf-body' },
-      h('div', { class: 'mf-actions' }, save, h('span', { class: 'mf-sep', 'aria-hidden': 'true' }), ...downloads),
+      h('div', { class: 'mf-actions' }, ...downloads),
       note,
       h('p', { class: 'rp-rover-sub' }, 'Saved missions'),
       list,
@@ -9015,7 +9406,6 @@ function createMissionFile(callbacks = {}) {
 
   function setReady(on) {
     ready = !!on;
-    save.disabled = !ready;
     for (const b of downloads) b.disabled = !ready;
   }
 
@@ -9023,7 +9413,7 @@ function createMissionFile(callbacks = {}) {
   window.addEventListener('storage', (e) => { if (e.key === RECORDS_KEY || e.key === null) refresh(); });
   setReady(false);
   refresh();
-  return { el, refresh, setReady };
+  return { el, refresh, setReady, save: doSave, ready: () => ready };
 }
 
 return { settingsOf, summaryOf, recordInputs, listText, createMissionFile };
@@ -9380,8 +9770,6 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   const roverRow = h('div', { class: 'rp-rover' },
     roverInput('descentDeg', 'Descent', '°', 1, 45, 1), roverInput('crossDeg', 'Across', '°', 1, 45, 1), roverInput('speedKmh', 'Speed', 'km/h', 0.05, 20, 0.05));
 
-  const planBtn = h('button', { type: 'submit', class: 'btn btn-primary rp-plan' }, 'Plan routes');   // stays enabled: planning again restarts
-  const cancelBtn = h('button', { type: 'button', class: 'btn rp-cancel', hidden: true, onclick: () => callbacks.onCancel?.() }, 'Cancel');
   const formError = h('p', { class: 'field-error rp-form-error', id: `${id}-form-error`, hidden: true });
 
   // fix R8 (replaces G's closed "Points and slope limit" disclosure): points, Add point, slope limit and
@@ -9396,41 +9784,30 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
       roverRow,
       powerRow,
       stationRow),
-    formError,
-    h('div', { class: 'rp-actions' }, planBtn, cancelBtn));
+    formError);
+  // the actions (Plan routes, the route chooser, Self-driving, Fly along, 3D preview, Save mission) are in the
+  // action bar over the map (actionbar.js); Enter in a field still plans
+  form.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches?.('input[type="text"], input[type="number"]')) { e.preventDefault(); submit(); }
+  });
 
   const status = h('div', { class: 'rp-status', role: 'status', 'aria-live': 'polite' });
   const results = h('div', { class: 'rp-results' });
   const notes = h('ul', { class: 'rp-notes fold-more-body' });
 
   // ---------- self-driving planner (route-rrt.js): Run, progress, the flowchart's steps, the figures ----------
-  const autoRun = h('button', { type: 'button', class: 'btn rp-auto-run', onclick: () => submit(true) }, 'Run');
-  const autoCancel = h('button', { type: 'button', class: 'btn rp-auto-cancel', hidden: true, onclick: () => callbacks.onAutoCancel?.() }, 'Cancel');
-  const autoOffer = h('button', { type: 'button', class: 'btn rp-auto-offer', hidden: true, onclick: () => submit(true) }, 'Try the self-driving planner (it moves blocked waypoints)');
-  const autoFill = h('span'), autoPct = h('span', { class: 'num' });
-  const autoProg = h('p', { class: 'region-progress', hidden: true }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, autoFill), autoPct);
   const autoTrace = h('ol', { class: 'rp-trace', 'aria-label': 'Planner steps' });
   const autoFigs = h('ul', { class: 'rp-energy rp-auto-figs' });
-  const autoUse = h('button', { type: 'button', class: 'btn btn-primary rp-auto-use', onclick: () => callbacks.onAutoUse?.() }, 'Use this path');
   const treesBox = h('input', { type: 'checkbox', id: `${id}-auto-trees`, checked: true });
   treesBox.addEventListener('change', () => callbacks.onAutoTrees?.(treesBox.checked));
-  const autoFoot = h('div', { class: 'rp-auto-foot', hidden: true }, autoUse, h('label', { class: 'rp-auto-trees', for: `${id}-auto-trees` }, treesBox, h('span', null, 'Show search trees')));
+  const autoFoot = h('div', { class: 'rp-auto-foot', hidden: true }, h('label', { class: 'rp-auto-trees', for: `${id}-auto-trees` }, treesBox, h('span', null, 'Show search trees')));
   const autoBox = h('section', { class: 'rp-auto', 'aria-label': 'Self-driving planner' },
     h('p', { class: 'rp-rover-title' }, 'Self-driving planner (B-RRT*)'),
     h('p', { class: 'rp-note-inline' }, 'Grows two random trees over the terrain, leg by leg, and drives the cheapest path they find. It moves a waypoint it cannot reach.'),
-    autoOffer, h('div', { class: 'rp-actions' }, autoRun, autoCancel), autoProg, autoTrace, autoFigs, autoFoot);
+    autoTrace, autoFigs, autoFoot);
   let autoShown = null, autoFlags = '';
   function renderAuto() {
     const r = auto?.result ?? null, run = !!auto?.running;
-    autoOffer.hidden = run || running || !(plan && !plan.ok && (plan.blocked || /^No route/.test(plan.error ?? '')));
-    autoCancel.hidden = !run;
-    autoProg.hidden = !run;
-    if (run) {
-      const pr = Math.max(0, Math.min(1, auto.progress ?? 0));
-      autoFill.style.transform = `scaleX(${pr.toFixed(3)})`;
-      const text = `Planning… ${Math.floor(pr * 10) * 10}%`;
-      if (autoPct.textContent !== text) autoPct.textContent = text;
-    }
     const stale = !!r && !planMatches(r, validPoints ?? lastPoints, limit, mobility);
     const flags = `${stale}|${auto?.used}|${selected}|${run}`;
     if (r === autoShown && flags === autoFlags) return;
@@ -9443,15 +9820,70 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     if (r && !run) for (const l of autoLines(r)) autoFigs.append(h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text));
     if (stale && !run) autoFigs.append(h('li', { class: 'rp-stale' }, 'Points or limit changed. Run again to update.'));
     autoFoot.hidden = !(r?.ok && !run);
-    const inUse = !!auto?.used && selected === 'auto';
-    autoUse.disabled = inUse || stale;
-    autoUse.textContent = inUse ? 'Using this path' : 'Use this path';
     if (treesBox.checked !== (auto?.showTrees !== false)) treesBox.checked = auto?.showTrees !== false;
   }
 
-  const mission = createMissionFile({ getRecord: () => callbacks.onMissionRecord?.() ?? null, onLoad: (r) => callbacks.onMissionLoad?.(r) });
+  const mission = createMissionFile({ getRecord: () => callbacks.onMissionRecord?.() ?? null, onLoad: (r) => callbacks.onMissionLoad?.(r), onNote: (t) => { barNote = t ?? ''; renderBar(); } });
   const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results, autoBox, mission.el,
     h('details', { class: 'fold-more rp-notes-box' }, h('summary', null, 'Notes'), notes));
+
+  // ---------- the action bar (actionbar.js): this card's actions, while the Route panel is active ----------
+  const SHORT = { short: 'Short', flat: 'Flat', sunny: 'Sun', auto: 'Auto' };
+  let barNote = '';
+  const insetOn = () => { try { return !!callbacks.insetOpen?.(); } catch { return false; } };   // the window is made after the card
+  // the drive's time: departure and arrival (or where the battery runs out), and the departure choices
+  function timeItem(route) {
+    const drive = route && energy && energy.routeId === route.id ? energy.drive : null;
+    const base = { type: 'popover', id: 'time', label: 'Departure time', icon: 'clock', title: 'When the rover leaves: the timeline time, or the best of the departures found', hint: 'Choose a route first' };
+    if (!drive) return { ...base, text: 'Departure', short: 'Time', disabled: true };
+    const day = (ms) => when(ms).replace(' UTC', '');
+    const text = drive.reason === 'ephemeris' ? 'Outside the ephemeris'
+      : drive.ok ? `Leave ${when(drive.departMs)} → arrive ${day(drive.arriveMs)}`
+      : drive.reason === 'empty' ? `Leave ${day(drive.departMs)} → battery out at km ${kmFmt.format(drive.emptyAt.km)}`
+      : `Leave ${day(drive.departMs)} → does not work`;
+    const scan = departures && departures.routeId === route.id ? departures.scan : null;
+    return { ...base, text, short: drive.departMs ? day(drive.departMs) : 'Time',
+      content: [
+        { type: 'button', label: 'Leave at the timeline time', onClick: () => callbacks.onDepartNow?.() },
+        { type: 'button', label: 'Find good departure times', keepOpen: true, onClick: () => callbacks.onFindDepartures?.() },
+        ...(scan ? [{ type: 'text', text: departuresLine(scan) },
+          { type: 'rows', rows: scan.best.map((b) => ({ id: String(b.departMs), label: when(b.departMs), sub: `lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`, selected: drive.departMs === b.departMs, onClick: () => callbacks.onUseDeparture?.(b.departMs) })) }] : [])] };
+  }
+  function barItems() {
+    const run = !!auto?.running;
+    const planned = !!plan?.ok && !running;
+    const route = planned ? plan.routes.find((r) => r.id === selected) : null;
+    const r0 = auto?.result ?? null;
+    const stale = !!r0 && !planMatches(r0, validPoints ?? lastPoints, limit, mobility);
+    const offer = !run && !running && !!plan && !plan.ok && (!!plan.blocked || /^No route/.test(plan.error ?? ''));
+    const items = [{ id: 'plan', label: 'Plan routes', short: 'Plan', icon: 'route', primary: true, title: 'Plan the routes between the points (Enter in a field does the same)', onClick: () => submit() }];
+    if (running) items.push({ type: 'progress', id: 'plan-progress', pct: progress ?? 0, text: `Planning… ${Math.floor(Math.max(0, Math.min(1, progress ?? 0)) * 10) * 10}%`, onCancel: () => callbacks.onCancel?.() });
+    else {
+      items.push({ type: 'segmented', id: 'choose', label: 'Route', value: selected, hint: 'Plan routes first',
+        options: planned ? plan.routes.map((r) => ({ id: r.id, label: names[r.id] ?? r.label, short: SHORT[r.id], sub: r.unavailable ? '' : `${routeFigures(r).length} km`, disabled: !!r.unavailable || !r.points?.length, title: r.unavailable ?? undefined })) : [],
+        onChange: (rid) => pick(rid) });
+    }
+    if (run) items.push({ type: 'progress', id: 'auto-progress', pct: auto.progress ?? 0, text: `Self-driving… ${Math.floor(Math.max(0, Math.min(1, auto.progress ?? 0)) * 10) * 10}%`, onCancel: () => callbacks.onAutoCancel?.() });
+    else {
+      items.push({ id: 'auto', label: 'Self-driving', short: 'Auto', icon: 'car', primary: offer, title: offer ? 'Try the self-driving planner: it moves blocked waypoints' : 'Run the self-driving planner (B-RRT*)', onClick: () => submit(true) });
+      if (r0?.ok) {
+        const inUse = !!auto?.used && selected === 'auto';
+        items.push({ id: 'auto-use', label: inUse ? 'Using this path' : 'Use this path', short: inUse ? 'In use' : 'Use', icon: 'use', primary: !inUse, disabled: inUse || stale, hint: inUse ? '' : 'Points or limit changed. Run again.', onClick: () => callbacks.onAutoUse?.() });
+      }
+    }
+    items.push(timeItem(route));
+    const canRoute = !!route?.profile;
+    items.push({ type: 'divider' },
+      { id: 'fly', label: 'Fly along in 3D', short: 'Fly', icon: 'fly', disabled: !canRoute, hint: 'Choose a route first', onClick: () => callbacks.onFly3d?.() },
+      { id: 'inset', label: '3D preview', short: '3D', icon: 'cube', pressed: insetOn(), disabled: !canRoute && !insetOn(), hint: 'Choose a route first', title: 'Show or hide the 3D preview window', onClick: () => { callbacks.onInset3d?.(); renderBar(); } },
+      { id: 'save', label: 'Save mission', short: 'Save', icon: 'save', disabled: !mission.ready(), hint: 'Choose a route first', onClick: () => mission.save() },
+      { type: 'status', id: 'note', text: barNote });
+    return items;
+  }
+  function renderBar() { deps.actionBar?.set('route', 'plan', barItems()); }
+  // the preview window has its own close button: re-read its state when the bar is reached
+  deps.actionBar?.el.addEventListener('pointerenter', () => renderBar(), true);
+  deps.actionBar?.el.addEventListener('focusin', () => renderBar());
 
   // ---------- points ----------
   function validate(showErrors) {
@@ -9574,6 +10006,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
       formError.hidden = false;
       formError.textContent = r.errors.length === 1 ? 'Fix the highlighted point.' : `Fix the ${r.errors.length} highlighted entries.`;
       const first = r.errors[0];
+      callbacks.onReveal?.();   // the card may be folded: the errors are in it
       list.querySelector(`[data-focus="${first.index}:${first.field}"]`)?.focus();
       return;
     }
@@ -9601,7 +10034,6 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   const progLine = h('p', { class: 'region-progress' }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, progFill), progText);
 
   function renderStatus(stale) {
-    cancelBtn.hidden = !running;
     if (running) {
       const pr = Math.max(0, Math.min(1, progress ?? 0));
       if (statusKey !== 'running') { statusKey = 'running'; clear(status); status.append(progLine); }
@@ -9666,6 +10098,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     syncRows();
     renderRover();
     renderAuto();
+    renderBar();
   }
 
   // phase 2: the selected route's rover figures under the rows
@@ -9701,18 +10134,12 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
         const hl = havenLines(hv, drive);
         return hl.length ? [h('p', { class: 'rp-rover-sub' }, 'If something goes wrong'), h('ul', { class: 'rp-energy rp-havens' }, ...hl.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text)))] : [];
       })(),
-      drive ? h('div', { class: 'rp-depart-row' },
-        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
-        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times'),
-        h('button', { type: 'button', class: 'btn btn-primary rp-depart rp-fly3d', onclick: () => callbacks.onFly3d?.() }, 'Fly along in 3D'),
-        (() => { const b = h('button', { type: 'button', class: 'btn rp-depart rp-inset3d', 'aria-pressed': String(!!callbacks.insetOpen?.()), onclick: () => b.setAttribute('aria-pressed', String(!!callbacks.onInset3d?.())) }, '3D preview'); return b; })()) : null,
       ...(() => {
         const scan = departures && departures.routeId === r.id ? departures.scan : null;
         if (!scan) return [];
         return [h('p', { class: 'rp-dep-line' }, departuresLine(scan)),
           scan.best.length ? h('ul', { class: 'rp-dep-list' }, ...scan.best.map((b) => h('li', null,
-            h('span', null, `${when(b.departMs)} · lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`),
-            h('button', { type: 'button', class: 'btn rp-dep-use', onclick: () => callbacks.onUseDeparture?.(b.departMs) }, 'Use')))) : null];
+            h('span', null, `${when(b.departMs)} · lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`)))) : null];
       })(),
       h('ul', null, ...lines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))));
     if (!roverBox.isConnected || roverBox.parentNode !== results) results.append(roverBox);
@@ -9809,6 +10236,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     if ('auto' in p) auto = p.auto ?? null;
     const baseBefore = notes.dataset.base;
     mission.setReady(!!plan?.ok && !!selected && !running);
+    if (running && p.running) barNote = '';
     renderResults();
     if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }
   }
@@ -12423,7 +12851,8 @@ __m['ui/mapview.js'] = (() => {
 // Phase 5 (G, docs/phase4/mock/structure.html): in the big layout the modes and the Layers menu (filters,
 // overlays, weights) sit in the top bar; the right panel is an inspector that follows the selected object
 // (point / route / region); the status line, legend and scale bar go to the time dock (main.js mounts them).
-const { nextSteps } = __m['mission-flow.js'];
+const { STAGES, NEXT_LABELS, stageUrl, readMission, hasRoute } = __m['mission-flow.js'];
+const { createActionBar } = __m['ui/actionbar.js'];
 const { h, s, clear } = __m['ui/dom.js'];
 const { panelIcon, closeX } = __m['ui/shell.js'];
 const { createMapFrame, keepFocus } = __m['ui/mapframe.js'];
@@ -12460,8 +12889,6 @@ function readLocal(key) { try { return JSON.parse(localStorage.getItem(key) ?? '
 function writeLocal(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage off: in memory only */ } }
 // 16 px line icons for the inspector's buttons (currentColor)
 const icon16 = (...kids) => s('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round', 'aria-hidden': 'true' }, ...kids);
-const dialIcon = () => icon16(s('circle', { cx: 8, cy: 8, r: 5.5 }), s('circle', { cx: 8, cy: 8, r: 1.2, fill: 'currentColor', stroke: 'none' }), s('path', { d: 'M8 1v2M8 13v2M1 8h2M13 8h2' }));
-const outIcon = () => icon16(s('path', { d: 'M6 4h6v6M12 4l-7 7' }));
 const layersIcon = () => icon16(s('path', { d: 'M8 2.5 14 6 8 9.5 2 6z' }), s('path', { d: 'M2 9l6 3.5L14 9' }));
 const closeIcon = () => icon16(s('path', { d: 'M4.5 4.5l7 7M11.5 4.5l-7 7' }));
 
@@ -12826,8 +13253,17 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   // the official products.
   // phase 5 (owner: every closable or toggled thing has a visible label, a tooltip and a name): the sky dial
   // is a labelled toggle; the site name opens the site list
-  const dialBtn = h('button', { type: 'button', class: 'insp-btn dial-btn', 'aria-pressed': 'true', title: 'Show or hide the sky dial on the map (K)', onclick: () => cb.onDial?.(dialBtn.getAttribute('aria-pressed') !== 'true') }, dialIcon(), 'Sky dial');
-  const detailsBtn = h('button', { type: 'button', class: 'insp-btn details-btn', 'data-action': 'details', 'aria-haspopup': 'dialog', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', onclick: () => cb.onDetails?.() }, 'Details', outIcon());
+  // the point's actions (Sky dial, Details, the next steps of the mission) are in the action bar (actionbar.js)
+  const actionBar = createActionBar(document, { parent: shellParts.app, avoid: () => [shellParts.app?.querySelector('.sidebar'), tools.tools, profileDock, pointCol, rightReopen] });
+  let dialPressed = true;
+  function syncPointBar() {
+    actionBar.set('point', 'site', [
+      { id: 'dial', label: 'Sky dial', short: 'Sky dial', icon: 'sun', pressed: dialPressed, title: 'Show or hide the sky dial on the map (K)', cls: 'dial-btn', onClick: () => cb.onDial?.(!dialPressed) },
+      { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
+      { type: 'divider' },
+      ...STAGES.slice(STAGES.findIndex((st) => st.id === 'site') + 1).map((st) => ({ id: `next-${st.id}`, label: `${NEXT_LABELS[st.id] ?? st.label} →`, short: NEXT_LABELS[st.id]?.split(' ').pop() ?? st.label, icon: 'go', title: st.title, attrs: { 'data-stage': st.id }, href: () => stageUrl(st.id, readMission(), { route: st.id === '3d' && hasRoute() }) })),
+    ]);
+  }
   const pName = h('button', { type: 'button', class: 'point-name insp-name-btn', title: 'Show the site list', 'aria-controls': 'lsn-sidebar', onclick: () => openSites() });
   const pSub = h('p', { class: 'point-coords num' });
   const liveNow = h('span', { class: 'insp-val num' }, DASH);
@@ -12837,9 +13273,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const btnGroup = h('div', { class: 'insp-btns' });
   const pointHead = h('div', { class: 'insp-head-block' },
     h('div', { class: 'insp-title-row' }, h('div', { class: 'insp-title' }, pName, pSub), btnGroup),
-    h('div', { class: 'insp-actions' }, dialBtn, detailsBtn),
-    // the mission's next steps for this site and date (mission-flow.js)
-    typeof document !== 'undefined' ? nextSteps(document, 'site', { className: 'insp-next' }) : null);
+    null);
   const pointTable = h('div', { class: 'insp-table' });
   // phase 6 A (mock personas.html?s=verdict): the verdict and the way out above the hours table, the live
   // rows under it, then the official products. setVerdict fills them without a re-render (the way out
@@ -12904,7 +13338,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   function setLive({ now, countdown, dialOn } = {}) {
     if (now !== undefined && liveNow.textContent !== now) liveNow.textContent = now;
     if (countdown !== undefined && liveCount.textContent !== countdown) { liveCount.textContent = countdown; countRow.hidden = !countdown; }
-    if (dialOn !== undefined) dialBtn.setAttribute('aria-pressed', String(!!dialOn));
+    if (dialOn !== undefined && dialPressed !== !!dialOn) { dialPressed = !!dialOn; syncPointBar(); }
   }
 
   function renderBest(best) {
@@ -12960,6 +13394,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
     renderSun();
     swPsr.set(params.showPsr);
     swDial.set(params.dialOn);
+    if (params.dialOn !== undefined && dialPressed !== !!params.dialOn) { dialPressed = !!params.dialOn; syncPointBar(); }
     weightsSec.hidden = params.mode !== 'score';
     weights.update({ weights: params.weights });
     const nFilters = (params.filters?.maxSlope != null ? 1 : 0) + (params.filters?.maxDark != null ? 1 : 0);
@@ -12989,8 +13424,11 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const kindClose = h('button', { type: 'button', class: 'insp-icon', 'aria-label': 'Close and go back to the selected point', title: 'Close and go back to the selected point', onclick: () => cb.onKind?.('point') }, closeIcon());
   const kindHead = h('div', { class: 'insp-head' }, kindTitle, kindClose);
   let kind = 'point';
+  syncPointBar();
+  actionBar.activate('point');
   function setKind(k) {
     if (pointCol) pointCol.dataset.kind = k;
+    actionBar.activate(k);
     if (k === kind) return;
     kind = k;
     kindTitle.textContent = KIND_TITLE[k] ?? '';
@@ -13172,6 +13610,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
     // the playhead's Sun and Earth, for the readout and the arrows on the map
     setLight(l) { light = l; frame.setLight(l); renderSun(); },
     terrainEl,
+    actionBar,
     setProfileAt(profileAt) { frame.redrawShapes({ profileAt }); },
     openFilters,
     // phase 4: the workflow cards in the folds
@@ -13873,12 +14312,13 @@ __m['ui/shapeentry.js'] = (() => {
 // the same shape objects as drawing on the map (map/shapes.js), from typed latitudes, longitudes and km.
 // Every field uses coords.js, so it accepts −89.45 / 89.45S and 222.6 / 137.4W like the Route plan rows.
 //
-// createShapeEntry(cb) → { el, update(params) }
+// createShapeEntry(cb) → { el, update(params), setBar(open) }
 // cb: {
 //   onShape(shape, slot)        Apply on Rectangle, Circle or Polygon: { type: 'rect', x0, y0, x1, y1 } |
 //                               { type: 'circle', cx, cy, rKm } | { type: 'polygon', points } in map km, for the
 //                               region slot shown ('A' | 'B'), exactly as the drawing tools produce them
 //   onPoint([xKm, yKm], { latDeg, lonDeg })   Apply on Point (the Select tool): pick that point
+//   actionBar                   the action bar (actionbar.js): Apply and Add vertex show there while setBar(true)
 //   onOpenRoutePlan()           the Route tool's "Open Route plan" button (the route rows live in that card)
 // }
 // params (every key optional; a missing key keeps what the form shows):
@@ -13976,10 +14416,20 @@ function createShapeEntry(cb = {}) {
   const body = h('div', { class: 'se-body' });
   const errorLine = h('p', { class: 'field-error se-form-error', role: 'alert', hidden: true });
   const status = h('p', { class: 'se-status', role: 'status', 'aria-live': 'polite' });
-  const applyBtn = h('button', { type: 'submit', class: 'btn btn-primary se-apply' }, 'Apply');
-  const actions = h('div', { class: 'se-actions' }, applyBtn);
+  // Apply and Add vertex are buttons of the action bar (actionbar.js) while this form is open; Enter in a field applies
   const form = h('form', { class: 'se-form', novalidate: true, 'aria-labelledby': `${id}-title`, onsubmit: (e) => { e.preventDefault(); apply(); } },
-    body, errorLine, actions, status);
+    body, errorLine, status);
+  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches?.('input')) { e.preventDefault(); apply(); } });
+  let barOn = false;
+  function renderBar() {
+    const bar = cb.actionBar;
+    if (!bar) return;
+    const open = barOn && tool !== 'route';
+    const apply1 = { id: 'apply', label: tool === 'point' ? 'Pick this point' : `Apply to region ${slot}`, short: tool === 'point' ? 'Pick' : 'Apply', icon: 'apply', primary: true, title: 'Make the typed point or shape (Enter in a field does the same)', onClick: () => apply() };
+    const add1 = { id: 'add', label: forms.polygon.rows.length >= MAX_POLYGON ? `At most ${MAX_POLYGON} vertices` : 'Add vertex', short: 'Vertex', icon: 'add', disabled: forms.polygon.rows.length >= MAX_POLYGON, hint: 'The polygon is full', onClick: () => add() };
+    bar.set('point', 'coords', open && tool === 'point' ? [apply1] : []);
+    bar.set('region', 'coords', open && tool !== 'point' ? (tool === 'polygon' ? [apply1, add1] : [apply1]) : []);
+  }
   const el = h('section', { class: 'shape-entry', 'aria-labelledby': `${id}-title` }, h('div', { class: 'se-head' }, title, sub), form);
 
   function readInputs() {
@@ -14019,7 +14469,6 @@ function createShapeEntry(cb = {}) {
     clear(body);
     body.className = `se-body is-${tool}`;
     title.textContent = TITLES[tool];
-    actions.hidden = tool === 'route';
     const regionLine = `Applies to region ${slot}.`;
     if (tool === 'point') {
       sub.textContent = 'Pick a point by its coordinates.';
@@ -14046,12 +14495,13 @@ function createShapeEntry(cb = {}) {
           iconBtn('×', `Remove vertex ${tag}`, rows.length <= MIN_POLYGON, () => remove(i)))));
       });
       body.append(colsHead('Vertex'), list,
-        h('div', { class: 'se-add-row' }, h('button', { type: 'button', class: 'btn se-add', disabled: rows.length >= MAX_POLYGON, onclick: () => add() }, rows.length >= MAX_POLYGON ? `At most ${MAX_POLYGON} vertices` : 'Add vertex')));
+        null);
     } else {
       sub.textContent = 'Route points are typed in the Route plan section, with the slope limit.';
       body.append(h('button', { type: 'button', class: 'btn se-open-route', onclick: () => cb.onOpenRoutePlan?.() }, 'Open Route plan'));
     }
     showErrors();
+    renderBar();
     if (focusKey) body.querySelector(`[data-key="${focusKey}"]`)?.focus({ preventScroll: true });
   }
 
@@ -14133,7 +14583,9 @@ function createShapeEntry(cb = {}) {
   }
 
   render();
-  return { el, update };
+  // the form is open (its fold): its actions show in the bar
+  function setBar(on) { barOn = !!on; renderBar(); }
+  return { el, update, setBar };
 }
 
 return { ENTRY_TOOLS, MAX_RADIUS_KM, MIN_POLYGON, blankFields, shapeFromFields, fieldsFromShape, createShapeEntry };
@@ -21464,6 +21916,7 @@ function start() {
   let sheet = null, dock = null, settingsSheet = null;
   let storyMode = null;   // phase 6 B (ui/storymode.js), made once the commands and the dock exist
   let hashFrozen = false;  // phase 6 B: while a story runs the address bar keeps the visitor's own state (written again on exit)
+  let onCoordsFold = () => {};   // the Coordinates fold opened or closed: its form's actions show in the action bar
   const mapView = plan ? createMapView({
     mapCard: shell.regions.mapCard, pointCard: shell.regions.pointCard, filtersCard: shell.regions.filtersCard,
     regionCard: shell.regions.regionCard, routeCard: shell.regions.routeCard,
@@ -21480,6 +21933,7 @@ function start() {
     },
     onMode: (mapMode) => update({ mapMode }),
     onPicking: (picking) => update({ picking }),
+    onFold: (name, open) => { if (name === 'coords') onCoordsFold(open); },
     onTool: (tool) => { kind = tool === 'route' ? 'route' : tool === 'select' ? 'point' : 'region'; update({ tool }); entryFold(tool); },
     onKind: (k) => { kind = k; update(k === 'point' ? { tool: 'select' } : {}); },
     onSlot: (slot) => update({ slot }),
@@ -21526,8 +21980,11 @@ function start() {
     onShape: (shape, slot) => { if (slot !== state.slot) state = { ...state, slot }; api.setRegion(slot, shape); },
     onPoint: (xy, { latDeg, lonDeg }) => pickOnMap({ point: { latDeg: Math.round(latDeg * 1e4) / 1e4, lonDeg: Math.round(lonDeg * 1e4) / 1e4 } }),
     onOpenRoutePlan: () => mapView.setFold('plan', true),
+    actionBar: mapView.actionBar,
   }) : null;
   if (shapeEntry) mapView.mountFold('coords', shapeEntry.el);
+  onCoordsFold = (open) => shapeEntry?.setBar(open);
+  onCoordsFold(mapView?.foldOpen('coords'));
   let entryShapes = { A: shapes.A, B: shapes.B };   // a new object only when a region changes (it refills the form)
   function syncEntry() {
     if (!shapeEntry) return;
@@ -21579,7 +22036,7 @@ function start() {
   // fix L5: a planned route in the hash is planned again once the first heat map is in
   let rpRestore = state.routePlan?.selected ? { ...state.routePlan } : null;
   function persistRoutePlan() { persist({ routePlan: cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null) }); }
-  const routePlanCard = mapView ? createRoutePlanCard({}, {
+  const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar }, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
     onPlan: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility, departMs: null }; routePlanCard.update({ departures: null }); runPlan(points, maxSlopeDeg).catch(() => {}); },
@@ -21608,6 +22065,7 @@ function start() {
     onMissionLoad: (rec) => { loadMission(rec).catch(() => {}); },
     onStation: (st) => { rp = { ...rp, station: st, stationOff: !st, coverage: null }; updateComms(); },
     onCancel: () => rpAbort?.abort(),
+    onReveal: () => mapView?.setFold('plan', true),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
   }) : null;
