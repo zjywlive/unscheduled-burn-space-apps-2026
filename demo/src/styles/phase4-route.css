@@ -192,3 +192,93 @@
 .rp-lander-body { fill: #ffd23d; stroke: var(--ground); stroke-width: 1.5; }
 .rp-lander-legs { fill: none; stroke: #ffd23d; stroke-width: 1.75; stroke-linecap: round; paint-order: stroke; }
 .rp-lander-label { fill: #ffd23d; font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--ground); stroke-width: 3.5px; stroke-linejoin: round; }
+
+/* ---------- route coloured by slope (routes-layer.js slopeRuns) ---------- */
+.rp-slope-seg { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- floating map extras (ui/inset3d.js): the slope legend and the 3D preview window ---------- */
+.map-floats {
+  position: fixed; left: 12px; bottom: 12px; z-index: 14; display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
+  max-width: calc(100vw - 24px); pointer-events: none;
+}
+/* the row sits inside .app, so the big layout's glass and edge variables are in scope there */
+.is-bigmap .map-floats {
+  left: calc(var(--edge, 16px) + var(--left-w, 0px) + var(--left-gap, 0px)); bottom: calc(var(--edge, 16px) + 96px);
+}
+.map-floats > * { pointer-events: auto; }
+.slope-legend {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 999px; color: var(--muted); font-size: 11px; line-height: 14px;
+  background: var(--glass-panel, rgba(20, 20, 22, 0.94)); -webkit-backdrop-filter: var(--glass-fx, none); backdrop-filter: var(--glass-fx, none);
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, none);
+}
+.slope-legend[hidden] { display: none; }
+.slope-legend-title { color: var(--text); font-weight: 500; }
+.slope-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.slope-legend-item i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
+.inset3d {
+  display: grid; grid-template-rows: 28px 200px; width: 320px; overflow: hidden; border-radius: var(--r1, 12px);
+  background: var(--glass-panel, rgba(20, 20, 22, 0.94)); -webkit-backdrop-filter: var(--glass-fx, none); backdrop-filter: var(--glass-fx, none);
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, none);
+}
+.inset3d-bar { display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; font-size: var(--fs-small); color: var(--text); }
+.inset3d-title { flex: 1; font-weight: 500; }
+.inset3d-btn {
+  height: 22px; padding: 0 8px; border: 1px solid var(--hair); border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  color: var(--text); font: inherit; font-size: 11px; cursor: pointer;
+}
+.inset3d-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.inset3d-frame { width: 100%; height: 200px; border: 0; background: #000; display: block; }
+
+/* ---------- route card: route colour switch and the Mission file section ---------- */
+.rp-colour { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; color: var(--muted); font-size: var(--fs-small); }
+.rp-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.rp-seg button { padding: 2px 10px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.rp-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.mf-body { display: grid; gap: 8px; margin-top: 6px; }
+.mf-actions, .mf-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mf-btn { height: 28px; padding: 0 10px; font-size: var(--fs-small); }
+.mf-btn:disabled { opacity: 0.45; cursor: default; }
+.mf-sep { width: 1px; height: 16px; background: var(--line); }
+.mf-note { margin: 0; min-height: 0; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.mf-note:empty { display: none; }
+.mf-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.mf-item { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--radius-inner); background: var(--raised); }
+.mf-name { color: var(--text); font-size: var(--fs-small); line-height: 16px; overflow-wrap: anywhere; }
+.mf-sub { color: var(--faint); font-size: 11px; line-height: 14px; }
+.mf-tag { margin-left: 6px; padding: 0 5px; border: 1px solid var(--control); border-radius: var(--radius-control); font-size: 10px; }
+.mf-row { margin-top: 4px; }
+.mf-empty { color: var(--faint); font-size: var(--fs-small); }
+
+/* the planned landing site, when no touchdown is known */
+.rp-landing-ring { fill: none; stroke: #ffd23d; stroke-width: 1.75; }
+.rp-landing-dot { fill: #ffd23d; stroke: var(--ground); stroke-width: 1.5; }
+
+/* ---------- self-driving planner (route-rrt.js) ---------- */
+.rp-auto { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rp-auto .rp-rover-title { margin: 0; }
+.rp-auto .rp-note-inline { margin: 0; }
+.rp-auto-offer { justify-self: start; text-align: left; }
+.rp-trace { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; max-height: 132px; overflow-y: auto; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.rp-trace:empty { display: none; }
+.rp-trace li { display: grid; grid-template-columns: 56px 1fr; gap: 6px; }
+.rp-trace-step { color: var(--faint); font-variant-numeric: tabular-nums; }
+.rp-trace li[data-step="found"], .rp-trace li[data-step="goal"] { color: var(--text); }
+.rp-trace li[data-step="abort"], .rp-trace li[data-step="none"] { color: #ff9f43; }
+.rp-auto-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.rp-auto-foot[hidden], .rp-auto-offer[hidden] { display: none; }
+.rp-auto-trees { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-small); cursor: pointer; }
+.rp-line-auto { stroke: #22d3ee; }
+.rp-route.is-selected .rp-line-auto { stroke: #22d3ee; }
+.rp-auto-layer { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.rp-auto-tree { stroke: #3b82f6; stroke-width: 0.6; opacity: 0.3; }
+.rp-auto-cand { stroke: #3b82f6; stroke-width: 1.6; opacity: 0.85; }
+.rp-auto-casing { stroke: var(--ground); stroke-width: 6; opacity: 0.7; }
+.rp-auto-path { stroke: #22d3ee; stroke-width: 3; }
+.rp-auto-move { stroke: #22d3ee; stroke-width: 1.25; stroke-dasharray: 3 3; }
+.rp-auto-ghost { stroke: var(--muted); stroke-width: 1.25; stroke-dasharray: 2 2; }
+.rp-auto-moved { fill: #22d3ee; stroke: var(--ground); stroke-width: 1.5; }
+.rp-auto-figs li.is-warn { color: var(--text); }
+.rp-auto-figs li.is-warn::marker { color: #ff9f43; }
+.rp-auto-figs { padding: 0 0 0 14px; display: grid; gap: 4px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.rp-auto-figs:empty { display: none; }
+.rp-auto-offer { height: auto; min-height: 30px; padding-top: 6px; padding-bottom: 6px; white-space: normal; justify-self: stretch; }

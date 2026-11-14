@@ -224,7 +224,7 @@ export function edgeTest(cor, mob) {
 // ---------- the corridor graph of one leg ----------
 // Nodes are DEM pixel centres (col c0 + u, row r0 + v). slope: degrees (Infinity off the terrain);
 // inv: ground km per map km (1 / stereographic scale factor); sun: 0–1 or NaN.
-function buildCorridor(dem, a, b, padKm, sunAt) {
+export function buildCorridor(dem, a, b, padKm, sunAt) {
   const kpp = dem.kmPerPixel, half = dem.halfKm, size = dem.size ?? Math.round((2 * half) / kpp);
   const colOf = (x) => (x + half) / kpp - 0.5, rowOf = (y) => (half - y) / kpp - 0.5;
   const c0 = Math.max(1, Math.floor(colOf(Math.min(a[0], b[0]) - padKm)));
@@ -503,7 +503,7 @@ function smooth(cor, path, a, b, lim, factor, edgeOk = null) {
 
 // Statistics of a leg's polyline, sampled every quarter node; a fixed (connector) segment takes the values
 // of its node, a waypoint's own steep node those of its substitute.
-function legStats(cor, line, fixed, subst, isPsr, mob = null) {
+export function legStats(cor, line, fixed, subst, isPsr, mob = null) {
   let len = 0, maxS = 0, slopeSum = 0, sunLen = 0, sunSum = 0, psrKm = 0;
   let climb = 0, descent = 0, cross = 0, hours = 0, oneWayKm = 0, run = null;
   const oneWay = [], tc = mob ? Math.tan(mob.climbDeg / DEG) : 0;

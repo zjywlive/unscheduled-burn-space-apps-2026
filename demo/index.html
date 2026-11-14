@@ -1535,6 +1535,96 @@ button.relay-win:hover .relay-win-time { text-decoration: underline; text-underl
 .rp-lander-legs { fill: none; stroke: #ffd23d; stroke-width: 1.75; stroke-linecap: round; paint-order: stroke; }
 .rp-lander-label { fill: #ffd23d; font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--ground); stroke-width: 3.5px; stroke-linejoin: round; }
 
+/* ---------- route coloured by slope (routes-layer.js slopeRuns) ---------- */
+.rp-slope-seg { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- floating map extras (ui/inset3d.js): the slope legend and the 3D preview window ---------- */
+.map-floats {
+  position: fixed; left: 12px; bottom: 12px; z-index: 14; display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
+  max-width: calc(100vw - 24px); pointer-events: none;
+}
+/* the row sits inside .app, so the big layout's glass and edge variables are in scope there */
+.is-bigmap .map-floats {
+  left: calc(var(--edge, 16px) + var(--left-w, 0px) + var(--left-gap, 0px)); bottom: calc(var(--edge, 16px) + 96px);
+}
+.map-floats > * { pointer-events: auto; }
+.slope-legend {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 999px; color: var(--muted); font-size: 11px; line-height: 14px;
+  background: var(--glass-panel, rgba(20, 20, 22, 0.94)); -webkit-backdrop-filter: var(--glass-fx, none); backdrop-filter: var(--glass-fx, none);
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, none);
+}
+.slope-legend[hidden] { display: none; }
+.slope-legend-title { color: var(--text); font-weight: 500; }
+.slope-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.slope-legend-item i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
+.inset3d {
+  display: grid; grid-template-rows: 28px 200px; width: 320px; overflow: hidden; border-radius: var(--r1, 12px);
+  background: var(--glass-panel, rgba(20, 20, 22, 0.94)); -webkit-backdrop-filter: var(--glass-fx, none); backdrop-filter: var(--glass-fx, none);
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, none);
+}
+.inset3d-bar { display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; font-size: var(--fs-small); color: var(--text); }
+.inset3d-title { flex: 1; font-weight: 500; }
+.inset3d-btn {
+  height: 22px; padding: 0 8px; border: 1px solid var(--hair); border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  color: var(--text); font: inherit; font-size: 11px; cursor: pointer;
+}
+.inset3d-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.inset3d-frame { width: 100%; height: 200px; border: 0; background: #000; display: block; }
+
+/* ---------- route card: route colour switch and the Mission file section ---------- */
+.rp-colour { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; color: var(--muted); font-size: var(--fs-small); }
+.rp-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.rp-seg button { padding: 2px 10px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.rp-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.mf-body { display: grid; gap: 8px; margin-top: 6px; }
+.mf-actions, .mf-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mf-btn { height: 28px; padding: 0 10px; font-size: var(--fs-small); }
+.mf-btn:disabled { opacity: 0.45; cursor: default; }
+.mf-sep { width: 1px; height: 16px; background: var(--line); }
+.mf-note { margin: 0; min-height: 0; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.mf-note:empty { display: none; }
+.mf-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.mf-item { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--radius-inner); background: var(--raised); }
+.mf-name { color: var(--text); font-size: var(--fs-small); line-height: 16px; overflow-wrap: anywhere; }
+.mf-sub { color: var(--faint); font-size: 11px; line-height: 14px; }
+.mf-tag { margin-left: 6px; padding: 0 5px; border: 1px solid var(--control); border-radius: var(--radius-control); font-size: 10px; }
+.mf-row { margin-top: 4px; }
+.mf-empty { color: var(--faint); font-size: var(--fs-small); }
+
+/* the planned landing site, when no touchdown is known */
+.rp-landing-ring { fill: none; stroke: #ffd23d; stroke-width: 1.75; }
+.rp-landing-dot { fill: #ffd23d; stroke: var(--ground); stroke-width: 1.5; }
+
+/* ---------- self-driving planner (route-rrt.js) ---------- */
+.rp-auto { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rp-auto .rp-rover-title { margin: 0; }
+.rp-auto .rp-note-inline { margin: 0; }
+.rp-auto-offer { justify-self: start; text-align: left; }
+.rp-trace { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; max-height: 132px; overflow-y: auto; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.rp-trace:empty { display: none; }
+.rp-trace li { display: grid; grid-template-columns: 56px 1fr; gap: 6px; }
+.rp-trace-step { color: var(--faint); font-variant-numeric: tabular-nums; }
+.rp-trace li[data-step="found"], .rp-trace li[data-step="goal"] { color: var(--text); }
+.rp-trace li[data-step="abort"], .rp-trace li[data-step="none"] { color: #ff9f43; }
+.rp-auto-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.rp-auto-foot[hidden], .rp-auto-offer[hidden] { display: none; }
+.rp-auto-trees { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-small); cursor: pointer; }
+.rp-line-auto { stroke: #22d3ee; }
+.rp-route.is-selected .rp-line-auto { stroke: #22d3ee; }
+.rp-auto-layer { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.rp-auto-tree { stroke: #3b82f6; stroke-width: 0.6; opacity: 0.3; }
+.rp-auto-cand { stroke: #3b82f6; stroke-width: 1.6; opacity: 0.85; }
+.rp-auto-casing { stroke: var(--ground); stroke-width: 6; opacity: 0.7; }
+.rp-auto-path { stroke: #22d3ee; stroke-width: 3; }
+.rp-auto-move { stroke: #22d3ee; stroke-width: 1.25; stroke-dasharray: 3 3; }
+.rp-auto-ghost { stroke: var(--muted); stroke-width: 1.25; stroke-dasharray: 2 2; }
+.rp-auto-moved { fill: #22d3ee; stroke: var(--ground); stroke-width: 1.5; }
+.rp-auto-figs li.is-warn { color: var(--text); }
+.rp-auto-figs li.is-warn::marker { color: #ff9f43; }
+.rp-auto-figs { padding: 0 0 0 14px; display: grid; gap: 4px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.rp-auto-figs:empty { display: none; }
+.rp-auto-offer { height: auto; min-height: 30px; padding-top: 6px; padding-bottom: 6px; white-space: normal; justify-self: stretch; }
+
 /* styles/phase4-shapeentry.css */
 /* Fix R9: the Coordinates form (ui/shapeentry.js). Same compact rows as the Route plan points: tag,
    latitude, longitude, row tools. No background of its own, so it sits on the glass panel. */
@@ -4780,7 +4870,7 @@ function slopeAt(dem, xKm, yKm) {
   return Math.atan(Math.hypot((e - w) / span, (n - s) / span)) * DEG;
 }
 
-return { DEFAULT_MAX_SLOPE, MOBILITY_DEFAULTS, cleanMobility, speedFactor, MIN_POINTS, MAX_POINTS, MAX_LEG_KM, CANDIDATES, corridorPadKm, SUNNY_WEIGHTS, COSTS, sunnyTargetCost, toPoint, planSunLayers, sunFromJobs, edgeTest, TRAP_MIN_NODES, simplify, reachFrom, planRoutes, pickByMetric, slopeAt };
+return { DEFAULT_MAX_SLOPE, MOBILITY_DEFAULTS, cleanMobility, speedFactor, MIN_POINTS, MAX_POINTS, MAX_LEG_KM, CANDIDATES, corridorPadKm, SUNNY_WEIGHTS, COSTS, sunnyTargetCost, toPoint, planSunLayers, sunFromJobs, edgeTest, buildCorridor, TRAP_MIN_NODES, legStats, simplify, reachFrom, planRoutes, pickByMetric, slopeAt };
 })();
 __m['state.js'] = (() => {
 // Screen state, URL hash parsing and writing, and the alternative scenario (spec §7.1).
@@ -8021,6 +8111,455 @@ function skyFromGrid(grid, eph, bodyAzEl, fromXY) {
 
 return { G_MOON, POWER_DEFAULTS, cleanPower, drivePowerW, panelW, simulateDrive, scanDepartures, skyFromGrid };
 })();
+__m['route-rrt.js'] = (() => {
+// Self-driving rover path planner: bidirectional RRT* (B-RRT*) run leg by leg, after the flowchart of
+// autonomous traverse planning (Delay = 0, Overall Path = []; initialize trees; select waypoints; B-RRT*;
+// path exists? add it; no: adjust waypoints and try again up to a number of tries, then abort).
+// Pure computation, no DOM; runs in slices so the page stays responsive and stops on its AbortSignal.
+//
+// planSelfDriving({ points, dem, maxSlopeDeg, mobility, seed, maxIter, maxTries, stepKm, timeBudgetMs },
+//                 { onProgress, signal, sliceMs, yieldFn }) → Promise<Result>
+//   points, dem, maxSlopeDeg, mobility: as planRoutes (route-plan.js): the dem_240m level, the climb limit and
+//     the descent / cross-slope limits. Without mobility every limit is the climb limit.
+//   seed        the pseudo-random seed (same seed and inputs → same result)
+//   maxIter     B-RRT* iterations per try (default 4000), maxTries tries per leg, the first run included (5)
+//   stepKm      steering step in map km; default per leg: leg length / 20, between 0.3 and 1 km
+//   timeBudgetMs total time budget (default 45000)
+//
+// Per leg: the corridor graph of route-plan.js gives terrain, slope, gradient and scale at any map point.
+// Two trees grow in continuous map km, one from the leg start (edges driven parent → child) and one from the
+// leg end (edges driven child → parent, towards the end), so one-way ground is handled by direction. An edge
+// is checked every quarter node along it with the planner's limits (slope, grade along, slope across); its
+// cost is the drive time (ground km / (speed × speedFactor)). RRT*: choose the cheapest parent among the
+// nearby nodes, rewire them through the new node, radius shrinking with the tree size. A new node tries to
+// connect to the other tree in the driving direction; every strictly better connection is a candidate path
+// (the last CANDIDATES_PER_LEG are kept) and the search goes on until maxIter. The best path is then
+// shortcut-smoothed with the same directed check, at no more cost.
+// Result = { ok, aborted, reason, error, trajectory: [[x, y], …], legs: [{ from, to, adjustedTo, tries }],
+//   candidates: [[[x, y], …], …], candidateLegs, trees: [[x1, y1, x2, y2], …], trace: [{ step, leg, text }],
+//   delayMs, nodes, ms, … and the route figures of the planner (lengthKm, maxSlopeDeg, meanSlopeDeg,
+//   climbMaxDeg, descentMaxDeg, crossMaxDeg, hours, oneWayKm, oneWay, profile { x, y, km, pitch }) }
+const { buildCorridor, legStats, corridorPadKm, cleanMobility, speedFactor, toPoint, MOBILITY_DEFAULTS, DEFAULT_MAX_SLOPE, MIN_POINTS, MAX_POINTS, MAX_LEG_KM } = __m['route-plan.js'];
+const { fromXY } = __m['terrain.js'];
+
+// Assumptions (docs/VARIABLES.md), not data.
+const RRT_DEFAULTS = Object.freeze({
+  maxIter: 4000, maxTries: 5, goalBias: 0.1, linkBias: 0.2, timeBudgetMs: 45000,
+  stepMinKm: 0.3, stepMaxKm: 1, stepLegDivisor: 20,
+  rewireMaxSteps: 4, rewireMinSteps: 1.2, neighbours: 16,
+});
+const ADJUST_RINGS_KM = Object.freeze([0.25, 0.5, 1, 2]);
+const CANDIDATES_PER_LEG = 8;
+const MAX_TREE_EDGES = 4000;
+const STEP_LABELS = Object.freeze({ init: 'Start', select: 'Select', brrt: 'B-RRT*', found: 'Path', none: 'No path', adjust: 'Adjust', add: 'Add', goal: 'Goal', abort: 'Abort' });
+const TREE_BRUTE = 48;       // trees this small are searched without the hash grid
+
+const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+function abortError() { const e = new Error('Route planning cancelled'); e.name = 'AbortError'; return e; }
+function defaultYield() {
+  if (typeof setImmediate === 'function') return new Promise((ok) => setImmediate(ok));
+  if (typeof MessageChannel === 'function') return new Promise((ok) => { const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); ok(); }; ch.port2.postMessage(0); });
+  return new Promise((ok) => setTimeout(ok, 0));
+}
+// mulberry32
+function makeRng(seed) {
+  let a = (Number(seed) >>> 0) || 1;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// ---------- the directed edge check ----------
+// edge(ax, ay, bx, by) → drive time in hours when the rover can drive a → b, -1 when not. Samples every
+// quarter node (as legStats does) with the node values: on the terrain, slope under the cap, grade along
+// the move within the climb / descent limits, slope across within the cross limit.
+function makeEdgeCheck(cor, mob) {
+  const tc = Math.tan(mob.climbDeg * Math.PI / 180), td = Math.tan(mob.descentDeg * Math.PI / 180), tx = Math.tan(mob.crossDeg * Math.PI / 180);
+  const lim = Math.max(mob.climbDeg, mob.descentDeg, mob.crossDeg);
+  const { gxs, gys, slope, inv, kpp } = cor;
+  return (ax, ay, bx, by) => {
+    const L = Math.hypot(bx - ax, by - ay);
+    if (!(L > 1e-9)) return 0;
+    const steps = Math.max(1, Math.ceil(L / (kpp * 0.25))), dl = L / steps, ux = (bx - ax) / L, uy = (by - ay) / L;
+    let hours = 0;
+    for (let i = 0; i < steps; i++) {
+      const t = (i + 0.5) / steps, n = cor.nodeAt(ax + (bx - ax) * t, ay + (by - ay) * t);
+      if (n < 0 || !(slope[n] <= lim)) return -1;
+      const pitch = gxs[n] * ux + gys[n] * uy;
+      if (!(pitch <= tc && -pitch <= td)) return -1;
+      if (!(Math.abs(gxs[n] * uy - gys[n] * ux) <= tx)) return -1;
+      hours += (dl * inv[n]) / (mob.speedKmh * speedFactor(pitch, mob));
+    }
+    return hours;
+  };
+}
+
+// ---------- trees with a spatial hash grid ----------
+function makeTree(cell) { return { x: [], y: [], par: [], cost: [], kids: [], grid: new Map(), cell, n: 0 }; }
+const cellKey = (ix, iy) => (ix + 32768) * 65536 + (iy + 32768);
+function addNode(T, x, y, par, cost) {
+  const id = T.n++;
+  T.x.push(x); T.y.push(y); T.par.push(par); T.cost.push(cost); T.kids.push([]);
+  if (par >= 0) T.kids[par].push(id);
+  const k = cellKey(Math.floor(x / T.cell), Math.floor(y / T.cell));
+  const c = T.grid.get(k);
+  if (c) c.push(id); else T.grid.set(k, [id]);
+  return id;
+}
+function nearest(T, x, y) {
+  let best = -1, bd = Infinity;
+  if (T.n <= TREE_BRUTE) {
+    for (let i = 0; i < T.n; i++) { const d = (T.x[i] - x) ** 2 + (T.y[i] - y) ** 2; if (d < bd) { bd = d; best = i; } }
+    return best;
+  }
+  const cx = Math.floor(x / T.cell), cy = Math.floor(y / T.cell);
+  for (let r = 0; r < 4000; r++) {
+    for (let ix = cx - r; ix <= cx + r; ix++) {
+      const edge = ix === cx - r || ix === cx + r;
+      for (let iy = cy - r; iy <= cy + r; iy += edge ? 1 : 2 * r || 1) {
+        const c = T.grid.get(cellKey(ix, iy));
+        if (!c) continue;
+        for (const id of c) { const d = (T.x[id] - x) ** 2 + (T.y[id] - y) ** 2; if (d < bd) { bd = d; best = id; } }
+      }
+    }
+    if (best >= 0 && Math.sqrt(bd) <= r * T.cell) break;
+  }
+  return best;
+}
+// up to `max` nodes within r of (x, y), nearest first: [{ id, d }]
+function near(T, x, y, r, max) {
+  const out = [];
+  if (T.n <= TREE_BRUTE) {
+    for (let i = 0; i < T.n; i++) { const d = Math.hypot(T.x[i] - x, T.y[i] - y); if (d <= r) out.push({ id: i, d }); }
+  } else {
+    const i0 = Math.floor((x - r) / T.cell), i1 = Math.floor((x + r) / T.cell), j0 = Math.floor((y - r) / T.cell), j1 = Math.floor((y + r) / T.cell);
+    for (let ix = i0; ix <= i1; ix++) for (let iy = j0; iy <= j1; iy++) {
+      const c = T.grid.get(cellKey(ix, iy));
+      if (!c) continue;
+      for (const id of c) { const d = Math.hypot(T.x[id] - x, T.y[id] - y); if (d <= r) out.push({ id, d }); }
+    }
+  }
+  out.sort((p, q) => p.d - q.d || p.id - q.id);
+  return out.length > max ? out.slice(0, max) : out;
+}
+function pushCost(T, id, delta) {
+  const stack = [id];
+  while (stack.length) { const k = stack.pop(); T.cost[k] += delta; for (const c of T.kids[k]) stack.push(c); }
+}
+const polyLen = (pts) => { let s = 0; for (let i = 0; i + 1 < pts.length; i++) s += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); return s; };
+
+// ---------- one B-RRT* run on a leg ----------
+// → { found, path: [[x, y], …] (smoothed), candidates, iterations, nodes, A, B }
+async function bRrt(ctx, start, goal, tryIndex) {
+  const { cor, edge, mob, rng, step, maxIter, deadline, ctl, P } = ctx;
+  const A = makeTree(step), B = makeTree(step);
+  addNode(A, start[0], start[1], -1, 0);
+  addNode(B, goal[0], goal[1], -1, 0);
+  const legKm = Math.hypot(goal[0] - start[0], goal[1] - start[1]);
+  const pad = Math.min(corridorPadKm(legKm), 0.35 * legKm + 2) * (1 + 0.6 * tryIndex);
+  const ex0 = cor.xOf(0), ex1 = cor.xOf(cor.W - 1), ey0 = cor.yOf(cor.H - 1), ey1 = cor.yOf(0);
+  const rx0 = Math.max(ex0, Math.min(start[0], goal[0]) - pad), rx1 = Math.min(ex1, Math.max(start[0], goal[0]) + pad);
+  const ry0 = Math.max(ey0, Math.min(start[1], goal[1]) - pad), ry1 = Math.min(ey1, Math.max(start[1], goal[1]) + pad);
+  const area = Math.max(1e-6, (rx1 - rx0) * (ry1 - ry0)), gamma = 2 * Math.sqrt((1.5 * area) / Math.PI);
+  const radius = (n) => Math.max(P.rewireMinSteps * step, Math.min(P.rewireMaxSteps * step, gamma * Math.sqrt(Math.log(Math.max(n, 2)) / n)));
+  const lbScale = 0.999 * cor.invMin / mob.speedKmh;   // drive time ≥ map distance × this
+  const candidates = [];
+  let best = null, bestLen = Infinity, iterations = 0;
+
+  const chain = (T, id) => { const out = []; for (let k = id; k >= 0; k = T.par[k]) out.push([T.x[k], T.y[k]]); return out; };
+  const record = (a, o, e) => {
+    const total = A.cost[a] + e + B.cost[o];
+    const path = [...chain(A, a).reverse(), ...chain(B, o)];
+    best = { a, o, e, total };
+    bestLen = polyLen(path);
+    candidates.push(path);
+    if (candidates.length > CANDIDATES_PER_LEG) candidates.shift();
+  };
+  // try to link a new node of one tree to the other tree in the driving direction
+  const connect = (isA, id) => {
+    const T = isA ? A : B, O = isA ? B : A;
+    const x = T.x[id], y = T.y[id];
+    const cand = near(O, x, y, 2.5 * step, 6);
+    let bt = Infinity, bo = -1, be = 0;
+    const tot = (o) => (isA ? T.cost[id] + O.cost[o] : O.cost[o] + T.cost[id]);
+    cand.sort((p, q) => tot(p.id) + p.d * lbScale - (tot(q.id) + q.d * lbScale));
+    for (const { id: o, d } of cand) {
+      const lb = tot(o) + d * lbScale;
+      if (lb >= bt || (best && lb >= best.total)) break;
+      const e = isA ? edge(x, y, O.x[o], O.y[o]) : edge(O.x[o], O.y[o], x, y);
+      if (e < 0) continue;
+      const t = tot(o) + e;
+      if (t < bt) { bt = t; bo = o; be = e; }
+    }
+    if (bo < 0 || (best && bt >= best.total - 1e-9)) return;
+    if (isA) record(id, bo, be); else record(bo, id, be);
+  };
+  const extend = (isA, qx, qy) => {
+    const T = isA ? A : B;
+    const ni = nearest(T, qx, qy);
+    const dx = qx - T.x[ni], dy = qy - T.y[ni], d = Math.hypot(dx, dy);
+    if (!(d > 1e-6)) return;
+    const nx = d <= step ? qx : T.x[ni] + (dx / d) * step, ny = d <= step ? qy : T.y[ni] + (dy / d) * step;
+    if (cor.nodeAt(nx, ny) < 0) return;
+    const nb = near(T, nx, ny, radius(T.n), P.neighbours);
+    const dirEdge = (id) => (isA ? edge(T.x[id], T.y[id], nx, ny) : edge(nx, ny, T.x[id], T.y[id]));
+    // choose the cheapest valid parent, cheapest lower bound first
+    const order = nb.map((q) => ({ ...q, lb: T.cost[q.id] + q.d * lbScale })).sort((p, q) => p.lb - q.lb || p.id - q.id);
+    let par = -1, pc = Infinity;
+    for (const q of order) {
+      if (q.lb >= pc) break;
+      const e = dirEdge(q.id);
+      if (e < 0) continue;
+      if (T.cost[q.id] + e < pc) { pc = T.cost[q.id] + e; par = q.id; }
+    }
+    if (par < 0) return;
+    const id = addNode(T, nx, ny, par, pc);
+    // rewire the neighbours through the new node
+    for (const q of nb) {
+      if (q.id === par || q.id === 0) continue;
+      if (pc + q.d * lbScale >= T.cost[q.id]) continue;
+      const e = isA ? edge(nx, ny, T.x[q.id], T.y[q.id]) : edge(T.x[q.id], T.y[q.id], nx, ny);
+      if (e < 0 || pc + e >= T.cost[q.id] - 1e-9) continue;
+      const old = T.par[q.id], kids = T.kids[old];
+      kids.splice(kids.indexOf(q.id), 1);
+      T.par[q.id] = id; T.kids[id].push(q.id);
+      pushCost(T, q.id, pc + e - T.cost[q.id]);
+    }
+    connect(isA, id);
+  };
+  const sample = (isA) => {
+    const O = isA ? B : A, u = rng();
+    if (u < P.goalBias) return isA ? goal : start;
+    if (u < P.goalBias + P.linkBias && O.n > 1) { const k = Math.floor(rng() * O.n); return [O.x[k], O.y[k]]; }
+    for (let k = 0; k < 30; k++) {
+      const x = rx0 + rng() * (rx1 - rx0), y = ry0 + rng() * (ry1 - ry0);
+      if (bestLen < Infinity && Math.hypot(x - start[0], y - start[1]) + Math.hypot(x - goal[0], y - goal[1]) > bestLen * 1.25) continue;
+      return [x, y];
+    }
+    return [rx0 + rng() * (rx1 - rx0), ry0 + rng() * (ry1 - ry0)];
+  };
+  const recheck = () => {
+    if (!best) return;
+    const total = A.cost[best.a] + best.e + B.cost[best.o];
+    if (total < best.total - 1e-9) record(best.a, best.o, best.e);
+  };
+  for (; iterations < maxIter; iterations++) {
+    if ((iterations & 7) === 0) {
+      await ctl.tick(iterations / maxIter);
+      if (nowMs() > deadline) break;
+    }
+    if ((iterations & 63) === 63) recheck();
+    const isA = (iterations & 1) === 0, q = sample(isA);
+    extend(isA, q[0], q[1]);
+  }
+  recheck();
+  if (!best) return { found: false, path: null, candidates, iterations, nodes: A.n + B.n, A, B };
+  // the chosen path: the best candidate, shortcut-smoothed with the same directed check at no more cost
+  const raw = candidates[candidates.length - 1];
+  return { found: true, path: shortcut(edge, raw), candidates, iterations, nodes: A.n + B.n, A, B };
+}
+
+// Shortcut smoothing: from each kept point jump to the farthest later point the rover can drive to directly
+// at no more drive time than along the path between them.
+function shortcut(edge, pts) {
+  const K = pts.length, pre = [0];
+  for (let i = 0; i + 1 < K; i++) { const e = edge(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]); pre.push(pre[i] + (e < 0 ? Infinity : e)); }
+  const out = [pts[0]];
+  let i = 0;
+  while (i < K - 1) {
+    let next = i + 1;
+    for (let j = K - 1; j >= i + 2; j--) {
+      const e = edge(pts[i][0], pts[i][1], pts[j][0], pts[j][1]);
+      if (e >= 0 && e <= (pre[j] - pre[i]) * (1 + 1e-6) + 1e-9) { next = j; break; }
+    }
+    out.push(pts[next]);
+    i = next;
+  }
+  return out;
+}
+
+// "Adjust Waypoints": a nearby passable spot for a goal the trees could not reach. Rings around it; spots the
+// start tree plausibly reaches (a tree node close by and an edge to it) come first, then the gentlest ground.
+// → [x, y] | null
+function adjustGoal(ctx, goal, tree, tried, tryIndex) {
+  const { cor, edge, mob, step } = ctx;
+  const lim = Math.max(mob.climbDeg, mob.descentDeg, mob.crossDeg);
+  let fallback = null;
+  for (const r of ADJUST_RINGS_KM) {
+    let best = null;
+    const off = ((tryIndex * 11) % 360) * Math.PI / 180;
+    for (let k = 0; k < 16; k++) {
+      const ang = off + (k * Math.PI) / 8, x = goal[0] + r * Math.cos(ang), y = goal[1] + r * Math.sin(ang);
+      const n = cor.nodeAt(x, y);
+      if (n < 0 || !(cor.slope[n] <= lim) || tried.some((t) => Math.hypot(t[0] - x, t[1] - y) < 0.1)) continue;
+      const s = cor.slope[n];
+      if (!fallback || s < fallback.s) fallback = { x, y, s };
+      const ni = nearest(tree, x, y);
+      if (Math.hypot(tree.x[ni] - x, tree.y[ni] - y) > 2.5 * step) continue;
+      if (edge(tree.x[ni], tree.y[ni], x, y) < 0) continue;
+      if (!best || s < best.s) best = { x, y, s };
+    }
+    if (best) return [best.x, best.y];
+  }
+  return fallback ? [fallback.x, fallback.y] : null;
+}
+
+// ---------- the planner ----------
+async function planSelfDriving({ points, dem, maxSlopeDeg = DEFAULT_MAX_SLOPE, mobility = null, seed = 1, maxIter = RRT_DEFAULTS.maxIter, maxTries = RRT_DEFAULTS.maxTries, stepKm = null, timeBudgetMs = RRT_DEFAULTS.timeBudgetMs } = {}, opts = {}) {
+  const t0 = nowMs();
+  const { onProgress = null, signal = null, sliceMs = 12, yieldFn = defaultYield } = opts;
+  const P = RRT_DEFAULTS;
+  const climbLim = Number(maxSlopeDeg);
+  const mobIn = climbLim > 0 && climbLim < 90 ? cleanMobility(mobility, climbLim) : null;
+  // without mobility every limit is the climb limit; the drive speed is the default one
+  const mob = mobIn ?? (climbLim > 0 && climbLim < 90 ? { climbDeg: climbLim, descentDeg: climbLim, crossDeg: climbLim, speedKmh: MOBILITY_DEFAULTS.speedKmh } : null);
+  const empty = { ok: false, aborted: false, reason: null, error: null, trajectory: [], legs: [], candidates: [], candidateLegs: [], trees: [], trace: [], delayMs: 0, nodes: 0, ms: 0, seed };
+  const fail = (error) => ({ ...empty, error, reason: error, ms: Math.round(nowMs() - t0) });
+  if (signal?.aborted) throw abortError();
+  if (!dem || !(dem.kmPerPixel > 0) || !(dem.halfKm > 0)) return fail('The terrain grid is not loaded yet.');
+  if (!mob) return fail('Set a slope limit between 1° and 89°.');
+  const wps = [];
+  for (const p of points ?? []) {
+    const q = toPoint(p);
+    if (!q) return fail('Every point needs a latitude and a longitude.');
+    const last = wps[wps.length - 1];
+    if (last && Math.hypot(q[0] - last[0], q[1] - last[1]) < 1e-6) continue;
+    wps.push(q);
+  }
+  if (wps.length < MIN_POINTS) return fail('Add a start and an end point.');
+  if (wps.length > MAX_POINTS) return fail(`Use at most ${MAX_POINTS} points.`);
+  for (let i = 0; i < wps.length; i++) {
+    const h = dem.heightAtXY(wps[i][0], wps[i][1]);
+    if (h === null || h === undefined || Number.isNaN(h)) return fail(`Point ${i + 1} is outside the terrain grid.`);
+  }
+  for (let i = 0; i + 1 < wps.length; i++) {
+    const d = Math.hypot(wps[i + 1][0] - wps[i][0], wps[i + 1][1] - wps[i][1]);
+    if (d > MAX_LEG_KM) return fail(`Leg ${i + 1} is ${Math.round(d)} km; split it with a waypoint (at most ${MAX_LEG_KM} km a leg).`);
+  }
+
+  const nLegs = wps.length - 1, tries = Math.max(1, Math.floor(maxTries)), iters = Math.max(1, Math.floor(maxIter));
+  const rng = makeRng(seed);
+  let sliceStart = nowMs(), legNo = 0, lastFrac = 0;
+  const ctl = {
+    async tick(frac) {
+      if (nowMs() - sliceStart < sliceMs) return;
+      const f = Math.min(0.999, (legNo + Math.max(0, Math.min(1, frac))) / nLegs);
+      if (f > lastFrac) { lastFrac = f; onProgress?.(f); }
+      await yieldFn();
+      if (signal?.aborted) throw abortError();
+      sliceStart = nowMs();
+    },
+  };
+  const trace = [];
+  const say = (step, leg, text) => trace.push({ step, leg, text });
+  const legs = [], candidates = [], candidateLegs = [], treeEdges = [];
+  let trajectory = [wps[0]], delayMs = 0, nodes = 0, aborted = false, reason = null;
+  const acc = { len: 0, maxS: 0, slopeSum: 0, climb: 0, descent: 0, cross: 0, hours: 0, oneWayKm: 0, oneWay: [], prof: { x: [], y: [], km: [], pitch: [] } };
+  say('init', -1, 'Delay = 0, overall path = []. Initialize trees.');
+
+  let from = wps[0];
+  for (let li = 0; li < nLegs; li++) {
+    legNo = li;
+    const to = wps[li + 1];
+    const legKm = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    const leg = { from, to, adjustedTo: null, tries: [] };
+    legs.push(leg);
+    say('select', li, `Waypoints: leg ${li + 1} of ${nLegs}, ${legKm.toFixed(1)} km.`);
+    const cor = buildCorridor(dem, from, to, corridorPadKm(legKm), null);
+    if (!cor) { aborted = true; reason = `Leg ${li + 1} is outside the terrain grid.`; say('abort', li, reason); break; }
+    if (!(cor.slope[cor.nodeAt(from[0], from[1])] <= Math.max(mob.climbDeg, mob.descentDeg, mob.crossDeg))) {
+      aborted = true; reason = `The start of leg ${li + 1} is on ground the rover cannot stand on.`; say('abort', li, reason); break;
+    }
+    const step = stepKm > 0 ? stepKm : Math.max(P.stepMinKm, Math.min(P.stepMaxKm, legKm / P.stepLegDivisor));
+    const edge = makeEdgeCheck(cor, mob);
+    const ctx = { cor, edge, mob, rng, step, maxIter: iters, ctl, P, deadline: 0 };
+    let goal = to, found = null;
+    const tried = [to];
+    for (let ti = 0; ti < tries; ti++) {
+      const remaining = timeBudgetMs - (nowMs() - t0);
+      if (remaining <= 0) { reason = 'The time budget ran out.'; break; }
+      ctx.deadline = nowMs() + Math.max(400, remaining / (nLegs - li + 1));
+      say('brrt', li, `Growing trees from both ends${ti ? ` (try ${ti + 1} of ${tries})` : ''}.`);
+      const tt = nowMs();
+      const run = await bRrt(ctx, from, goal, ti);
+      const ms = Math.round(nowMs() - tt);
+      if (ti > 0) delayMs += ms;
+      nodes += run.nodes;
+      leg.tries.push({ goal, found: run.found, iterations: run.iterations, nodes: run.nodes, ms });
+      for (const T of [run.A, run.B]) for (let k = 1; k < T.n; k++) { const p = T.par[k]; treeEdges.push([T.x[p], T.y[p], T.x[k], T.y[k]]); }
+      for (const c of run.candidates) { candidates.push(c); candidateLegs.push(li); }
+      if (run.found) { found = run; break; }
+      say('none', li, `The trees did not meet (${run.iterations} iterations, ${run.nodes} nodes).`);
+      if (ti + 1 >= tries) { reason = `No path to waypoint ${li + 2} after ${tries} ${tries === 1 ? 'try' : 'tries'}.`; break; }
+      const ta = nowMs();
+      const moved = adjustGoal(ctx, goal, run.A, tried, ti);
+      delayMs += Math.round(nowMs() - ta);
+      if (!moved) { reason = `No passable ground within ${ADJUST_RINGS_KM[ADJUST_RINGS_KM.length - 1]} km of waypoint ${li + 2}.`; break; }
+      const m = Math.round(Math.hypot(moved[0] - goal[0], moved[1] - goal[1]) * 1000);
+      say('adjust', li, `Moved the end waypoint ${m} m to ground the start tree can reach.`);
+      goal = moved; tried.push(moved);
+      leg.adjustedTo = moved;
+    }
+    if (!found) { aborted = true; reason ??= `No path for leg ${li + 1}.`; say('abort', li, reason); break; }
+    say('found', li, `A path of ${found.path.length - 1} segments after ${found.iterations} iterations.`);
+    // add the leg to the overall trajectory, and its figures
+    trajectory.push(...found.path.slice(1));
+    const st = legStats(cor, found.path, {}, new Map(), null, mob);
+    acc.len += st.len; acc.slopeSum += st.slopeSum; acc.maxS = Math.max(acc.maxS, st.maxS);
+    acc.climb = Math.max(acc.climb, st.climb); acc.descent = Math.max(acc.descent, st.descent); acc.cross = Math.max(acc.cross, st.cross);
+    acc.hours += st.hours; acc.oneWayKm += st.oneWayKm; acc.oneWay.push(...st.oneWay);
+    for (const k of ['x', 'y', 'km', 'pitch']) for (const v of st.prof[k]) acc.prof[k].push(v);
+    say('add', li, `${st.len.toFixed(1)} km added to the trajectory.`);
+    from = goal;
+    if (li + 1 < nLegs) say('goal', li, 'Overall goal reached? No, next leg.'); else say('goal', li, 'Overall goal reached? Yes, resulting trajectory.');
+    await ctl.tick(1);
+  }
+  if (aborted) say('goal', legs.length - 1, 'Resulting trajectory: the part driven so far.');
+  onProgress?.(1);
+
+  // candidates: the last of each leg first, at most 8 per leg (kept as found); trees thinned to the cap
+  const trees = treeEdges.length > MAX_TREE_EDGES ? Array.from({ length: MAX_TREE_EDGES }, (_, i) => treeEdges[Math.floor((i * treeEdges.length) / MAX_TREE_EDGES)]) : treeEdges;
+  return {
+    ...empty,
+    ok: !aborted && trajectory.length >= 2, aborted, reason: aborted ? reason : null, error: null,
+    trajectory, points: trajectory, legs, candidates, candidateLegs, trees, trace, delayMs: Math.round(delayMs), nodes, ms: Math.round(nowMs() - t0),
+    limitDeg: climbLim, mobility: mob, waypoints: wps,
+    lengthKm: acc.len, maxSlopeDeg: acc.maxS, meanSlopeDeg: acc.len > 0 ? acc.slopeSum / acc.len : 0,
+    climbMaxDeg: acc.climb, descentMaxDeg: acc.descent, crossMaxDeg: acc.cross, hours: acc.hours, oneWayKm: acc.oneWayKm, oneWay: acc.oneWay,
+    profile: { x: Float32Array.from(acc.prof.x), y: Float32Array.from(acc.prof.y), km: Float32Array.from(acc.prof.km), pitch: Float32Array.from(acc.prof.pitch) },
+  };
+}
+
+// The result for the 3D globe, in latitude / longitude: the trajectory, up to 12 candidate paths (spread over
+// the legs, each up to 300 points), up to 4000 tree edges, the moved waypoints (ghost → moved) and the trace.
+function autonavPayload(result, toLatLon = fromXY) {
+  if (!result) return null;
+  const ll = ([x, y]) => { const p = toLatLon(x, y); const q = Array.isArray(p) ? [p[0], p[1]] : [p.latDeg, p.lonDeg]; return [Math.round(q[0] * 1e5) / 1e5, Math.round(q[1] * 1e5) / 1e5]; };
+  const thin = (pts, max) => {
+    if (pts.length <= max) return pts;
+    return Array.from({ length: max }, (_, i) => pts[Math.round((i * (pts.length - 1)) / (max - 1))]);
+  };
+  const cands = result.candidates ?? [], legOf = result.candidateLegs ?? [];
+  let chosen = cands.map((_, i) => i);
+  if (chosen.length > 12) {
+    // the last candidate of every leg (the best of it) first, then the other late ones
+    const lastOf = new Map();
+    chosen.forEach((i) => lastOf.set(legOf[i] ?? 0, i));
+    const first = [...lastOf.values()];
+    const rest = chosen.filter((i) => !first.includes(i)).reverse();
+    chosen = [...first, ...rest].slice(0, 12).sort((a, b) => a - b);
+  }
+  return {
+    trajectory: thin(result.trajectory ?? [], 2000).map(ll),
+    candidates: chosen.map((i) => thin(cands[i], 300).map(ll)),
+    trees: (result.trees ?? []).slice(0, MAX_TREE_EDGES).map(([x1, y1, x2, y2]) => [...ll([x1, y1]), ...ll([x2, y2])]),
+    adjusted: (result.legs ?? []).filter((l) => l.adjustedTo).map((l) => ({ from: ll(l.to), to: ll(l.adjustedTo) })),
+    aborted: !!result.aborted,
+    reason: result.reason ?? null,
+    trace: (result.trace ?? []).map((t) => `${STEP_LABELS[t.step] ?? t.step}: ${t.text}`),
+  };
+}
+
+return { RRT_DEFAULTS, ADJUST_RINGS_KM, CANDIDATES_PER_LEG, MAX_TREE_EDGES, STEP_LABELS, makeEdgeCheck, planSelfDriving, autonavPayload };
+})();
 __m['comms.js'] = (() => {
 // Phase 4 (docs/PHASES.md): surface radio links over real terrain. A link between two antennas above the
 // ground: free-space loss plus the loss of the dominant knife edge in the terrain profile between them
@@ -8146,6 +8685,280 @@ function linkSummary(profile, station, earth = null, tMs = null) {
 
 return { MOON_R_M, BANDS, STATION_DEFAULTS, cleanStation, fsplDb, knifeEdgeDb, link, coverage, routeLinks, linkSummary };
 })();
+__m['mission-save.js'] = (() => {
+// Saved missions: a planned route with everything around it (the route3d.js payload: path, times, battery,
+// sunlight, links, grade and height per point, waypoints, havens, traps, the touchdown; the settings it was
+// planned with; a summary; and, when recorded on the globe, the rover's motion), kept in localStorage and
+// exported as files. Pure apart from downloadText(); no imports.
+//
+// Record v1 = { kind: 'lsn-mission-record', v: 1, id, name, savedMs, mission, settings, summary, route, recording }
+//   mission    mission-flow.js mission (site, landing time, touchdown)
+//   settings   { maxSlopeDeg, mobility, power, station, departMs }
+//   summary    { routeId, label, lengthKm, hours, arriveMs, socMin, oneWayKm, returnable, trapsKm2, stationKm, earthShare }
+//   route      route3d.js payload v1
+//   recording  null | { startedMs, fields: [...], samples: [[…], …] }   motion recorded during 3D playback
+
+const RECORDS_KEY = 'lsn-records';
+const MAX_RECORDS = 20;
+const RECORDING_FIELDS = Object.freeze(['tMs', 'latDeg', 'lonDeg', 'km', 'heightM', 'pitchDeg', 'rollDeg', 'yawDeg', 'soc', 'flags']);
+const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+
+// The self-driving planner's search trees (route.autonav.trees) can be thousands of edges: a saved record keeps
+// at most this many, so twenty records still fit in the browser's storage.
+const SAVED_TREE_EDGES = 600;
+
+function buildRecord({ name = null, mission = null, settings = {}, summary = {}, route: full, recording = null, savedMs = Date.now() }) {
+  const trees = full?.autonav?.trees;
+  const route = trees?.length > SAVED_TREE_EDGES ? { ...full, autonav: { ...full.autonav, trees: trees.filter((_, i) => i % Math.ceil(trees.length / SAVED_TREE_EDGES) === 0) } } : full;
+  const id = `m${savedMs.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+  const label = route?.label ? `${route.label} route` : 'Route';
+  const where = mission?.siteName ?? (route?.pts?.[0] ? `${route.pts[0][0].toFixed(2)}°, ${route.pts[0][1].toFixed(2)}°` : '');
+  return {
+    kind: 'lsn-mission-record', v: 1, id, savedMs,
+    name: name ?? `${label}${where ? ` from ${where}` : ''} · ${new Date(savedMs).toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+    mission, settings, summary, route, recording,
+  };
+}
+
+function parseRecord(text) {
+  try {
+    const r = typeof text === 'string' ? JSON.parse(text) : text;
+    return r && r.kind === 'lsn-mission-record' && r.v === 1 && r.route && Array.isArray(r.route.pts) ? r : null;
+  } catch { return null; }
+}
+
+function readAll(storage) {
+  try { const a = JSON.parse(store(storage)?.getItem(RECORDS_KEY) ?? '[]'); return Array.isArray(a) ? a.filter((r) => parseRecord(r)) : []; } catch { return []; }
+}
+function writeAll(list, storage) {
+  store(storage)?.setItem(RECORDS_KEY, JSON.stringify(list));
+}
+
+// Newest first: { id, name, savedMs, lengthKm, label, recorded }
+function listRecords(storage) {
+  return readAll(storage).sort((a, b) => b.savedMs - a.savedMs).map((r) => ({ id: r.id, name: r.name, savedMs: r.savedMs, lengthKm: r.route.lengthKm, label: r.route.label, recorded: !!r.recording?.samples?.length }));
+}
+
+// Saves (or replaces by id) a record, keeping the newest MAX_RECORDS. When the browser's storage is full the
+// oldest are dropped until it fits. → { ok, dropped, reason }
+function saveRecord(record, storage) {
+  let list = readAll(storage).filter((r) => r.id !== record.id);
+  list.unshift(record);
+  list.sort((a, b) => b.savedMs - a.savedMs);
+  let dropped = Math.max(0, list.length - MAX_RECORDS);
+  list = list.slice(0, MAX_RECORDS);
+  for (;;) {
+    try { writeAll(list, storage); return { ok: true, dropped, reason: null }; } catch (e) {
+      if (list.length <= 1) return { ok: false, dropped, reason: 'The browser storage is full; download the file instead.' };
+      list.pop(); dropped++;
+    }
+  }
+}
+
+const loadRecord = (id, storage) => readAll(storage).find((r) => r.id === id) ?? null;
+function deleteRecord(id, storage) { writeAll(readAll(storage).filter((r) => r.id !== id), storage); }
+
+// Adds a motion recording to a stored record (by id), or returns the record with it for a download.
+function withRecording(record, recording) { return { ...record, recording }; }
+
+// ---------- files ----------
+const lonE = (lon) => (lon > 180 ? lon - 360 : lon);   // GeoJSON wants −180…180
+
+// GeoJSON (selenographic lat/lon, east longitude −180…180): the route line with per-vertex arrays in its
+// properties, the waypoints, havens, stops, the touchdown and the traps.
+function toGeoJSON(r) {
+  const p = r.route, f = [];
+  f.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: p.pts.map((q) => [lonE(q[1]), q[0]]) },
+    properties: { kind: 'route', name: r.name, routeId: p.routeId, label: p.label, lengthKm: p.lengthKm, body: 'Moon (IAU 2015, mean radius 1737.4 km)',
+      km: p.pts.map((q) => q[2]), tMs: p.pts.map((q) => q[3]), soc: p.pts.map((q) => q[4]), flags: p.pts.map((q) => q[5]), gradeDeg: p.pts.map((q) => q[6] ?? null), heightM: p.pts.map((q) => q[7] ?? null),
+      summary: r.summary, settings: r.settings } });
+  (p.wps ?? []).forEach((w, i) => f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(w.lonDeg), w.latDeg] }, properties: { kind: 'waypoint', n: i + 1 } }));
+  (p.havens ?? []).forEach((h) => f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(h.lonDeg), h.latDeg] }, properties: { kind: 'haven' } }));
+  (p.stops ?? []).forEach((s) => f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(s.lonDeg), s.latDeg] }, properties: { kind: 'stop', km: s.km, fromMs: s.fromMs, toMs: s.toMs } }));
+  if (r.mission?.landed) f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(r.mission.landed.lonDeg), r.mission.landed.latDeg] }, properties: { kind: 'touchdown', ...r.mission.landed } });
+  if (p.traps?.cells?.length) f.push({ type: 'Feature', geometry: { type: 'MultiPoint', coordinates: p.traps.cells.map(([la, lo]) => [lonE(lo), la]) }, properties: { kind: 'traps', cellKm: p.traps.cellKm } });
+  if (r.recording?.samples?.length) f.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.recording.samples.map((s) => [lonE(s[2]), s[1]]) }, properties: { kind: 'recorded-track', fields: r.recording.fields } });
+  return { type: 'FeatureCollection', features: f };
+}
+
+const csvCell = (v) => (v === null || v === undefined || (typeof v === 'number' && !Number.isFinite(v)) ? '' : typeof v === 'number' ? String(+v.toFixed(6)) : `"${String(v).replace(/"/g, '""')}"`);
+
+// One row per route point: where, when, battery, sunlight / Earth / station / one-way, grade and height.
+function routeCSV(r) {
+  const head = ['km', 'lat_deg', 'lon_deg_east', 'utc', 'battery_share', 'sunlit', 'earth_in_view', 'station_link', 'one_way', 'grade_deg', 'height_m'];
+  const rows = r.route.pts.map((q) => [q[2], q[0], q[1], Number.isFinite(q[3]) ? new Date(q[3]).toISOString() : null, q[4], q[5] & 1 ? 1 : 0, q[5] & 2 ? 1 : 0, q[5] & 4 ? 1 : 0, q[5] & 8 ? 1 : 0, q[6] ?? null, q[7] ?? null]);
+  return [head.join(','), ...rows.map((row) => row.map(csvCell).join(','))].join('\n') + '\n';
+}
+
+// One row per recorded motion sample.
+function recordingCSV(rec) {
+  if (!rec?.samples?.length) return '';
+  const fields = rec.fields ?? RECORDING_FIELDS;
+  return [fields.join(','), ...rec.samples.map((s) => s.map((v, i) => (fields[i] === 'tMs' && Number.isFinite(v) ? new Date(v).toISOString() : csvCell(v))).join(','))].join('\n') + '\n';
+}
+
+const fileName = (r, ext) => `${(r.name ?? 'mission').replace(/[^A-Za-z0-9._ -]+/g, '').replace(/\s+/g, '_').slice(0, 80)}.${ext}`;
+
+// Offers a text file to save (browser only).
+function downloadText(doc, filename, text, mime = 'application/json') {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = doc.createElement('a');
+  a.href = url; a.download = filename;
+  doc.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+return { RECORDS_KEY, MAX_RECORDS, RECORDING_FIELDS, SAVED_TREE_EDGES, buildRecord, parseRecord, listRecords, saveRecord, loadRecord, deleteRecord, withRecording, toGeoJSON, routeCSV, recordingCSV, fileName, downloadText };
+})();
+__m['ui/mission-records.js'] = (() => {
+// Mission file section of the route card: save the selected route as a record, download it as JSON, GeoJSON
+// or CSV, list the saved missions (this browser's storage, shared with the 3D globe), load, delete, import.
+// The pure helpers (record to card inputs, summary and settings of a record, list text) are tested in Node.
+//
+// settingsOf({ maxSlopeDeg, mobility, power, station, stationOff, departMs }) → record settings
+// summaryOf({ route, plan, drive, comms }) → record summary (null where unknown)
+// recordInputs(record) → { points, maxSlopeDeg, mobility, power, station, departMs, routeId, siteName }
+// listText(item) → { title, sub }
+// createMissionFile(callbacks) → { el, refresh(), setReady(bool) }
+// callbacks: {
+//   getRecord() → record | null        the record of the selected route as it is now (not stored)
+//   onLoad(record)                     Load pressed (or a file imported)
+// }
+const { h, clear } = __m['ui/dom.js'];
+const { toXY } = __m['terrain.js'];
+const { saveRecord, listRecords, loadRecord, deleteRecord, parseRecord, toGeoJSON, routeCSV, recordingCSV, fileName, downloadText, RECORDS_KEY } = __m['mission-save.js'];
+
+const num = (v) => (Number.isFinite(v) ? v : null);
+
+// The settings a plan was made with, as stored in a record.
+function settingsOf({ maxSlopeDeg = null, mobility = null, power = null, station = null, stationOff = false, departMs = null } = {}) {
+  return { maxSlopeDeg: num(maxSlopeDeg), mobility: mobility ? { ...mobility } : null, power: power ? { ...power } : null, station: stationOff ? null : station ? { ...station } : null, stationOff: !!stationOff, departMs: num(departMs) };
+}
+
+// The figures of the selected route for a record's summary; what is not known is null.
+function summaryOf({ route, plan = null, drive = null, comms = null } = {}) {
+  const m = comms?.summary ?? null;
+  return {
+    routeId: route?.id ?? null, label: route?.label ?? null, lengthKm: num(route?.lengthKm),
+    hours: drive ? num(drive.driveH + (drive.waitH ?? 0)) : num(route?.hours),
+    arriveMs: drive?.ok ? num(drive.arriveMs) : null,
+    socMin: drive ? num(drive.socMin) : null,
+    oneWayKm: num(route?.oneWayKm),
+    returnable: typeof plan?.returnable === 'boolean' ? plan.returnable : null,
+    trapsKm2: num(plan?.traps?.km2),
+    stationKm: m ? num(m.stationKm) : null,
+    earthShare: m && m.totalKm > 0 && m.earthKm !== null ? num(m.earthKm / m.totalKm) : null,
+  };
+}
+
+// A record as the route card's inputs: the points in map km (start, waypoints, end; the first and last route
+// points when the record has none), the limits, power, station and departure, and the route to select.
+function recordInputs(rec) {
+  const r = rec.route, s = rec.settings ?? {};
+  const ll = r.wps?.length >= 2 ? r.wps.map((w) => [w.latDeg, w.lonDeg]) : [r.pts[0], r.pts[r.pts.length - 1]].map((q) => [q[0], q[1]]);
+  const mob = s.mobility ?? null;
+  return {
+    points: ll.map(([la, lo]) => toXY(la, lo)),
+    maxSlopeDeg: num(s.maxSlopeDeg) ?? num(mob?.climbDeg) ?? num(r.limits?.climbDeg),
+    mobility: mob ?? (r.limits ? { descentDeg: r.limits.descentDeg, crossDeg: r.limits.crossDeg } : null),
+    power: s.power ?? null,
+    station: s.stationOff ? null : s.station ?? null,
+    stationOff: s.stationOff ?? s.station === null,
+    departMs: num(s.departMs) ?? num(r.departMs),
+    routeId: rec.summary?.routeId ?? r.routeId ?? null,
+    siteName: rec.mission?.siteName ?? null,
+  };
+}
+
+const fmtDate = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+// Two lines for a list row: the name, and length, date and whether motion was recorded.
+function listText(item) {
+  const bits = [Number.isFinite(item.lengthKm) ? `${(Math.round(item.lengthKm * 10) / 10).toFixed(1)} km` : null, Number.isFinite(item.savedMs) ? fmtDate(item.savedMs) : null].filter(Boolean);
+  return { title: item.name, sub: bits.join(' · '), recorded: !!item.recorded };
+}
+
+// ---------- the section ----------
+let uid = 0;
+
+function createMissionFile(callbacks = {}) {
+  const id = `lsn-mf-${++uid}`;
+  let ready = false;
+  const note = h('p', { class: 'mf-note', role: 'status', 'aria-live': 'polite' });
+  const say = (t) => { note.textContent = t ?? ''; };
+  const save = h('button', { type: 'button', class: 'btn mf-btn', onclick: () => doSave() }, 'Save mission');
+  const dl = (label, ext, make, mime) => h('button', { type: 'button', class: 'btn mf-btn', onclick: () => {
+    const rec = callbacks.getRecord?.();
+    if (!rec) return say('Select a route first.');
+    downloadText(document, fileName(rec, ext), make(rec), mime);
+  } }, label);
+  const downloads = [dl('JSON', 'json', (r) => JSON.stringify(r, null, 1), 'application/json'), dl('GeoJSON', 'geojson', (r) => JSON.stringify(toGeoJSON(r)), 'application/geo+json'), dl('CSV', 'csv', routeCSV, 'text/csv')];
+  const list = h('ul', { class: 'mf-list', 'aria-label': 'Saved missions' });
+  const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true, id: `${id}-file` });
+  file.addEventListener('change', async () => {
+    const f = file.files?.[0];
+    file.value = '';
+    if (!f) return;
+    let rec = null;
+    try { rec = parseRecord(await f.text()); } catch { rec = null; }
+    if (!rec) return say('That file is not a saved mission.');
+    const r = saveRecord(rec);
+    say(r.ok ? `Imported ${rec.name}.` : r.reason);
+    refresh();
+    callbacks.onLoad?.(rec);
+  });
+  const importBtn = h('button', { type: 'button', class: 'btn mf-btn', onclick: () => file.click() }, 'Import file…');
+  const count = h('span', { class: 'num' });
+  const summary = h('summary', null, 'Mission file ', count);
+  const el = h('details', { class: 'fold-more rp-file', id }, summary,
+    h('div', { class: 'mf-body' },
+      h('div', { class: 'mf-actions' }, save, h('span', { class: 'mf-sep', 'aria-hidden': 'true' }), ...downloads),
+      note,
+      h('p', { class: 'rp-rover-sub' }, 'Saved missions'),
+      list,
+      h('div', { class: 'mf-actions' }, importBtn, file)));
+
+  function doSave() {
+    const rec = callbacks.getRecord?.();
+    if (!rec) return say('Select a route first.');
+    const r = saveRecord(rec);
+    say(r.ok ? `Saved “${rec.name}”.${r.dropped ? ` ${r.dropped} older mission${r.dropped === 1 ? '' : 's'} dropped to make room.` : ''}` : r.reason);
+    refresh();
+  }
+
+  function refresh() {
+    const items = listRecords();
+    count.textContent = items.length ? `(${items.length})` : '';
+    clear(list);
+    if (!items.length) { list.append(h('li', { class: 'mf-empty' }, 'None yet. Save one above, or import a file.')); return; }
+    for (const it of items) {
+      const t = listText(it);
+      const download = (ext, make, mime) => { const rec = loadRecord(it.id); if (rec) downloadText(document, fileName(rec, ext), make(rec), mime); };
+      list.append(h('li', { class: 'mf-item', 'data-id': it.id },
+        h('span', { class: 'mf-name' }, t.title),
+        h('span', { class: 'mf-sub' }, t.sub, t.recorded ? h('span', { class: 'mf-tag' }, 'motion recorded') : null),
+        h('span', { class: 'mf-row' },
+          h('button', { type: 'button', class: 'btn mf-btn', onclick: () => { const rec = loadRecord(it.id); if (rec) { say(`Loading “${rec.name}”…`); callbacks.onLoad?.(rec); } } }, 'Load'),
+          h('button', { type: 'button', class: 'btn mf-btn', onclick: () => download('json', (r) => JSON.stringify(r, null, 1), 'application/json') }, 'Download'),
+          t.recorded ? h('button', { type: 'button', class: 'btn mf-btn', onclick: () => download('motion.csv', (r) => recordingCSV(r.recording), 'text/csv') }, 'Motion CSV') : null,
+          h('button', { type: 'button', class: 'btn mf-btn mf-del', onclick: () => { if (confirm(`Delete “${it.name}”? This cannot be undone.`)) { deleteRecord(it.id); say('Deleted.'); refresh(); } } }, 'Delete'))));
+    }
+  }
+
+  function setReady(on) {
+    ready = !!on;
+    save.disabled = !ready;
+    for (const b of downloads) b.disabled = !ready;
+  }
+
+  // a record saved from the 3D globe tab shows up here
+  window.addEventListener('storage', (e) => { if (e.key === RECORDS_KEY || e.key === null) refresh(); });
+  setReady(false);
+  refresh();
+  return { el, refresh, setReady };
+}
+
+return { settingsOf, summaryOf, recordInputs, listText, createMissionFile };
+})();
 __m['ui/routeplan.js'] = (() => {
 // Route plan card (phase 4 §6 R): the waypoints as latitude and longitude rows (add, remove, reorder),
 // a slope limit, a Plan button with progress and Cancel, the three candidates as selectable rows with
@@ -8166,7 +8979,13 @@ __m['ui/routeplan.js'] = (() => {
 //   onDepartNow()                       phase 3: "Leave at the timeline time" pressed
 //   onFindDepartures()                  phase 3: "Find good departure times" pressed
 //   onFly3d()                           phase 6: "Fly along in 3D" pressed
+//   onAutoRun({ points, maxSlopeDeg, mobility })  the self-driving planner (route-rrt.js) asked to run; onAutoCancel(), onAutoUse()
+//                                       (add its trajectory as the Self-driving candidate), onAutoTrees(show) (the search trees on the map)
 //   onUseDeparture(ms)                  phase 3: one of the found departures chosen
+//   onColour('slope' | 'plain')         the route colour switch
+//   onInset3d() → boolean               "3D preview" pressed; true when the window is open now (insetOpen() says so)
+//   onMissionRecord() → record | null   the Mission file section asks for the selected route's record
+//   onMissionLoad(record)               a saved or imported mission chosen to load
 //   onLimit(maxSlopeDeg)                the slope limit slider was let go at a new value (for the URL hash);
 //                                       set it back from outside with update({ maxSlopeDeg })
 // }
@@ -8181,12 +9000,18 @@ __m['ui/routeplan.js'] = (() => {
 //   departures: { routeId, scan } | null           phase 3: route-energy.js scanDepartures of the selected route
 //   comms: { routeId, summary, links, earth, coverage } | null   phase 4: comms.js figures of the selected route
 //   havens: { routeId, result } | null           phase 5: contingency.js findHavens of the selected route
+//   routeColour: 'slope' | 'plain'               the route colour switch
+//   mobility, power: object | null               set the rover and power inputs (null: the defaults), e.g. from a loaded mission
+//   station: object | null                       set the station inputs (null: switched off)
+//   auto: { running, progress, result, used, showTrees } | null   the self-driving planner's state (result: route-rrt.js planSelfDriving)
 const { h, s, clear } = __m['ui/dom.js'];
 const { fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
 const { parseLatLon, formatLat, formatLon } = __m['coords.js'];
 const { DEFAULT_MAX_SLOPE, MAX_POINTS, MIN_POINTS, MOBILITY_DEFAULTS } = __m['route-plan.js'];
 const { POWER_DEFAULTS } = __m['route-energy.js'];
+const { STEP_LABELS } = __m['route-rrt.js'];
 const { STATION_DEFAULTS, BANDS } = __m['comms.js'];
+const { createMissionFile } = __m['ui/mission-records.js'];
 
 const LIMIT = { min: 5, max: 30, step: 1 };
 const kmFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -8384,6 +9209,25 @@ function planMatches(plan, points, limitDeg, mobility = null) {
   return w.every((p, i) => Math.abs(p[0] - points[i][0]) < 0.05 && Math.abs(p[1] - points[i][1]) < 0.05);
 }
 
+// The self-driving planner's figures (route-rrt.js result) as display lines.
+function autoLines(r) {
+  if (!r) return [];
+  const d1 = (v) => `${(Math.round(v * 10) / 10).toFixed(1)}°`;
+  const lines = [];
+  if (r.aborted) lines.push({ key: 'abort', warn: true, text: `Aborted: ${r.reason} The part driven so far is shown (${kmFmt.format(r.lengthKm ?? 0)} km).` });
+  else if (r.error) { lines.push({ key: 'error', warn: true, text: r.error }); return lines; }
+  if (r.trajectory?.length >= 2 && !r.aborted) {
+    lines.push({ key: 'length', text: `Trajectory ${kmFmt.format(r.lengthKm)} km, drive time ${dur(r.hours)} at ${r.mobility?.speedKmh ?? MOBILITY_DEFAULTS.speedKmh} km/h, slower on slopes.` });
+    lines.push({ key: 'grades', text: `Steepest along it: up ${d1(r.climbMaxDeg)}, down ${d1(r.descentMaxDeg)}, across ${d1(r.crossMaxDeg)}.` });
+  }
+  const moved = (r.legs ?? []).filter((l) => l.adjustedTo);
+  lines.push({ key: 'adjust', warn: moved.length > 0, text: moved.length
+    ? `Adjusted waypoints: ${moved.length} moved (${moved.map((l) => `${intFmt.format(Math.hypot(l.adjustedTo[0] - l.to[0], l.adjustedTo[1] - l.to[1]) * 1000)} m`).join(', ')}). Delay from retries: ${(r.delayMs / 1000).toFixed(1)} s.`
+    : `No waypoint had to move. Delay from retries: ${(r.delayMs / 1000).toFixed(1)} s.` });
+  lines.push({ key: 'search', text: `Searched ${intFmt.format(r.nodes)} tree nodes in ${(r.ms / 1000).toFixed(1)} s; ${(r.candidates ?? []).length} candidate paths (blue on the map), the chosen trajectory in cyan.` });
+  return lines;
+}
+
 // ---------- the card ----------
 
 function swatch(id) {
@@ -8402,8 +9246,10 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   let power = { ...POWER_DEFAULTS };         // phase 3: panel, battery, load, mass
   let energy = null, departures = null, comms = null, havens = null;
   let station = { ...STATION_DEFAULTS }, stationOn = true;
+  let colour = 'slope';          // route colour on the map: by slope, or plain
   let lastPoints = null, emitted = null;
   let running = false, progress = 0, plan = null, selected = null, hovered = null;
+  let auto = null;               // the self-driving planner's state, from main.js
   let validPoints = null;        // the rows as points when all are valid
 
   // fix R8: the point rows are the first thing in the card, open by default; one line says both ways in
@@ -8488,7 +9334,54 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   const results = h('div', { class: 'rp-results' });
   const notes = h('ul', { class: 'rp-notes fold-more-body' });
 
-  const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results,
+  // ---------- self-driving planner (route-rrt.js): Run, progress, the flowchart's steps, the figures ----------
+  const autoRun = h('button', { type: 'button', class: 'btn rp-auto-run', onclick: () => submit(true) }, 'Run');
+  const autoCancel = h('button', { type: 'button', class: 'btn rp-auto-cancel', hidden: true, onclick: () => callbacks.onAutoCancel?.() }, 'Cancel');
+  const autoOffer = h('button', { type: 'button', class: 'btn rp-auto-offer', hidden: true, onclick: () => submit(true) }, 'Try the self-driving planner (it moves blocked waypoints)');
+  const autoFill = h('span'), autoPct = h('span', { class: 'num' });
+  const autoProg = h('p', { class: 'region-progress', hidden: true }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, autoFill), autoPct);
+  const autoTrace = h('ol', { class: 'rp-trace', 'aria-label': 'Planner steps' });
+  const autoFigs = h('ul', { class: 'rp-energy rp-auto-figs' });
+  const autoUse = h('button', { type: 'button', class: 'btn btn-primary rp-auto-use', onclick: () => callbacks.onAutoUse?.() }, 'Use this path');
+  const treesBox = h('input', { type: 'checkbox', id: `${id}-auto-trees`, checked: true });
+  treesBox.addEventListener('change', () => callbacks.onAutoTrees?.(treesBox.checked));
+  const autoFoot = h('div', { class: 'rp-auto-foot', hidden: true }, autoUse, h('label', { class: 'rp-auto-trees', for: `${id}-auto-trees` }, treesBox, h('span', null, 'Show search trees')));
+  const autoBox = h('section', { class: 'rp-auto', 'aria-label': 'Self-driving planner' },
+    h('p', { class: 'rp-rover-title' }, 'Self-driving planner (B-RRT*)'),
+    h('p', { class: 'rp-note-inline' }, 'Grows two random trees over the terrain, leg by leg, and drives the cheapest path they find. It moves a waypoint it cannot reach.'),
+    autoOffer, h('div', { class: 'rp-actions' }, autoRun, autoCancel), autoProg, autoTrace, autoFigs, autoFoot);
+  let autoShown = null, autoFlags = '';
+  function renderAuto() {
+    const r = auto?.result ?? null, run = !!auto?.running;
+    autoOffer.hidden = run || running || !(plan && !plan.ok && (plan.blocked || /^No route/.test(plan.error ?? '')));
+    autoCancel.hidden = !run;
+    autoProg.hidden = !run;
+    if (run) {
+      const pr = Math.max(0, Math.min(1, auto.progress ?? 0));
+      autoFill.style.transform = `scaleX(${pr.toFixed(3)})`;
+      const text = `Planning… ${Math.floor(pr * 10) * 10}%`;
+      if (autoPct.textContent !== text) autoPct.textContent = text;
+    }
+    const stale = !!r && !planMatches(r, validPoints ?? lastPoints, limit, mobility);
+    const flags = `${stale}|${auto?.used}|${selected}|${run}`;
+    if (r === autoShown && flags === autoFlags) return;
+    if (r !== autoShown) {
+      clear(autoTrace);
+      for (const t of r?.trace ?? []) autoTrace.append(h('li', { 'data-step': t.step }, h('span', { class: 'rp-trace-step' }, STEP_LABELS[t.step] ?? t.step), t.text));
+    }
+    autoShown = r; autoFlags = flags;
+    clear(autoFigs);
+    if (r && !run) for (const l of autoLines(r)) autoFigs.append(h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text));
+    if (stale && !run) autoFigs.append(h('li', { class: 'rp-stale' }, 'Points or limit changed. Run again to update.'));
+    autoFoot.hidden = !(r?.ok && !run);
+    const inUse = !!auto?.used && selected === 'auto';
+    autoUse.disabled = inUse || stale;
+    autoUse.textContent = inUse ? 'Using this path' : 'Use this path';
+    if (treesBox.checked !== (auto?.showTrees !== false)) treesBox.checked = auto?.showTrees !== false;
+  }
+
+  const mission = createMissionFile({ getRecord: () => callbacks.onMissionRecord?.() ?? null, onLoad: (r) => callbacks.onMissionLoad?.(r) });
+  const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results, autoBox, mission.el,
     h('details', { class: 'fold-more rp-notes-box' }, h('summary', null, 'Notes'), notes));
 
   // ---------- points ----------
@@ -8603,7 +9496,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     }
   }
 
-  function submit() {
+  function submit(viaAuto = false) {
     // take what is typed even if no change event has fired yet (Enter in a field)
     rowEls.forEach((r, i) => { rows[i] = { lat: r.lat.value.trim(), lon: r.lon.value.trim() }; });
     const r = validate(true);
@@ -8617,7 +9510,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     }
     formError.hidden = true;
     emitPoints();
-    callbacks.onPlan?.({ points: r.points, maxSlopeDeg: limit, mobility: { ...mobility } });
+    callbacks[viaAuto ? 'onAutoRun' : 'onPlan']?.({ points: r.points, maxSlopeDeg: limit, mobility: { ...mobility } });
   }
 
   function renderLimit() {
@@ -8627,7 +9520,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   }
 
   // ---------- results ----------
-  const names = { short: 'Shortest', flat: 'Flattest', sunny: 'Sunniest' };
+  const names = { short: 'Shortest', flat: 'Flattest', sunny: 'Sunniest', auto: 'Self-driving' };
 
   function pick(rid) { if (rid !== selected) callbacks.onPick?.(rid); }
   function hover(rid) { if (rid !== hovered) { hovered = rid; callbacks.onHover?.(rid); } }
@@ -8666,6 +9559,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     if (plan.error) { status.append(h('p', { class: 'rp-error' }, plan.error)); return; }
     if (plan.ok) {
       if (stale) status.append(h('p', { class: 'rp-stale' }, 'Points or limit changed. Plan again to update.'));
+      else if (plan.selfDriving) status.append(h('p', { class: 'rp-done num' }, `Self-driving route planned in ${(plan.ms / 1000).toFixed(1)} s.`));
       else status.append(h('p', { class: 'rp-done num' }, `Searched ${intFmt.format(plan.nodes)} terrain nodes in ${(plan.ms / 1000).toFixed(1)} s.`));
     }
   }
@@ -8702,6 +9596,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     results.querySelector('.rp-rows')?.classList.toggle('is-stale', stale);
     syncRows();
     renderRover();
+    renderAuto();
   }
 
   // phase 2: the selected route's rover figures under the rows
@@ -8718,7 +9613,9 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     const drive = energy && energy.routeId === r.id ? energy.drive : null;
     const eLines = energyLines(drive, power, energy?.skyKm ?? null);
     const chart = drive ? batteryChart(drive, power.reserve, r.lengthKm) : null;
+    const seg = h('span', { class: 'rp-seg', role: 'group', 'aria-label': 'Route colour' }, ...[['slope', 'Slope'], ['plain', 'Plain']].map(([k, label]) => h('button', { type: 'button', 'aria-pressed': String(colour === k), onclick: () => { if (colour !== k) { colour = k; roverKey = null; callbacks.onColour?.(k); renderRover(); } } }, label)));
     roverBox.append(h('p', { class: 'rp-rover-title' }, `Rover on the ${names[r.id] ?? r.label} route`),
+      r.profile ? h('div', { class: 'rp-colour' }, h('span', null, 'Route colour'), seg) : null,
       eLines.length ? h('ul', { class: 'rp-energy' }, ...eLines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))) : null,
       chart ? h('div', { class: 'rp-bat-box' }, chart,
         ...(() => { const c = comms && comms.routeId === r.id ? comms : null; const strip = c ? linkStrip(r.profile, c.links, c.earth, r.lengthKm) : null; return strip ? [strip, h('div', { class: 'rp-link-key' }, h('span', { class: 'k-earth' }, 'Earth in view'), h('span', { class: 'k-station' }, 'Station link'))] : []; })(),
@@ -8738,7 +9635,8 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
       drive ? h('div', { class: 'rp-depart-row' },
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times'),
-        h('button', { type: 'button', class: 'btn btn-primary rp-depart rp-fly3d', onclick: () => callbacks.onFly3d?.() }, 'Fly along in 3D')) : null,
+        h('button', { type: 'button', class: 'btn btn-primary rp-depart rp-fly3d', onclick: () => callbacks.onFly3d?.() }, 'Fly along in 3D'),
+        (() => { const b = h('button', { type: 'button', class: 'btn rp-depart rp-inset3d', 'aria-pressed': String(!!callbacks.insetOpen?.()), onclick: () => b.setAttribute('aria-pressed', String(!!callbacks.onInset3d?.())) }, '3D preview'); return b; })()) : null,
       ...(() => {
         const scan = departures && departures.routeId === r.id ? departures.scan : null;
         if (!scan) return [];
@@ -8805,6 +9703,8 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
       h('li', null, `Comms: free-space loss plus the dominant knife edge in the terrain between the station's mast and the rover's ${STATION_DEFAULTS.roverM} m antenna (ITU-R P.526), with the Moon's curvature, on the loaded terrain grid. Site, mast, radius, bands and 0 dBi antennas follow Jun et al. (JPL, IEEE Aerospace 2025); the ${STATION_DEFAULTS.txDbm} dBm transmitter and ${STATION_DEFAULTS.thresholdDbm} dBm threshold are assumptions. Earth in view uses the skyline grid at the simulated times.`));
   }
 
+  function setInput(inputId, v) { const i = el.querySelector(`#${inputId}`); if (i) i.value = String(v); }
+
   function update(p = {}) {
     if ('points' in p && p.points !== lastPoints) {
       lastPoints = p.points ?? null;
@@ -8827,7 +9727,19 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     if ('departures' in p) { departures = p.departures ?? null; roverKey = null; }
     if ('comms' in p) { comms = p.comms ?? null; roverKey = null; }
     if ('havens' in p) { havens = p.havens ?? null; roverKey = null; }
+    if (p.routeColour && p.routeColour !== colour) { colour = p.routeColour; roverKey = null; }
+    if ('mobility' in p) { mobility = { ...MOBILITY_DEFAULTS, ...Object.fromEntries(Object.keys(MOBILITY_DEFAULTS).filter((k) => ok(p.mobility?.[k])).map((k) => [k, p.mobility[k]])) }; for (const k of Object.keys(MOBILITY_DEFAULTS)) setInput(`${id}-${k}`, mobility[k]); }
+    if ('power' in p) { power = { ...POWER_DEFAULTS, ...Object.fromEntries(Object.keys(POWER_DEFAULTS).filter((k) => ok(p.power?.[k])).map((k) => [k, p.power[k]])) }; for (const k of ['panelW', 'batteryWh', 'loadW', 'massKg']) setInput(`${id}-${k}`, power[k]); }
+    if ('station' in p) {
+      stationOn = !!p.station;
+      if (p.station) station = { ...STATION_DEFAULTS, ...p.station };
+      stationToggle.checked = stationOn; stationRow.classList.toggle('is-off', !stationOn);
+      for (const k of ['latDeg', 'lonDeg', 'mastM']) setInput(`${id}-st-${k}`, station[k]);
+      bandSel.value = station.band;
+    }
+    if ('auto' in p) auto = p.auto ?? null;
     const baseBefore = notes.dataset.base;
+    mission.setReady(!!plan?.ok && !!selected && !running);
     renderResults();
     if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }
   }
@@ -8841,7 +9753,33 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   return { el, update };
 }
 
-return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, COVERAGE_BINS, commsLines, havenLines, linkStrip, departuresLine, batteryChart, routeSentence, planMatches, createRoutePlanCard };
+return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, COVERAGE_BINS, commsLines, havenLines, linkStrip, departuresLine, batteryChart, routeSentence, planMatches, autoLines, createRoutePlanCard };
+})();
+__m['slope-colours.js'] = (() => {
+// The slope colour scale shared by the 2D map and the 3D globe: a route coloured by the grade along the way
+// (its absolute value, uphill or downhill), in the bands a rover driver reads at a glance. Pure; no DOM.
+const SLOPE_BANDS = Object.freeze([
+  { maxDeg: 2, colour: '#22d3ee', label: '0–2°' },
+  { maxDeg: 5, colour: '#4ade80', label: '2–5°' },
+  { maxDeg: 8, colour: '#facc15', label: '5–8°' },
+  { maxDeg: 12, colour: '#fb923c', label: '8–12°' },
+  { maxDeg: 15, colour: '#ef4444', label: '12–15°' },
+  { maxDeg: Infinity, colour: '#d946ef', label: 'over 15°' },
+]);
+const SLOPE_UNKNOWN = '#9aa0a6';
+
+// The band of a grade in degrees (sign ignored); null or NaN → the unknown colour.
+function slopeBand(deg) {
+  if (!Number.isFinite(deg)) return null;
+  const a = Math.abs(deg);
+  return SLOPE_BANDS.find((b) => a < b.maxDeg) ?? SLOPE_BANDS[SLOPE_BANDS.length - 1];
+}
+const slopeColour = (deg) => slopeBand(deg)?.colour ?? SLOPE_UNKNOWN;
+
+// '#rrggbb' → [r, g, b] in 0–1 (for three.js vertex colours).
+const rgb01 = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+
+return { SLOPE_BANDS, SLOPE_UNKNOWN, slopeBand, slopeColour, rgb01 };
 })();
 __m['map/routes-layer.js'] = (() => {
 // Planned route candidates on the map (phase 4 §6 R): the three candidates of route-plan.js and their
@@ -8862,6 +9800,8 @@ __m['map/routes-layer.js'] = (() => {
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
 //   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
+//   slope: boolean,                      colour the selected route by grade (slope-colours.js bands) when it has a profile
+//   landing: { x, y } | null             the planned landing site, drawn as a dot with a ring when there is no touchdown
 //   landed: { x, y, source } | null           where the lander touched down (the rover's start)
 //   havens: contingency.js findHavens() | null  phase 5: checkpoint → haven links, havens (H), checkpoints without one
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
@@ -8873,6 +9813,7 @@ __m['map/routes-layer.js'] = (() => {
 // (the selected one keeps its first place). Lines are wider and cased (phase4-route.css).
 const { s, clear } = __m['ui/dom.js'];
 const { COVERAGE_BINS } = __m['ui/routeplan.js'];
+const { SLOPE_BANDS, SLOPE_UNKNOWN, slopeBand } = __m['slope-colours.js'];
 
 const f1 = (v) => (Math.round(v * 10) / 10).toString();
 const ROUTE_IDS = ['short', 'flat', 'sunny'];
@@ -8891,6 +9832,22 @@ function routePathD(points, toPx) {
     lx = x; ly = y;
   }
   return d;
+}
+
+// Slope colouring: the route's driving profile cut into runs of one grade band, as one path per band:
+// [{ colour, d }]. The step into sample i is coloured by the grade at i, atan(|pitch|) in degrees.
+function slopeRuns(profile, toPx) {
+  const n = profile?.x?.length ?? 0, ds = [...SLOPE_BANDS, { colour: SLOPE_UNKNOWN }].map(() => '');
+  let last = -2, lx = NaN, ly = NaN;
+  for (let i = 1; i < n; i++) {
+    const [ax, ay] = toPx(profile.x[i - 1], profile.y[i - 1]), [bx, by] = toPx(profile.x[i], profile.y[i]);
+    if (![ax, ay, bx, by].every(Number.isFinite)) { last = -2; continue; }
+    const band = slopeBand(Math.atan(Math.abs(profile.pitch[i])) * 180 / Math.PI);
+    const k = band ? SLOPE_BANDS.indexOf(band) : SLOPE_BANDS.length;
+    ds[k] += k === last && Math.abs(ax - lx) < 0.01 && Math.abs(ay - ly) < 0.01 ? `L${f1(bx)} ${f1(by)}` : `M${f1(ax)} ${f1(ay)}L${f1(bx)} ${f1(by)}`;
+    last = k; lx = bx; ly = by;
+  }
+  return ds.map((d, k) => ({ colour: k < SLOPE_BANDS.length ? SLOPE_BANDS[k].colour : SLOPE_UNKNOWN, d })).filter((r) => r.d);
 }
 
 // The pixel point at a fraction (default half) of a polyline's pixel length, and the direction there.
@@ -8956,7 +9913,38 @@ function placeLabel(points, toPx, name, frac, taken, width = Infinity, height = 
   return null;
 }
 
-function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null, landed = null } = {}) {
+// Self-driving planner (route-rrt.js) on the map: the search trees faint blue, the candidate paths blue, the
+// chosen trajectory cyan (under the routes); the adjusted waypoints, a ghost of the asked one and a marker at
+// the moved one (over them). auto: { trees: [[x1, y1, x2, y2], …], candidates, trajectory, adjusted: [{ from, to }],
+// showTrees }
+const AUTO_CYAN = '#22d3ee';
+function drawAuto(gEl, auto, toPx, part) {
+  const g = s('g', { class: `rp-auto-layer rp-auto-${part}` });
+  if (part === 'under') {
+    if (auto.showTrees && auto.trees?.length) {
+      let d = '';
+      for (const [ax, ay, bx, by] of auto.trees) {
+        const [x1, y1] = toPx(ax, ay), [x2, y2] = toPx(bx, by);
+        if ([x1, y1, x2, y2].every(Number.isFinite)) d += `M${f1(x1)} ${f1(y1)}L${f1(x2)} ${f1(y2)}`;
+      }
+      if (d) g.append(s('path', { class: 'rp-auto-tree', d }));
+    }
+    for (const c of auto.candidates ?? []) { const d = routePathD(c, toPx); if (d) g.append(s('path', { class: 'rp-auto-cand', d })); }
+    const td = auto.trajectory?.length > 1 ? routePathD(auto.trajectory, toPx) : '';
+    if (td) g.append(s('path', { class: 'rp-auto-casing', d: td }), s('path', { class: 'rp-auto-path', d: td }));
+  } else {
+    for (const a of auto.adjusted ?? []) {
+      const [x1, y1] = toPx(a.from[0], a.from[1]), [x2, y2] = toPx(a.to[0], a.to[1]);
+      if (![x1, y1, x2, y2].every(Number.isFinite)) continue;
+      g.append(s('path', { class: 'rp-auto-move', d: `M${f1(x1)} ${f1(y1)}L${f1(x2)} ${f1(y2)}` }),
+        s('circle', { class: 'rp-auto-ghost', cx: f1(x1), cy: f1(y1), r: 6 }),
+        s('circle', { class: 'rp-auto-moved', cx: f1(x2), cy: f1(y2), r: 5 }));
+    }
+  }
+  if (g.childNodes.length) gEl.append(g);
+}
+
+function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null, landed = null, landing = null, slope = false, auto = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
@@ -8990,6 +9978,7 @@ function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx,
     }
     if (d) gEl.append(s('path', { class: 'rp-traps', d }));
   }
+  if (auto) drawAuto(gEl, auto, toPx, 'under');
   const list = (routes ?? []).filter((r) => r && r.points && r.points.length >= 2 && (!r.sameAs || r.id === selected));
   // unselected first, so the selected line sits on top
   const order = [...list].sort((a, b) => (a.id === selected) - (b.id === selected) || ROUTE_IDS.indexOf(a.id) - ROUTE_IDS.indexOf(b.id));
@@ -8998,7 +9987,11 @@ function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx,
     if (!d) continue;
     const sel = r.id === selected, hov = r.id === hovered;
     const g = s('g', { class: `rp-route rp-route-${r.id}${sel ? ' is-selected' : ''}${hov ? ' is-hovered' : ''}` });
-    g.append(s('path', { class: 'rp-casing', d }), s('path', { class: `rp-line rp-line-${r.id}`, d }));
+    g.append(s('path', { class: 'rp-casing', d }));
+    // coloured by grade: the selected route with a profile, in runs of one band; else the plain line
+    const runs = sel && slope && r.profile?.x?.length > 1 ? slopeRuns(r.profile, toPx) : null;
+    if (runs?.length) for (const run of runs) g.append(s('path', { class: 'rp-slope-seg', d: run.d, style: `stroke:${run.colour}` }));
+    else g.append(s('path', { class: `rp-line rp-line-${r.id}`, d }));
     // phase 2: the selected route's one-way stretches over its line
     if (sel && r.oneWay?.length) {
       const od = r.oneWay.map((seg) => routePathD(seg, toPx)).join('');
@@ -9064,6 +10057,14 @@ function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx,
         s('text', { class: 'rp-lander-label', x: 14, y: -2 }, landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander')));
     }
   }
+  else if (landing) {
+    const [x, y] = toPx(landing.x, landing.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      gEl.append(s('g', { class: 'rp-landing', transform: `translate(${f1(x)} ${f1(y)})` },
+        s('circle', { class: 'rp-landing-ring', r: 9 }), s('circle', { class: 'rp-landing-dot', r: 4 }),
+        s('text', { class: 'rp-lander-label', x: 14, y: -12 }, 'Landing site')));
+    }
+  }
   if (waypoints && waypoints.length) {
     const g = s('g', { class: 'rp-waypoints' });
     waypoints.forEach((p, n) => {
@@ -9076,9 +10077,10 @@ function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx,
     });
     gEl.append(g);
   }
+  if (auto) drawAuto(gEl, auto, toPx, 'over');
 }
 
-return { ROUTE_IDS, routePathD, midpoint, domAvoidBoxes, labelBox, placeLabel, drawRoutes };
+return { ROUTE_IDS, routePathD, slopeRuns, midpoint, domAvoidBoxes, labelBox, placeLabel, AUTO_CYAN, drawAuto, drawRoutes };
 })();
 __m['ui/hovercard.js'] = (() => {
 // Hover card for a snapped map target (phase 3 §4.5): name, coordinates, height, the current mode's
@@ -9707,6 +10709,9 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
       drive: rp?.energy?.drive ?? null,
       havens: rp?.havens?.result ?? null,
       landed: rp?.landed ?? null,
+      landing: rp?.landing ?? null,
+      slope: rp?.routeColour !== 'plain',
+      auto: rp?.auto?.draw ?? null,
       coverage: rp?.stationOff ? null : rp?.coverage ?? null,
       toPx: (x, y) => toPxView(sqView(view), S, x, y),
       width: S, height: S,
@@ -12580,6 +13585,66 @@ function frameRoute(p) {
 }
 
 return { ROUTE3D_KEY, FLAGS, buildPayload, parsePayload, timeSpan, roverAt, frameRoute };
+})();
+__m['ui/inset3d.js'] = (() => {
+// Floating map extras, bottom left over the map: the slope legend (a frosted chip) and the 3D preview window
+// (a small frosted window with the globe in an iframe). Neither hides by itself: the legend follows the
+// route colour switch, the window opens and closes with its own buttons and remembers that in storage.
+//
+// createMapFloats(doc) → HTMLElement                    the row both are added to (appended to the app, else the body)
+// createSlopeLegend() → { el, setShown(bool) }
+// createInset3d({ host, beforeOpen, onFull, storage }) → { open(), close(), toggle(), isOpen(), wanted() }
+//   beforeOpen() → boolean   writes the route payload; false: nothing to show yet, the window stays shut
+//   onFull()                 "Open full 3D" pressed
+//   wanted()                 the remembered state (was it open last time)
+const { h } = __m['ui/dom.js'];
+const { SLOPE_BANDS } = __m['slope-colours.js'];
+
+const INSET_KEY = 'lsn-inset3d';
+const INSET_SRC = 'globe.html#route=1&embed=1';
+const store = (s) => { try { return s ?? (typeof localStorage !== 'undefined' ? localStorage : null); } catch { return null; } };
+
+function readInsetPref(storage) { try { return store(storage)?.getItem(INSET_KEY) === '1'; } catch { return false; } }
+function writeInsetPref(on, storage) { try { store(storage)?.setItem(INSET_KEY, on ? '1' : '0'); } catch { /* storage blocked: it just does not remember */ } }
+
+function createMapFloats(doc = document) {
+  const el = h('div', { class: 'map-floats' });
+  (doc.querySelector('.app') ?? doc.body).append(el);
+  return el;
+}
+
+function createSlopeLegend() {
+  const el = h('div', { class: 'slope-legend', role: 'group', 'aria-label': 'Route colour by slope', hidden: true },
+    h('span', { class: 'slope-legend-title' }, 'Slope'),
+    ...SLOPE_BANDS.map((b) => h('span', { class: 'slope-legend-item' }, h('i', { style: `background:${b.colour}` }), b.label)));
+  return { el, setShown(on) { el.hidden = !on; } };
+}
+
+function createInset3d({ host, beforeOpen = () => true, onFull = () => {}, storage } = {}) {
+  let win = null;
+  const isOpen = () => !!win;
+  function open() {
+    if (win) return true;
+    if (!beforeOpen()) return false;
+    const close = h('button', { type: 'button', class: 'inset3d-btn', 'aria-label': 'Close the 3D preview', title: 'Close the 3D preview', onclick: () => api.close() }, '×');
+    const full = h('button', { type: 'button', class: 'inset3d-btn inset3d-full', onclick: () => onFull() }, 'Open full 3D');
+    const frame = h('iframe', { class: 'inset3d-frame', title: '3D preview of the route', src: INSET_SRC, loading: 'eager', allow: 'fullscreen' });
+    win = h('aside', { class: 'inset3d', 'aria-label': '3D preview' }, h('div', { class: 'inset3d-bar' }, h('span', { class: 'inset3d-title' }, '3D preview'), full, close), frame);
+    host.prepend(win);
+    writeInsetPref(true, storage);
+    return true;
+  }
+  function close() {
+    if (!win) return;
+    win.remove();   // the iframe goes with it: the globe's WebGL is freed
+    win = null;
+    writeInsetPref(false, storage);
+  }
+  const api = { open, close, toggle() { return isOpen() ? (close(), false) : open(); }, isOpen, wanted: () => readInsetPref(storage) };
+  return api;
+}
+
+return { INSET_KEY, INSET_SRC, readInsetPref, writeInsetPref, createMapFloats, createSlopeLegend, createInset3d };
 })();
 __m['charts/scale.js'] = (() => {
 // Linear scales, round ticks and path splitting for the two charts.
@@ -19363,10 +20428,14 @@ const { PRESETS: RELAY_PRESETS } = __m['relay.js'];
 const { createRoutePlanCard } = __m['ui/routeplan.js'];
 const { createShapeEntry } = __m['ui/shapeentry.js'];
 const { planRoutes, sunFromJobs, simplify } = __m['route-plan.js'];
+const { planSelfDriving, autonavPayload } = __m['route-rrt.js'];
 const { simulateDrive, skyFromGrid, scanDepartures } = __m['route-energy.js'];
 const { coverage: stationCoverage, routeLinks, linkSummary, STATION_DEFAULTS } = __m['comms.js'];
 const { findHavens } = __m['contingency.js'];
 const { buildPayload, ROUTE3D_KEY } = __m['route3d.js'];
+const { createMapFloats, createSlopeLegend, createInset3d } = __m['ui/inset3d.js'];
+const { settingsOf, summaryOf, recordInputs } = __m['ui/mission-records.js'];
+const { buildRecord } = __m['mission-save.js'];
 const { renderPanorama, updatePanoramaCursor } = __m['charts/panorama.js'];
 const { renderElevation, updateElevationCursor } = __m['charts/elevation.js'];
 const { renderCompare } = __m['ui/compare.js'];
@@ -19731,22 +20800,87 @@ function start() {
     },
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
     // phase 6: hand the selected route and its drive to the 3D globe
-    onFly3d: () => {
-      const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
-      if (!r?.profile) return;
-      const payload = buildPayload({ route: r, drive: rp.energy?.routeId === r.id ? rp.energy.drive : null, links: rp.comms?.routeId === r.id ? rp.comms.links : null, havens: rp.havens?.routeId === r.id ? rp.havens.result : null, power: { batteryWh: 4000, reserve: 0.2, ...(rp.power ?? {}) }, mobility: rp.plan.mobility, heightAtXY: terrainHeight, waypoints: rp.plan.waypoints, traps: rp.plan.traps });
-      try { localStorage.setItem(ROUTE3D_KEY, JSON.stringify(payload)); } catch { return; }
-      window.open('globe.html#route=1', '_blank');
-    },
+    onFly3d: () => openFull3d(),
+    // the self-driving planner (route-rrt.js)
+    onAutoRun: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility }; runAuto(points, maxSlopeDeg).catch(() => {}); },
+    onAutoCancel: () => autoAbort?.abort(),
+    onAutoUse: () => useAuto(),
+    onAutoTrees: (on) => setAuto({ showTrees: on }),
+    onColour: (mode) => { rp = { ...rp, routeColour: mode }; redrawRoutes(); },
+    onInset3d: () => inset3d.toggle(),
+    insetOpen: () => inset3d.isOpen(),
+    onMissionRecord: () => missionRecord(),
+    onMissionLoad: (rec) => { loadMission(rec).catch(() => {}); },
     onStation: (st) => { rp = { ...rp, station: st, stationOff: !st, coverage: null }; updateComms(); },
     onCancel: () => rpAbort?.abort(),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
   }) : null;
+  // the 3D payload of the selected route and its drive, as the globe reads it; null without a route with a profile
+  function route3dPayload() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
+    if (!r?.profile) return null;
+    const payload = buildPayload({ route: r, drive: rp.energy?.routeId === r.id ? rp.energy.drive : null, links: rp.comms?.routeId === r.id ? rp.comms.links : null, havens: rp.havens?.routeId === r.id ? rp.havens.result : null, power: { batteryWh: 4000, reserve: 0.2, ...(rp.power ?? {}) }, mobility: rp.plan.mobility, heightAtXY: terrainHeight, waypoints: rp.plan.waypoints, traps: rp.plan.traps });
+    // the self-driving planner's trees, candidates and trajectory, when it ran for these points
+    if (autoMatches()) payload.autonav = autonavPayload(rp.auto.result);
+    return payload;
+  }
+  // writes it for the globe (a tab, or the preview window, which reloads on the storage event); the payload as written
+  let lastRoute3d = '';
+  function writeRoute3d() {
+    const payload = route3dPayload();
+    if (!payload) return null;
+    const json = JSON.stringify(payload);
+    if (json !== lastRoute3d) { try { localStorage.setItem(ROUTE3D_KEY, json); } catch { return null; } lastRoute3d = json; }
+    return payload;
+  }
+  function openFull3d() { if (writeRoute3d()) window.open('globe.html#route=1', '_blank'); }
+  // the 3D preview window and the slope legend float over the map's bottom left
+  const floats = mapView ? createMapFloats(document) : null;
+  const slopeLegend = createSlopeLegend();
+  if (floats) floats.append(slopeLegend.el);
+  const inset3d = createInset3d({ host: floats ?? document.body, beforeOpen: () => !!writeRoute3d(), onFull: () => openFull3d() });
+  // while it is open, the globe gets the new payload when the route, its drive, links or havens change
+  let insetTimer = 0;
+  function pushInset() {
+    if (!inset3d.isOpen()) return;
+    clearTimeout(insetTimer);
+    insetTimer = setTimeout(() => { if (inset3d.isOpen()) writeRoute3d(); }, 150);
+  }
+  // a mission record of the selected route as it is now (not stored): settings, summary and the 3D payload
+  function missionRecord() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
+    const route = route3dPayload();
+    if (!r || !route) return null;
+    const drive = rp.energy?.routeId === r.id ? rp.energy.drive : null, comms = rp.comms?.routeId === r.id ? rp.comms : null;
+    return buildRecord({
+      mission: readMission(),
+      settings: settingsOf({ maxSlopeDeg: rp.maxSlopeDeg, mobility: rp.plan.mobility, power: rp.power ?? null, station: rp.station ?? { ...STATION_DEFAULTS }, stationOff: !!rp.stationOff, departMs: rp.departMs ?? null }),
+      summary: summaryOf({ route: r, plan: rp.plan, drive, comms }),
+      route,
+    });
+  }
+  // restores a saved mission: the points, limits, power, station and departure, then plans again and picks its route
+  async function loadMission(rec) {
+    const inp = recordInputs(rec);
+    if (!inp.points?.length || !routePlanCard) return;
+    const maxSlopeDeg = inp.maxSlopeDeg ?? rp.maxSlopeDeg ?? 15;
+    rp = { ...rp, mobility: inp.mobility ?? undefined, power: inp.power ?? undefined, station: inp.station ?? undefined, stationOff: inp.stationOff, coverage: null, departMs: inp.departMs, selected: null };
+    routePlanCard.update({ points: inp.points, maxSlopeDeg, mobility: inp.mobility, power: inp.power, station: inp.stationOff ? null : inp.station ?? { ...STATION_DEFAULTS }, departures: null });
+    rp = { ...rp, points: inp.points, maxSlopeDeg };
+    persistRoutePlan();
+    await runPlan(inp.points, maxSlopeDeg, { pick: inp.routeId ?? 'short' });
+  }
   if (routePlanCard) mapView.mountFold('plan', routePlanCard.el);
   if (routePlanCard && rp.points) routePlanCard.update({ points: rp.points, ...(rp.maxSlopeDeg ? { maxSlopeDeg: rp.maxSlopeDeg } : {}) });
 
-  function redrawRoutes() { mapView?.frame.redrawShapes({ routePlan: rp }); }
+  function redrawRoutes() {
+    // the self-driving layer is drawn only while its points are the current ones
+    if (rp.auto?.result && !!rp.auto.draw !== autoMatches()) rp = { ...rp, auto: { ...rp.auto, draw: autoMatches() ? autoDraw(rp.auto) : null } };
+    mapView?.frame.redrawShapes({ routePlan: rp });
+    const sel = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+    slopeLegend.setShown(rp.routeColour !== 'plain' && !!sel?.profile?.x?.length);
+  }
   function dem240() {
     const l = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
     if (l) return Promise.resolve(l);
@@ -19780,6 +20914,64 @@ function start() {
       if (rpAbort === ac) rpAbort = null;
     }
   }
+  // The self-driving planner (route-rrt.js): B-RRT* leg by leg on the 240 m grid. Its state lives in rp.auto:
+  // { running, progress, result, used, showTrees, draw (what the map layer draws) }.
+  let autoAbort = null;
+  const sameWps = (a, b) => !!a && !!b && a.length === b.length && a.every((p, i) => Math.abs(p[0] - b[i][0]) < 0.05 && Math.abs(p[1] - b[i][1]) < 0.05);
+  const autoMatches = () => !!rp.auto?.result && sameWps(rp.auto.result.waypoints, rp.points);
+  function autoDraw(a) {
+    const r = a.result;
+    return r ? { trees: r.trees, candidates: r.candidates, trajectory: r.trajectory, adjusted: r.legs.filter((l) => l.adjustedTo).map((l) => ({ from: l.to, to: l.adjustedTo })), showTrees: a.showTrees !== false } : null;
+  }
+  function setAuto(p) {
+    const prev = rp.auto ?? { showTrees: true };
+    const next = { ...prev, ...p };
+    if (p.result !== undefined || 'showTrees' in p) next.draw = autoDraw(next);
+    rp = { ...rp, auto: next };
+    routePlanCard?.update({ auto: next });
+    redrawRoutes();
+  }
+  async function runAuto(points, maxSlopeDeg) {
+    autoAbort?.abort();
+    const ac = new AbortController();
+    autoAbort = ac;
+    rp = { ...rp, points, maxSlopeDeg };
+    setAuto({ running: true, progress: 0, result: null, draw: null, used: false });
+    try {
+      const dem = await dem240();
+      if (ac.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      const result = await planSelfDriving({ points, dem, maxSlopeDeg, mobility: rp.mobility ?? {} },
+        { signal: ac.signal, onProgress: (f) => { rp = { ...rp, auto: { ...rp.auto, progress: f } }; routePlanCard?.update({ auto: rp.auto }); } });
+      setAuto({ running: false, progress: 1, result });
+      if (result.trajectory.length > 1) mapView?.fitRoute(result.trajectory);
+      return result;
+    } catch (e) {
+      setAuto({ running: false });
+      if (e?.name !== 'AbortError') throw e;
+      return null;
+    } finally {
+      if (autoAbort === ac) autoAbort = null;
+    }
+  }
+  // "Use this path": the trajectory becomes a fourth candidate, selected, so the battery run, the station links,
+  // the havens and the 3D hand-off work on it as on the others. Without a matching A* plan (for example when it was
+  // blocked) the plan holds just this route.
+  function useAuto() {
+    const res = rp.auto?.result;
+    if (!res?.ok || !routePlanCard) return;
+    const route = {
+      id: 'auto', label: 'Self-driving', points: res.trajectory, lengthKm: res.lengthKm, maxSlopeDeg: res.maxSlopeDeg, meanSlopeDeg: res.meanSlopeDeg,
+      sunShare: null, sunKnown: 0, psrKm: null, sameAs: null, unavailable: null,
+      climbMaxDeg: res.climbMaxDeg, descentMaxDeg: res.descentMaxDeg, crossMaxDeg: res.crossMaxDeg, hours: res.hours, oneWayKm: res.oneWayKm, oneWay: res.oneWay, profile: res.profile,
+    };
+    const base = rp.plan?.ok && sameWps(rp.plan.waypoints, res.waypoints) ? rp.plan
+      : { ok: true, error: null, blocked: null, routes: [], limitDeg: res.limitDeg, baselineKm: 0.24, waypoints: res.waypoints, nodes: 0, ms: res.ms, mobility: res.mobility, returnable: res.oneWayKm <= 0.05, selfDriving: true };
+    const plan = { ...base, routes: [...base.routes.filter((r) => r.id !== 'auto'), route] };
+    rp = { ...rp, plan };
+    routePlanCard.update({ plan });
+    setAuto({ used: true });
+    pickPlanned('auto');
+  }
   // phase 3: the selected route's drive, run forward from the departure (the timeline time when it was planned)
   function timelineNow() {
     try { return timeline.getState().nowMs; } catch { return state.cursorMs ?? state.landingMs; }
@@ -19795,7 +20987,11 @@ function start() {
     updateHavens();
     updateComms();
     redrawRoutes();
+    // the preview window comes back as it was left, once there is a route to show
+    if (!insetRestored && inset3d.wanted() && inset3d.open()) insetRestored = true;
+    pushInset();
   }
+  let insetRestored = false;
   // phase 5: safe havens from checkpoints along the drive, on the planner's 240 m grid
   function updateHavens() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
@@ -19805,6 +21001,7 @@ function start() {
     const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
     rp = { ...rp, havens: { routeId: r.id, result, stamp: Date.now() } };
     routePlanCard?.update({ havens: rp.havens });
+    pushInset();
   }
   // phase 4: the surface station's coverage and the links along the selected route, on the finest terrain loaded
   function terrainHeight(x, y) {
@@ -19823,6 +21020,7 @@ function start() {
     rp = { ...rp, coverage: cov, comms: { routeId: r.id, summary, links, earth: per?.earth ?? null, coverage: cov, stamp: Date.now() } };
     routePlanCard?.update({ comms: rp.comms });
     redrawRoutes();
+    pushInset();
   }
   function pickPlanned(id) {
     const r = rp.plan?.routes.find((x) => x.id === id);
@@ -19843,6 +21041,9 @@ function start() {
   }
   function clearPlanned() {
     rpAbort?.abort();
+    autoAbort?.abort();
+    rp = { ...rp, auto: null };
+    routePlanCard?.update({ auto: null });
     plannedRoute = null;
     rpRestore = null;
     rp = { ...rp, points: null, plan: null, selected: null, hovered: null };
@@ -20485,7 +21686,12 @@ function start() {
     let l = landHash ?? landedFor(m);
     if (l && s && moonKm(l.latDeg, l.lonDeg, s.latDeg, s.lonDeg) > 30) l = null;
     const next = l && l.latDeg <= TERRAIN_MAX_LAT ? { ...l, x: toXY(l.latDeg, l.lonDeg)[0], y: toXY(l.latDeg, l.lonDeg)[1] } : null;
-    if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); }
+    // the planned landing site (the mission's), drawn when there is no touchdown
+    const pl = Number.isFinite(m?.latDeg) && Number.isFinite(m?.lonDeg) ? m : s;
+    const landing = pl && pl.latDeg <= TERRAIN_MAX_LAT ? { x: toXY(pl.latDeg, pl.lonDeg)[0], y: toXY(pl.latDeg, pl.lonDeg)[1] } : null;
+    const moved = (landing?.x ?? null) !== (rp.landing?.x ?? null) || (landing?.y ?? null) !== (rp.landing?.y ?? null);
+    if (moved) rp = { ...rp, landing };
+    if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); } else if (moved) redrawRoutes();
   }
   window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
   function render() {

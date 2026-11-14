@@ -17,7 +17,13 @@
 //   onDepartNow()                       phase 3: "Leave at the timeline time" pressed
 //   onFindDepartures()                  phase 3: "Find good departure times" pressed
 //   onFly3d()                           phase 6: "Fly along in 3D" pressed
+//   onAutoRun({ points, maxSlopeDeg, mobility })  the self-driving planner (route-rrt.js) asked to run; onAutoCancel(), onAutoUse()
+//                                       (add its trajectory as the Self-driving candidate), onAutoTrees(show) (the search trees on the map)
 //   onUseDeparture(ms)                  phase 3: one of the found departures chosen
+//   onColour('slope' | 'plain')         the route colour switch
+//   onInset3d() → boolean               "3D preview" pressed; true when the window is open now (insetOpen() says so)
+//   onMissionRecord() → record | null   the Mission file section asks for the selected route's record
+//   onMissionLoad(record)               a saved or imported mission chosen to load
 //   onLimit(maxSlopeDeg)                the slope limit slider was let go at a new value (for the URL hash);
 //                                       set it back from outside with update({ maxSlopeDeg })
 // }
@@ -32,12 +38,18 @@
 //   departures: { routeId, scan } | null           phase 3: route-energy.js scanDepartures of the selected route
 //   comms: { routeId, summary, links, earth, coverage } | null   phase 4: comms.js figures of the selected route
 //   havens: { routeId, result } | null           phase 5: contingency.js findHavens of the selected route
+//   routeColour: 'slope' | 'plain'               the route colour switch
+//   mobility, power: object | null               set the rover and power inputs (null: the defaults), e.g. from a loaded mission
+//   station: object | null                       set the station inputs (null: switched off)
+//   auto: { running, progress, result, used, showTrees } | null   the self-driving planner's state (result: route-rrt.js planSelfDriving)
 import { h, s, clear } from './dom.js';
 import { fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { parseLatLon, formatLat, formatLon } from '../coords.js';
 import { DEFAULT_MAX_SLOPE, MAX_POINTS, MIN_POINTS, MOBILITY_DEFAULTS } from '../route-plan.js';
 import { POWER_DEFAULTS } from '../route-energy.js';
+import { STEP_LABELS } from '../route-rrt.js';
 import { STATION_DEFAULTS, BANDS } from '../comms.js';
+import { createMissionFile } from './mission-records.js';
 
 const LIMIT = { min: 5, max: 30, step: 1 };
 const kmFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -235,6 +247,25 @@ export function planMatches(plan, points, limitDeg, mobility = null) {
   return w.every((p, i) => Math.abs(p[0] - points[i][0]) < 0.05 && Math.abs(p[1] - points[i][1]) < 0.05);
 }
 
+// The self-driving planner's figures (route-rrt.js result) as display lines.
+export function autoLines(r) {
+  if (!r) return [];
+  const d1 = (v) => `${(Math.round(v * 10) / 10).toFixed(1)}°`;
+  const lines = [];
+  if (r.aborted) lines.push({ key: 'abort', warn: true, text: `Aborted: ${r.reason} The part driven so far is shown (${kmFmt.format(r.lengthKm ?? 0)} km).` });
+  else if (r.error) { lines.push({ key: 'error', warn: true, text: r.error }); return lines; }
+  if (r.trajectory?.length >= 2 && !r.aborted) {
+    lines.push({ key: 'length', text: `Trajectory ${kmFmt.format(r.lengthKm)} km, drive time ${dur(r.hours)} at ${r.mobility?.speedKmh ?? MOBILITY_DEFAULTS.speedKmh} km/h, slower on slopes.` });
+    lines.push({ key: 'grades', text: `Steepest along it: up ${d1(r.climbMaxDeg)}, down ${d1(r.descentMaxDeg)}, across ${d1(r.crossMaxDeg)}.` });
+  }
+  const moved = (r.legs ?? []).filter((l) => l.adjustedTo);
+  lines.push({ key: 'adjust', warn: moved.length > 0, text: moved.length
+    ? `Adjusted waypoints: ${moved.length} moved (${moved.map((l) => `${intFmt.format(Math.hypot(l.adjustedTo[0] - l.to[0], l.adjustedTo[1] - l.to[1]) * 1000)} m`).join(', ')}). Delay from retries: ${(r.delayMs / 1000).toFixed(1)} s.`
+    : `No waypoint had to move. Delay from retries: ${(r.delayMs / 1000).toFixed(1)} s.` });
+  lines.push({ key: 'search', text: `Searched ${intFmt.format(r.nodes)} tree nodes in ${(r.ms / 1000).toFixed(1)} s; ${(r.candidates ?? []).length} candidate paths (blue on the map), the chosen trajectory in cyan.` });
+  return lines;
+}
+
 // ---------- the card ----------
 
 function swatch(id) {
@@ -253,8 +284,10 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   let power = { ...POWER_DEFAULTS };         // phase 3: panel, battery, load, mass
   let energy = null, departures = null, comms = null, havens = null;
   let station = { ...STATION_DEFAULTS }, stationOn = true;
+  let colour = 'slope';          // route colour on the map: by slope, or plain
   let lastPoints = null, emitted = null;
   let running = false, progress = 0, plan = null, selected = null, hovered = null;
+  let auto = null;               // the self-driving planner's state, from main.js
   let validPoints = null;        // the rows as points when all are valid
 
   // fix R8: the point rows are the first thing in the card, open by default; one line says both ways in
@@ -339,7 +372,54 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   const results = h('div', { class: 'rp-results' });
   const notes = h('ul', { class: 'rp-notes fold-more-body' });
 
-  const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results,
+  // ---------- self-driving planner (route-rrt.js): Run, progress, the flowchart's steps, the figures ----------
+  const autoRun = h('button', { type: 'button', class: 'btn rp-auto-run', onclick: () => submit(true) }, 'Run');
+  const autoCancel = h('button', { type: 'button', class: 'btn rp-auto-cancel', hidden: true, onclick: () => callbacks.onAutoCancel?.() }, 'Cancel');
+  const autoOffer = h('button', { type: 'button', class: 'btn rp-auto-offer', hidden: true, onclick: () => submit(true) }, 'Try the self-driving planner (it moves blocked waypoints)');
+  const autoFill = h('span'), autoPct = h('span', { class: 'num' });
+  const autoProg = h('p', { class: 'region-progress', hidden: true }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, autoFill), autoPct);
+  const autoTrace = h('ol', { class: 'rp-trace', 'aria-label': 'Planner steps' });
+  const autoFigs = h('ul', { class: 'rp-energy rp-auto-figs' });
+  const autoUse = h('button', { type: 'button', class: 'btn btn-primary rp-auto-use', onclick: () => callbacks.onAutoUse?.() }, 'Use this path');
+  const treesBox = h('input', { type: 'checkbox', id: `${id}-auto-trees`, checked: true });
+  treesBox.addEventListener('change', () => callbacks.onAutoTrees?.(treesBox.checked));
+  const autoFoot = h('div', { class: 'rp-auto-foot', hidden: true }, autoUse, h('label', { class: 'rp-auto-trees', for: `${id}-auto-trees` }, treesBox, h('span', null, 'Show search trees')));
+  const autoBox = h('section', { class: 'rp-auto', 'aria-label': 'Self-driving planner' },
+    h('p', { class: 'rp-rover-title' }, 'Self-driving planner (B-RRT*)'),
+    h('p', { class: 'rp-note-inline' }, 'Grows two random trees over the terrain, leg by leg, and drives the cheapest path they find. It moves a waypoint it cannot reach.'),
+    autoOffer, h('div', { class: 'rp-actions' }, autoRun, autoCancel), autoProg, autoTrace, autoFigs, autoFoot);
+  let autoShown = null, autoFlags = '';
+  function renderAuto() {
+    const r = auto?.result ?? null, run = !!auto?.running;
+    autoOffer.hidden = run || running || !(plan && !plan.ok && (plan.blocked || /^No route/.test(plan.error ?? '')));
+    autoCancel.hidden = !run;
+    autoProg.hidden = !run;
+    if (run) {
+      const pr = Math.max(0, Math.min(1, auto.progress ?? 0));
+      autoFill.style.transform = `scaleX(${pr.toFixed(3)})`;
+      const text = `Planning… ${Math.floor(pr * 10) * 10}%`;
+      if (autoPct.textContent !== text) autoPct.textContent = text;
+    }
+    const stale = !!r && !planMatches(r, validPoints ?? lastPoints, limit, mobility);
+    const flags = `${stale}|${auto?.used}|${selected}|${run}`;
+    if (r === autoShown && flags === autoFlags) return;
+    if (r !== autoShown) {
+      clear(autoTrace);
+      for (const t of r?.trace ?? []) autoTrace.append(h('li', { 'data-step': t.step }, h('span', { class: 'rp-trace-step' }, STEP_LABELS[t.step] ?? t.step), t.text));
+    }
+    autoShown = r; autoFlags = flags;
+    clear(autoFigs);
+    if (r && !run) for (const l of autoLines(r)) autoFigs.append(h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text));
+    if (stale && !run) autoFigs.append(h('li', { class: 'rp-stale' }, 'Points or limit changed. Run again to update.'));
+    autoFoot.hidden = !(r?.ok && !run);
+    const inUse = !!auto?.used && selected === 'auto';
+    autoUse.disabled = inUse || stale;
+    autoUse.textContent = inUse ? 'Using this path' : 'Use this path';
+    if (treesBox.checked !== (auto?.showTrees !== false)) treesBox.checked = auto?.showTrees !== false;
+  }
+
+  const mission = createMissionFile({ getRecord: () => callbacks.onMissionRecord?.() ?? null, onLoad: (r) => callbacks.onMissionLoad?.(r) });
+  const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results, autoBox, mission.el,
     h('details', { class: 'fold-more rp-notes-box' }, h('summary', null, 'Notes'), notes));
 
   // ---------- points ----------
@@ -454,7 +534,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     }
   }
 
-  function submit() {
+  function submit(viaAuto = false) {
     // take what is typed even if no change event has fired yet (Enter in a field)
     rowEls.forEach((r, i) => { rows[i] = { lat: r.lat.value.trim(), lon: r.lon.value.trim() }; });
     const r = validate(true);
@@ -468,7 +548,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     }
     formError.hidden = true;
     emitPoints();
-    callbacks.onPlan?.({ points: r.points, maxSlopeDeg: limit, mobility: { ...mobility } });
+    callbacks[viaAuto ? 'onAutoRun' : 'onPlan']?.({ points: r.points, maxSlopeDeg: limit, mobility: { ...mobility } });
   }
 
   function renderLimit() {
@@ -478,7 +558,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   }
 
   // ---------- results ----------
-  const names = { short: 'Shortest', flat: 'Flattest', sunny: 'Sunniest' };
+  const names = { short: 'Shortest', flat: 'Flattest', sunny: 'Sunniest', auto: 'Self-driving' };
 
   function pick(rid) { if (rid !== selected) callbacks.onPick?.(rid); }
   function hover(rid) { if (rid !== hovered) { hovered = rid; callbacks.onHover?.(rid); } }
@@ -517,6 +597,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     if (plan.error) { status.append(h('p', { class: 'rp-error' }, plan.error)); return; }
     if (plan.ok) {
       if (stale) status.append(h('p', { class: 'rp-stale' }, 'Points or limit changed. Plan again to update.'));
+      else if (plan.selfDriving) status.append(h('p', { class: 'rp-done num' }, `Self-driving route planned in ${(plan.ms / 1000).toFixed(1)} s.`));
       else status.append(h('p', { class: 'rp-done num' }, `Searched ${intFmt.format(plan.nodes)} terrain nodes in ${(plan.ms / 1000).toFixed(1)} s.`));
     }
   }
@@ -553,6 +634,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     results.querySelector('.rp-rows')?.classList.toggle('is-stale', stale);
     syncRows();
     renderRover();
+    renderAuto();
   }
 
   // phase 2: the selected route's rover figures under the rows
@@ -569,7 +651,9 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     const drive = energy && energy.routeId === r.id ? energy.drive : null;
     const eLines = energyLines(drive, power, energy?.skyKm ?? null);
     const chart = drive ? batteryChart(drive, power.reserve, r.lengthKm) : null;
+    const seg = h('span', { class: 'rp-seg', role: 'group', 'aria-label': 'Route colour' }, ...[['slope', 'Slope'], ['plain', 'Plain']].map(([k, label]) => h('button', { type: 'button', 'aria-pressed': String(colour === k), onclick: () => { if (colour !== k) { colour = k; roverKey = null; callbacks.onColour?.(k); renderRover(); } } }, label)));
     roverBox.append(h('p', { class: 'rp-rover-title' }, `Rover on the ${names[r.id] ?? r.label} route`),
+      r.profile ? h('div', { class: 'rp-colour' }, h('span', null, 'Route colour'), seg) : null,
       eLines.length ? h('ul', { class: 'rp-energy' }, ...eLines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))) : null,
       chart ? h('div', { class: 'rp-bat-box' }, chart,
         ...(() => { const c = comms && comms.routeId === r.id ? comms : null; const strip = c ? linkStrip(r.profile, c.links, c.earth, r.lengthKm) : null; return strip ? [strip, h('div', { class: 'rp-link-key' }, h('span', { class: 'k-earth' }, 'Earth in view'), h('span', { class: 'k-station' }, 'Station link'))] : []; })(),
@@ -589,7 +673,8 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       drive ? h('div', { class: 'rp-depart-row' },
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times'),
-        h('button', { type: 'button', class: 'btn btn-primary rp-depart rp-fly3d', onclick: () => callbacks.onFly3d?.() }, 'Fly along in 3D')) : null,
+        h('button', { type: 'button', class: 'btn btn-primary rp-depart rp-fly3d', onclick: () => callbacks.onFly3d?.() }, 'Fly along in 3D'),
+        (() => { const b = h('button', { type: 'button', class: 'btn rp-depart rp-inset3d', 'aria-pressed': String(!!callbacks.insetOpen?.()), onclick: () => b.setAttribute('aria-pressed', String(!!callbacks.onInset3d?.())) }, '3D preview'); return b; })()) : null,
       ...(() => {
         const scan = departures && departures.routeId === r.id ? departures.scan : null;
         if (!scan) return [];
@@ -656,6 +741,8 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       h('li', null, `Comms: free-space loss plus the dominant knife edge in the terrain between the station's mast and the rover's ${STATION_DEFAULTS.roverM} m antenna (ITU-R P.526), with the Moon's curvature, on the loaded terrain grid. Site, mast, radius, bands and 0 dBi antennas follow Jun et al. (JPL, IEEE Aerospace 2025); the ${STATION_DEFAULTS.txDbm} dBm transmitter and ${STATION_DEFAULTS.thresholdDbm} dBm threshold are assumptions. Earth in view uses the skyline grid at the simulated times.`));
   }
 
+  function setInput(inputId, v) { const i = el.querySelector(`#${inputId}`); if (i) i.value = String(v); }
+
   function update(p = {}) {
     if ('points' in p && p.points !== lastPoints) {
       lastPoints = p.points ?? null;
@@ -678,7 +765,19 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     if ('departures' in p) { departures = p.departures ?? null; roverKey = null; }
     if ('comms' in p) { comms = p.comms ?? null; roverKey = null; }
     if ('havens' in p) { havens = p.havens ?? null; roverKey = null; }
+    if (p.routeColour && p.routeColour !== colour) { colour = p.routeColour; roverKey = null; }
+    if ('mobility' in p) { mobility = { ...MOBILITY_DEFAULTS, ...Object.fromEntries(Object.keys(MOBILITY_DEFAULTS).filter((k) => ok(p.mobility?.[k])).map((k) => [k, p.mobility[k]])) }; for (const k of Object.keys(MOBILITY_DEFAULTS)) setInput(`${id}-${k}`, mobility[k]); }
+    if ('power' in p) { power = { ...POWER_DEFAULTS, ...Object.fromEntries(Object.keys(POWER_DEFAULTS).filter((k) => ok(p.power?.[k])).map((k) => [k, p.power[k]])) }; for (const k of ['panelW', 'batteryWh', 'loadW', 'massKg']) setInput(`${id}-${k}`, power[k]); }
+    if ('station' in p) {
+      stationOn = !!p.station;
+      if (p.station) station = { ...STATION_DEFAULTS, ...p.station };
+      stationToggle.checked = stationOn; stationRow.classList.toggle('is-off', !stationOn);
+      for (const k of ['latDeg', 'lonDeg', 'mastM']) setInput(`${id}-st-${k}`, station[k]);
+      bandSel.value = station.band;
+    }
+    if ('auto' in p) auto = p.auto ?? null;
     const baseBefore = notes.dataset.base;
+    mission.setReady(!!plan?.ok && !!selected && !running);
     renderResults();
     if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }
   }

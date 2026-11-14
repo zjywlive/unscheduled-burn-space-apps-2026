@@ -16,6 +16,8 @@
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
 //   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
+//   slope: boolean,                      colour the selected route by grade (slope-colours.js bands) when it has a profile
+//   landing: { x, y } | null             the planned landing site, drawn as a dot with a ring when there is no touchdown
 //   landed: { x, y, source } | null           where the lander touched down (the rover's start)
 //   havens: contingency.js findHavens() | null  phase 5: checkpoint → haven links, havens (H), checkpoints without one
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
@@ -27,6 +29,7 @@
 // (the selected one keeps its first place). Lines are wider and cased (phase4-route.css).
 import { s, clear } from '../ui/dom.js';
 import { COVERAGE_BINS } from '../ui/routeplan.js';
+import { SLOPE_BANDS, SLOPE_UNKNOWN, slopeBand } from '../slope-colours.js';
 
 const f1 = (v) => (Math.round(v * 10) / 10).toString();
 export const ROUTE_IDS = ['short', 'flat', 'sunny'];
@@ -45,6 +48,22 @@ export function routePathD(points, toPx) {
     lx = x; ly = y;
   }
   return d;
+}
+
+// Slope colouring: the route's driving profile cut into runs of one grade band, as one path per band:
+// [{ colour, d }]. The step into sample i is coloured by the grade at i, atan(|pitch|) in degrees.
+export function slopeRuns(profile, toPx) {
+  const n = profile?.x?.length ?? 0, ds = [...SLOPE_BANDS, { colour: SLOPE_UNKNOWN }].map(() => '');
+  let last = -2, lx = NaN, ly = NaN;
+  for (let i = 1; i < n; i++) {
+    const [ax, ay] = toPx(profile.x[i - 1], profile.y[i - 1]), [bx, by] = toPx(profile.x[i], profile.y[i]);
+    if (![ax, ay, bx, by].every(Number.isFinite)) { last = -2; continue; }
+    const band = slopeBand(Math.atan(Math.abs(profile.pitch[i])) * 180 / Math.PI);
+    const k = band ? SLOPE_BANDS.indexOf(band) : SLOPE_BANDS.length;
+    ds[k] += k === last && Math.abs(ax - lx) < 0.01 && Math.abs(ay - ly) < 0.01 ? `L${f1(bx)} ${f1(by)}` : `M${f1(ax)} ${f1(ay)}L${f1(bx)} ${f1(by)}`;
+    last = k; lx = bx; ly = by;
+  }
+  return ds.map((d, k) => ({ colour: k < SLOPE_BANDS.length ? SLOPE_BANDS[k].colour : SLOPE_UNKNOWN, d })).filter((r) => r.d);
 }
 
 // The pixel point at a fraction (default half) of a polyline's pixel length, and the direction there.
@@ -110,7 +129,38 @@ export function placeLabel(points, toPx, name, frac, taken, width = Infinity, he
   return null;
 }
 
-export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null, landed = null } = {}) {
+// Self-driving planner (route-rrt.js) on the map: the search trees faint blue, the candidate paths blue, the
+// chosen trajectory cyan (under the routes); the adjusted waypoints, a ghost of the asked one and a marker at
+// the moved one (over them). auto: { trees: [[x1, y1, x2, y2], …], candidates, trajectory, adjusted: [{ from, to }],
+// showTrees }
+export const AUTO_CYAN = '#22d3ee';
+export function drawAuto(gEl, auto, toPx, part) {
+  const g = s('g', { class: `rp-auto-layer rp-auto-${part}` });
+  if (part === 'under') {
+    if (auto.showTrees && auto.trees?.length) {
+      let d = '';
+      for (const [ax, ay, bx, by] of auto.trees) {
+        const [x1, y1] = toPx(ax, ay), [x2, y2] = toPx(bx, by);
+        if ([x1, y1, x2, y2].every(Number.isFinite)) d += `M${f1(x1)} ${f1(y1)}L${f1(x2)} ${f1(y2)}`;
+      }
+      if (d) g.append(s('path', { class: 'rp-auto-tree', d }));
+    }
+    for (const c of auto.candidates ?? []) { const d = routePathD(c, toPx); if (d) g.append(s('path', { class: 'rp-auto-cand', d })); }
+    const td = auto.trajectory?.length > 1 ? routePathD(auto.trajectory, toPx) : '';
+    if (td) g.append(s('path', { class: 'rp-auto-casing', d: td }), s('path', { class: 'rp-auto-path', d: td }));
+  } else {
+    for (const a of auto.adjusted ?? []) {
+      const [x1, y1] = toPx(a.from[0], a.from[1]), [x2, y2] = toPx(a.to[0], a.to[1]);
+      if (![x1, y1, x2, y2].every(Number.isFinite)) continue;
+      g.append(s('path', { class: 'rp-auto-move', d: `M${f1(x1)} ${f1(y1)}L${f1(x2)} ${f1(y2)}` }),
+        s('circle', { class: 'rp-auto-ghost', cx: f1(x1), cy: f1(y1), r: 6 }),
+        s('circle', { class: 'rp-auto-moved', cx: f1(x2), cy: f1(y2), r: 5 }));
+    }
+  }
+  if (g.childNodes.length) gEl.append(g);
+}
+
+export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null, landed = null, landing = null, slope = false, auto = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
@@ -144,6 +194,7 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
     }
     if (d) gEl.append(s('path', { class: 'rp-traps', d }));
   }
+  if (auto) drawAuto(gEl, auto, toPx, 'under');
   const list = (routes ?? []).filter((r) => r && r.points && r.points.length >= 2 && (!r.sameAs || r.id === selected));
   // unselected first, so the selected line sits on top
   const order = [...list].sort((a, b) => (a.id === selected) - (b.id === selected) || ROUTE_IDS.indexOf(a.id) - ROUTE_IDS.indexOf(b.id));
@@ -152,7 +203,11 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
     if (!d) continue;
     const sel = r.id === selected, hov = r.id === hovered;
     const g = s('g', { class: `rp-route rp-route-${r.id}${sel ? ' is-selected' : ''}${hov ? ' is-hovered' : ''}` });
-    g.append(s('path', { class: 'rp-casing', d }), s('path', { class: `rp-line rp-line-${r.id}`, d }));
+    g.append(s('path', { class: 'rp-casing', d }));
+    // coloured by grade: the selected route with a profile, in runs of one band; else the plain line
+    const runs = sel && slope && r.profile?.x?.length > 1 ? slopeRuns(r.profile, toPx) : null;
+    if (runs?.length) for (const run of runs) g.append(s('path', { class: 'rp-slope-seg', d: run.d, style: `stroke:${run.colour}` }));
+    else g.append(s('path', { class: `rp-line rp-line-${r.id}`, d }));
     // phase 2: the selected route's one-way stretches over its line
     if (sel && r.oneWay?.length) {
       const od = r.oneWay.map((seg) => routePathD(seg, toPx)).join('');
@@ -218,6 +273,14 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
         s('text', { class: 'rp-lander-label', x: 14, y: -2 }, landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander')));
     }
   }
+  else if (landing) {
+    const [x, y] = toPx(landing.x, landing.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      gEl.append(s('g', { class: 'rp-landing', transform: `translate(${f1(x)} ${f1(y)})` },
+        s('circle', { class: 'rp-landing-ring', r: 9 }), s('circle', { class: 'rp-landing-dot', r: 4 }),
+        s('text', { class: 'rp-lander-label', x: 14, y: -12 }, 'Landing site')));
+    }
+  }
   if (waypoints && waypoints.length) {
     const g = s('g', { class: 'rp-waypoints' });
     waypoints.forEach((p, n) => {
@@ -230,4 +293,5 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
     });
     gEl.append(g);
   }
+  if (auto) drawAuto(gEl, auto, toPx, 'over');
 }

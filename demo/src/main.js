@@ -29,10 +29,14 @@ import { PRESETS as RELAY_PRESETS } from './relay.js';
 import { createRoutePlanCard } from './ui/routeplan.js';
 import { createShapeEntry } from './ui/shapeentry.js';
 import { planRoutes, sunFromJobs, simplify } from './route-plan.js';
+import { planSelfDriving, autonavPayload } from './route-rrt.js';
 import { simulateDrive, skyFromGrid, scanDepartures } from './route-energy.js';
 import { coverage as stationCoverage, routeLinks, linkSummary, STATION_DEFAULTS } from './comms.js';
 import { findHavens } from './contingency.js';
 import { buildPayload, ROUTE3D_KEY } from './route3d.js';
+import { createMapFloats, createSlopeLegend, createInset3d } from './ui/inset3d.js';
+import { settingsOf, summaryOf, recordInputs } from './ui/mission-records.js';
+import { buildRecord } from './mission-save.js';
 import { renderPanorama, updatePanoramaCursor } from './charts/panorama.js';
 import { renderElevation, updateElevationCursor } from './charts/elevation.js';
 import { renderCompare } from './ui/compare.js';
@@ -397,22 +401,87 @@ function start() {
     },
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
     // phase 6: hand the selected route and its drive to the 3D globe
-    onFly3d: () => {
-      const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
-      if (!r?.profile) return;
-      const payload = buildPayload({ route: r, drive: rp.energy?.routeId === r.id ? rp.energy.drive : null, links: rp.comms?.routeId === r.id ? rp.comms.links : null, havens: rp.havens?.routeId === r.id ? rp.havens.result : null, power: { batteryWh: 4000, reserve: 0.2, ...(rp.power ?? {}) }, mobility: rp.plan.mobility, heightAtXY: terrainHeight, waypoints: rp.plan.waypoints, traps: rp.plan.traps });
-      try { localStorage.setItem(ROUTE3D_KEY, JSON.stringify(payload)); } catch { return; }
-      window.open('globe.html#route=1', '_blank');
-    },
+    onFly3d: () => openFull3d(),
+    // the self-driving planner (route-rrt.js)
+    onAutoRun: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility }; runAuto(points, maxSlopeDeg).catch(() => {}); },
+    onAutoCancel: () => autoAbort?.abort(),
+    onAutoUse: () => useAuto(),
+    onAutoTrees: (on) => setAuto({ showTrees: on }),
+    onColour: (mode) => { rp = { ...rp, routeColour: mode }; redrawRoutes(); },
+    onInset3d: () => inset3d.toggle(),
+    insetOpen: () => inset3d.isOpen(),
+    onMissionRecord: () => missionRecord(),
+    onMissionLoad: (rec) => { loadMission(rec).catch(() => {}); },
     onStation: (st) => { rp = { ...rp, station: st, stationOff: !st, coverage: null }; updateComms(); },
     onCancel: () => rpAbort?.abort(),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
   }) : null;
+  // the 3D payload of the selected route and its drive, as the globe reads it; null without a route with a profile
+  function route3dPayload() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
+    if (!r?.profile) return null;
+    const payload = buildPayload({ route: r, drive: rp.energy?.routeId === r.id ? rp.energy.drive : null, links: rp.comms?.routeId === r.id ? rp.comms.links : null, havens: rp.havens?.routeId === r.id ? rp.havens.result : null, power: { batteryWh: 4000, reserve: 0.2, ...(rp.power ?? {}) }, mobility: rp.plan.mobility, heightAtXY: terrainHeight, waypoints: rp.plan.waypoints, traps: rp.plan.traps });
+    // the self-driving planner's trees, candidates and trajectory, when it ran for these points
+    if (autoMatches()) payload.autonav = autonavPayload(rp.auto.result);
+    return payload;
+  }
+  // writes it for the globe (a tab, or the preview window, which reloads on the storage event); the payload as written
+  let lastRoute3d = '';
+  function writeRoute3d() {
+    const payload = route3dPayload();
+    if (!payload) return null;
+    const json = JSON.stringify(payload);
+    if (json !== lastRoute3d) { try { localStorage.setItem(ROUTE3D_KEY, json); } catch { return null; } lastRoute3d = json; }
+    return payload;
+  }
+  function openFull3d() { if (writeRoute3d()) window.open('globe.html#route=1', '_blank'); }
+  // the 3D preview window and the slope legend float over the map's bottom left
+  const floats = mapView ? createMapFloats(document) : null;
+  const slopeLegend = createSlopeLegend();
+  if (floats) floats.append(slopeLegend.el);
+  const inset3d = createInset3d({ host: floats ?? document.body, beforeOpen: () => !!writeRoute3d(), onFull: () => openFull3d() });
+  // while it is open, the globe gets the new payload when the route, its drive, links or havens change
+  let insetTimer = 0;
+  function pushInset() {
+    if (!inset3d.isOpen()) return;
+    clearTimeout(insetTimer);
+    insetTimer = setTimeout(() => { if (inset3d.isOpen()) writeRoute3d(); }, 150);
+  }
+  // a mission record of the selected route as it is now (not stored): settings, summary and the 3D payload
+  function missionRecord() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
+    const route = route3dPayload();
+    if (!r || !route) return null;
+    const drive = rp.energy?.routeId === r.id ? rp.energy.drive : null, comms = rp.comms?.routeId === r.id ? rp.comms : null;
+    return buildRecord({
+      mission: readMission(),
+      settings: settingsOf({ maxSlopeDeg: rp.maxSlopeDeg, mobility: rp.plan.mobility, power: rp.power ?? null, station: rp.station ?? { ...STATION_DEFAULTS }, stationOff: !!rp.stationOff, departMs: rp.departMs ?? null }),
+      summary: summaryOf({ route: r, plan: rp.plan, drive, comms }),
+      route,
+    });
+  }
+  // restores a saved mission: the points, limits, power, station and departure, then plans again and picks its route
+  async function loadMission(rec) {
+    const inp = recordInputs(rec);
+    if (!inp.points?.length || !routePlanCard) return;
+    const maxSlopeDeg = inp.maxSlopeDeg ?? rp.maxSlopeDeg ?? 15;
+    rp = { ...rp, mobility: inp.mobility ?? undefined, power: inp.power ?? undefined, station: inp.station ?? undefined, stationOff: inp.stationOff, coverage: null, departMs: inp.departMs, selected: null };
+    routePlanCard.update({ points: inp.points, maxSlopeDeg, mobility: inp.mobility, power: inp.power, station: inp.stationOff ? null : inp.station ?? { ...STATION_DEFAULTS }, departures: null });
+    rp = { ...rp, points: inp.points, maxSlopeDeg };
+    persistRoutePlan();
+    await runPlan(inp.points, maxSlopeDeg, { pick: inp.routeId ?? 'short' });
+  }
   if (routePlanCard) mapView.mountFold('plan', routePlanCard.el);
   if (routePlanCard && rp.points) routePlanCard.update({ points: rp.points, ...(rp.maxSlopeDeg ? { maxSlopeDeg: rp.maxSlopeDeg } : {}) });
 
-  function redrawRoutes() { mapView?.frame.redrawShapes({ routePlan: rp }); }
+  function redrawRoutes() {
+    // the self-driving layer is drawn only while its points are the current ones
+    if (rp.auto?.result && !!rp.auto.draw !== autoMatches()) rp = { ...rp, auto: { ...rp.auto, draw: autoMatches() ? autoDraw(rp.auto) : null } };
+    mapView?.frame.redrawShapes({ routePlan: rp });
+    const sel = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+    slopeLegend.setShown(rp.routeColour !== 'plain' && !!sel?.profile?.x?.length);
+  }
   function dem240() {
     const l = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
     if (l) return Promise.resolve(l);
@@ -446,6 +515,64 @@ function start() {
       if (rpAbort === ac) rpAbort = null;
     }
   }
+  // The self-driving planner (route-rrt.js): B-RRT* leg by leg on the 240 m grid. Its state lives in rp.auto:
+  // { running, progress, result, used, showTrees, draw (what the map layer draws) }.
+  let autoAbort = null;
+  const sameWps = (a, b) => !!a && !!b && a.length === b.length && a.every((p, i) => Math.abs(p[0] - b[i][0]) < 0.05 && Math.abs(p[1] - b[i][1]) < 0.05);
+  const autoMatches = () => !!rp.auto?.result && sameWps(rp.auto.result.waypoints, rp.points);
+  function autoDraw(a) {
+    const r = a.result;
+    return r ? { trees: r.trees, candidates: r.candidates, trajectory: r.trajectory, adjusted: r.legs.filter((l) => l.adjustedTo).map((l) => ({ from: l.to, to: l.adjustedTo })), showTrees: a.showTrees !== false } : null;
+  }
+  function setAuto(p) {
+    const prev = rp.auto ?? { showTrees: true };
+    const next = { ...prev, ...p };
+    if (p.result !== undefined || 'showTrees' in p) next.draw = autoDraw(next);
+    rp = { ...rp, auto: next };
+    routePlanCard?.update({ auto: next });
+    redrawRoutes();
+  }
+  async function runAuto(points, maxSlopeDeg) {
+    autoAbort?.abort();
+    const ac = new AbortController();
+    autoAbort = ac;
+    rp = { ...rp, points, maxSlopeDeg };
+    setAuto({ running: true, progress: 0, result: null, draw: null, used: false });
+    try {
+      const dem = await dem240();
+      if (ac.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      const result = await planSelfDriving({ points, dem, maxSlopeDeg, mobility: rp.mobility ?? {} },
+        { signal: ac.signal, onProgress: (f) => { rp = { ...rp, auto: { ...rp.auto, progress: f } }; routePlanCard?.update({ auto: rp.auto }); } });
+      setAuto({ running: false, progress: 1, result });
+      if (result.trajectory.length > 1) mapView?.fitRoute(result.trajectory);
+      return result;
+    } catch (e) {
+      setAuto({ running: false });
+      if (e?.name !== 'AbortError') throw e;
+      return null;
+    } finally {
+      if (autoAbort === ac) autoAbort = null;
+    }
+  }
+  // "Use this path": the trajectory becomes a fourth candidate, selected, so the battery run, the station links,
+  // the havens and the 3D hand-off work on it as on the others. Without a matching A* plan (for example when it was
+  // blocked) the plan holds just this route.
+  function useAuto() {
+    const res = rp.auto?.result;
+    if (!res?.ok || !routePlanCard) return;
+    const route = {
+      id: 'auto', label: 'Self-driving', points: res.trajectory, lengthKm: res.lengthKm, maxSlopeDeg: res.maxSlopeDeg, meanSlopeDeg: res.meanSlopeDeg,
+      sunShare: null, sunKnown: 0, psrKm: null, sameAs: null, unavailable: null,
+      climbMaxDeg: res.climbMaxDeg, descentMaxDeg: res.descentMaxDeg, crossMaxDeg: res.crossMaxDeg, hours: res.hours, oneWayKm: res.oneWayKm, oneWay: res.oneWay, profile: res.profile,
+    };
+    const base = rp.plan?.ok && sameWps(rp.plan.waypoints, res.waypoints) ? rp.plan
+      : { ok: true, error: null, blocked: null, routes: [], limitDeg: res.limitDeg, baselineKm: 0.24, waypoints: res.waypoints, nodes: 0, ms: res.ms, mobility: res.mobility, returnable: res.oneWayKm <= 0.05, selfDriving: true };
+    const plan = { ...base, routes: [...base.routes.filter((r) => r.id !== 'auto'), route] };
+    rp = { ...rp, plan };
+    routePlanCard.update({ plan });
+    setAuto({ used: true });
+    pickPlanned('auto');
+  }
   // phase 3: the selected route's drive, run forward from the departure (the timeline time when it was planned)
   function timelineNow() {
     try { return timeline.getState().nowMs; } catch { return state.cursorMs ?? state.landingMs; }
@@ -461,7 +588,11 @@ function start() {
     updateHavens();
     updateComms();
     redrawRoutes();
+    // the preview window comes back as it was left, once there is a route to show
+    if (!insetRestored && inset3d.wanted() && inset3d.open()) insetRestored = true;
+    pushInset();
   }
+  let insetRestored = false;
   // phase 5: safe havens from checkpoints along the drive, on the planner's 240 m grid
   function updateHavens() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
@@ -471,6 +602,7 @@ function start() {
     const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
     rp = { ...rp, havens: { routeId: r.id, result, stamp: Date.now() } };
     routePlanCard?.update({ havens: rp.havens });
+    pushInset();
   }
   // phase 4: the surface station's coverage and the links along the selected route, on the finest terrain loaded
   function terrainHeight(x, y) {
@@ -489,6 +621,7 @@ function start() {
     rp = { ...rp, coverage: cov, comms: { routeId: r.id, summary, links, earth: per?.earth ?? null, coverage: cov, stamp: Date.now() } };
     routePlanCard?.update({ comms: rp.comms });
     redrawRoutes();
+    pushInset();
   }
   function pickPlanned(id) {
     const r = rp.plan?.routes.find((x) => x.id === id);
@@ -509,6 +642,9 @@ function start() {
   }
   function clearPlanned() {
     rpAbort?.abort();
+    autoAbort?.abort();
+    rp = { ...rp, auto: null };
+    routePlanCard?.update({ auto: null });
     plannedRoute = null;
     rpRestore = null;
     rp = { ...rp, points: null, plan: null, selected: null, hovered: null };
@@ -1151,7 +1287,12 @@ function start() {
     let l = landHash ?? landedFor(m);
     if (l && s && moonKm(l.latDeg, l.lonDeg, s.latDeg, s.lonDeg) > 30) l = null;
     const next = l && l.latDeg <= TERRAIN_MAX_LAT ? { ...l, x: toXY(l.latDeg, l.lonDeg)[0], y: toXY(l.latDeg, l.lonDeg)[1] } : null;
-    if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); }
+    // the planned landing site (the mission's), drawn when there is no touchdown
+    const pl = Number.isFinite(m?.latDeg) && Number.isFinite(m?.lonDeg) ? m : s;
+    const landing = pl && pl.latDeg <= TERRAIN_MAX_LAT ? { x: toXY(pl.latDeg, pl.lonDeg)[0], y: toXY(pl.latDeg, pl.lonDeg)[1] } : null;
+    const moved = (landing?.x ?? null) !== (rp.landing?.x ?? null) || (landing?.y ?? null) !== (rp.landing?.y ?? null);
+    if (moved) rp = { ...rp, landing };
+    if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); } else if (moved) redrawRoutes();
   }
   window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
   function render() {
