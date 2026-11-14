@@ -25,7 +25,7 @@ map sharpens a moment after you stop.
 They are kept in **this browser's local storage** (keys starting with `lsn-`): the shared mission (site, landing time,
 touchdown point), the route handed to 3D, saved missions (newest 20), the globe's marked areas and the settings.
 A private window, clearing site data, another browser or another port (localhost:8731 vs :8741) starts empty.
-To keep a mission, use **Save mission** and then **JSON** in the route card's *Mission file* to download it; *Import
+To keep a mission, use **Save mission** in the route action bar and then **JSON** in the route card's *Mission file* to download it; *Import
 file…* loads it back. Settings can be exported and imported in *Settings → Data and reset*.
 
 ### The links between the pages don't carry my plan

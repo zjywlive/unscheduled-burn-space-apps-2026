@@ -130,7 +130,9 @@ The **Sun & Earth** readout (left) gives, for the selected site at the playhead:
 6. **18.6-year average** — NASA's long-term Sun and Earth visibility at the point.
 7. **Best cells** — the five best cells for the current mode, at least 20 km apart; click one to select it.
 
-Below it, **Coordinates** lets you type any latitude and longitude ("Type a point").
+Below it, **Coordinates** lets you type any latitude and longitude ("Type a point"); then press **Pick this point** in the
+action bar. The same panel takes typed corners or vertices for a region (**Apply to region A/B**, **Add vertex** in the
+bar).
 
 ## 6. The sky dial and the Details sheet
 
@@ -180,10 +182,10 @@ map switches to Live) and *Done*.
 
 ## 8. Regions and comparing two areas
 
-Draw an area with **Rectangle**, **Circle** or **Polygon** (left toolbar), press *Apply to region A*, then choose
+Draw an area with **Rectangle**, **Circle** or **Polygon** (left toolbar), press **Apply to region A** in the action bar at the top of the map, then choose
 **B** in the toolbar and draw a second one. The Regions panel shows each region's area, cells, sunlit, Earth and
 both-in-view share, share that passes the filters, mean suitability and the best cell, side by side; *Pick the best
-cell* selects it.
+cell* (in the bar) selects it.
 
 ![Two regions, A and B, compared](../img/guide/nav-regions.png)
 
@@ -245,7 +247,7 @@ much do we lose if the landing slips two weeks?*
 
 ## Use case C: Compare two candidate areas
 
-1. Draw a rectangle around the first area, *Apply to region A*.
-2. Choose **B** in the toolbar, draw the second area, *Apply to region B*.
+1. Draw a rectangle around the first area and press **Apply to region A** in the action bar.
+2. Choose **B** in the left toolbar, draw the second area, press **Apply to region B**.
 3. Compare *Sunlit*, *Earth in view*, *Both in view*, *Passes filters* and *Suitability* side by side (screenshot in
    [§8](#8-regions-and-comparing-two-areas)). *Pick the best cell* in the better region and continue with use case A.

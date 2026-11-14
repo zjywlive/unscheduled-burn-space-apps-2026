@@ -78,13 +78,14 @@ rover parks until it is back to 45 %. The chart shows the battery along the rout
 two strips under it for **Earth in view** and the **station link**. The map marks **P** where it parks and **!** where
 the battery runs out.
 
-**Departure time** in the action bar opens:
+The **departure time** in the action bar (it shows the current departure and arrival, or where the battery runs out)
+opens a menu:
 
 ![Departure choices](../img/guide/route-departure.png)
 
 * **Leave at the timeline time** — use the playhead as the departure;
 * **Find good departure times** — tries every 6 h for 60 days from landing and lists the best three by lowest battery;
-  click one to use it.
+  click one to use it. The card itself has no departure buttons; it shows the result.
 
 All energy figures are assumptions (VARIABLES §3). The skyline grid is 1–2 km, so shadows from small nearby relief
 are missed, and there is no thermal model.
@@ -115,7 +116,7 @@ end of a leg, under the same direction-dependent limits; when they meet, the con
 and the best path is smoothed. If a waypoint cannot be reached it is moved to the gentlest reachable ground nearby;
 after five tries the planner stops and returns what it has. The card lists the steps (Start → Select → B-RRT\* →
 Path → Add → Goal), the trajectory's length, time and steepest slopes, and how many tree nodes and candidate paths it
-used. *Use this path* adds it as a fourth candidate; *Show search trees* draws the trees (faint blue), candidate paths
+used. **Use this path** in the action bar adds it as a fourth candidate; *Show search trees* (in the card) draws the trees (faint blue), candidate paths
 (blue) and the chosen trajectory (cyan). It is seeded: the same inputs give the same path.
 
 ![The self-driving planner's trees and trajectory](../img/guide/route-selfdrive.png)
@@ -160,26 +161,27 @@ radio contact. Which route, and when do we leave?*
    with the landing 10 Jan 2027 02:00 UTC, stay 14 days). The ridge itself is excellent: the site card shows the Sun
    up all 336 h of the stay and Earth up 331 h; it is the drive off the ridge that is hard.
 2. **Draw** the route with the Route tool: the start on the landing site (−89.450°, 222.692°), one via point and the
-   end about 10 km away (−89.779°, 219.247°). Press **Plan routes**.
-3. **Compare the candidates** in the table: *Shortest* 10.6 km (max 19.7°, mean 11.7°, 47 % sunlit), *Flattest*
+   end about 10 km away (−89.779°, 219.247°). Press **Plan routes** in the action bar at the top of the map.
+3. **Compare the candidates** in the card's table (the chooser in the bar shows their lengths): *Shortest* 10.6 km (max 19.7°, mean 11.7°, 47 % sunlit), *Flattest*
    25.5 km (15.6°, 6.1°, 31 %), *Sunniest* 14.4 km (19.7°, 9.4°, 48 %). The Flattest is more than twice as long, so
-   choose **Short**.
+   choose **Short** in the bar's chooser.
 4. **Read the rover summary** for the departure at the playhead, 10 Jan 14:00 UTC: *"the battery runs out at km 9.2
    (11 Jan 10:40 UTC), parked in the dark"*: 6.5 km of the drive are in shadow. Earth is in view for 61 % of the route,
    and with the surface station the rover is *always in touch*. Mobility: steepest up 15.3°, down 19.6°, across
    11.2°; 1.4 km is one-way (it could not drive back up), but driving back by another way is possible; 4.3 km² of
    trap ground lies nearby.
-5. **Find a better departure.** *Departure time → Find good departure times*: 70 of 241 departures (every 6 h for 60
+5. **Find a better departure.** Click the departure time in the action bar (it reads *Leave 10 Jan 14:00 → battery out
+   at km 9.2*) and choose **Find good departure times** in its menu: 70 of 241 departures (every 6 h for 60
    days) get there. The best are 22 Jan 20:00 UTC (lowest battery 91 %), 23 Jan 20:00 and 24 Jan 20:00 (88 %).
-6. **Use 22 Jan 20:00.** The summary now reads: leaves 22 Jan 20:00, arrives 23 Jan 13:03 after 17 h of driving,
+6. **Use 22 Jan 20:00**: click it in the same menu. The summary now reads: leaves 22 Jan 20:00, arrives 23 Jan 13:03 after 17 h of driving,
    battery lowest 91 %, ends at 100 %, only 1.1 km in shadow, **Earth in view for 77 % of the route**, station link
    100 %, and a safe haven reachable from all 7 checkpoints.
 
    ![The same route leaving on 22 Jan 20:00](../img/guide/route-rover-used.png)
-7. **Check it with the self-driving planner** (*Self-driving*): it finds a 10.5 km trajectory in 17 h with the steepest
-   climb 13.7° (gentler than the A\* route's 15.3°) without moving any waypoint. *Use this path* if you prefer it.
+7. **Check it with the self-driving planner** (**Self-driving** in the action bar): it finds a 10.5 km trajectory in 17 h with the steepest
+   climb 13.7° (gentler than the A\* route's 15.3°) without moving any waypoint. **Use this path** (in the bar) if you prefer it.
 8. **Decide and hand on.** Leave on 22 Jan 20:00 on the Short route (or the self-driving path). **Save mission**, then
-   **Fly along in 3D** to check the terrain under the rover ([globe.md, use case](globe.md#use-case-check-the-drive-in-3d)).
+   **Fly along in 3D** (both in the action bar) to check the terrain under the rover ([globe.md, use case](globe.md#use-case-check-the-drive-in-3d)).
 
 What this does not tell you: the slopes are on a 240 m grid, so rocks and rover-scale slopes are unknown; the rover's
 power figures are assumptions; nothing checks the cold.

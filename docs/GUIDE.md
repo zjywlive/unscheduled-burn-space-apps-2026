@@ -64,7 +64,7 @@ becomes the rover's start.
 | How good is the radio link (Earth, relay)? | Navigator, Details → Comms | Earth direct, example relay, longest blind spell |
 | Which of two areas is better? | Navigator, regions A and B | Draw both, compare side by side |
 | Can a rover drive from the landing site to a point, and which way? | Navigator, route card | Three candidates under the slope limits; one-way and trap ground |
-| When should the rover leave so the battery holds? | Route card, *Departure time* | *Find good departure times* |
+| When should the rover leave so the battery holds? | Route action bar, the departure time | Its menu: *Find good departure times*, then pick one |
 | Is the rover always in touch? | Route card, rover summary | Station link, Earth in view, gaps |
 | Where does it shelter if something goes wrong? | Route card, *If something goes wrong* | Safe havens and a comms-denied heading |
 | How close is the rover to tipping, and where? | Globe, route view | Attitude panel along the profile |

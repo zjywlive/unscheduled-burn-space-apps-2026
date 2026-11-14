@@ -78,7 +78,8 @@ the Sun's direction, with lines to the Sun (yellow) and Earth (blue) and the par
   baseline on 5 m data), the nearest spot within 500 m that meets the slope limit, Sun and Earth above the skyline.
   Lander-scale rocks are not in the DEM (LROC NAC images or lidar would be needed).
 * **Vehicle** — the close-up and every vehicle number, all labelled *assumed*: dry mass, propellant, thrust, specific
-  impulse, throttle floor, Δv reserve, array, battery, loads, touchdown limits. Change them and **Replan**.
+  impulse, throttle floor, Δv reserve, array, battery, loads, touchdown limits. Change them and press **Replan** in the action bar (it lights up once the numbers differ from the plan). The tab
+  holds inputs only; the plan's actions are all in the bar.
 
 ## 4. Contingency branches
 
