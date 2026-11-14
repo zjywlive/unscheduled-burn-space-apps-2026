@@ -1,0 +1,123 @@
+/* ---------- phase 5 (S): the sky dial on the map and the site detail sheet ----------
+   Same material and scale as phase4-bigmap.css (--glass*, --hair, --ctl, --fs-*, --r1, --r2) and the body
+   colours of styles.css (--sun, --earth, --negative). No new hues. The fallbacks only matter outside
+   .is-bigmap (the harness page). */
+
+/* the dial: fixed screen size, placed by translate() from ui/skydial.js; it never takes the pointer,
+   except the two body dots */
+.skydial {
+  position: absolute; left: 0; top: 0; z-index: 3; width: var(--skydial-size, 300px); height: var(--skydial-size, 300px);
+  pointer-events: none; transition: opacity var(--t, 160ms) ease; will-change: transform;
+}
+.skydial[hidden] { display: none; }
+.skydial-svg { display: block; overflow: visible; }
+.skydial-backing { fill: rgb(0 0 0 / 0.42); }
+.skydial-ground { fill: rgb(255 255 255 / 0.18); }
+.skydial-skyline { fill: none; stroke: rgb(255 255 255 / 0.8); stroke-width: 1; stroke-linejoin: round; }
+.skydial-ring { fill: none; stroke: rgb(255 255 255 / 0.22); stroke-width: 1; }
+.skydial-ring-zero { stroke: rgb(255 255 255 / 0.4); }
+.skydial-ring-edge { stroke: rgb(255 255 255 / 0.3); }
+.skydial-ticks { stroke: rgb(255 255 255 / 0.6); stroke-width: 1; }
+.skydial-text {
+  font: 500 11px/1 var(--font, system-ui, sans-serif); fill: #d6d6da; font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: rgb(0 0 0 / 0.72); stroke-width: 3px; stroke-linejoin: round;
+}
+.skydial-letter { font-size: var(--fs-label, 12px); font-weight: 600; fill: var(--text, #fff); }
+.skydial-ringlabel { font-size: 10px; fill: #c2c2c6; }
+.skydial-track path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.skydial-track-sun .skydial-stay { stroke: var(--sun); stroke-width: 2; }
+.skydial-track-sun .skydial-beyond { stroke: var(--sun); stroke-opacity: 0.35; stroke-width: 1; }
+.skydial-track-earth .skydial-stay { stroke: var(--earth); stroke-width: 1.5; }
+.skydial-track-earth .skydial-beyond { stroke: var(--earth); stroke-opacity: 0.4; stroke-width: 1; }
+.skydial-ray { stroke: var(--sun); stroke-opacity: 0.75; stroke-width: 1.25; stroke-dasharray: 3 4; }
+.skydial-ray.is-hidden { stroke-opacity: 0.4; }
+.skydial-center { fill: #fff; stroke: #000; stroke-width: 1.5; }
+.skydial-dot { stroke-width: 2; }
+.skydial-dot-sun { fill: var(--sun); stroke: var(--sun); }
+.skydial-dot-earth { fill: var(--earth); stroke: var(--earth); }
+/* behind the terrain: hollow */
+.skydial-dot.is-hidden { fill: rgb(17 17 17 / 0.9); }
+.skydial-dotlabel { fill: var(--text, #fff); }
+.skydial-body.is-hidden .skydial-dotlabel { fill: #c2c2c6; }
+.skydial-hit { fill: transparent; stroke: none; pointer-events: all; cursor: default; }
+.skydial.is-dimmed { opacity: 0.35; }
+.skydial.is-dimmed .skydial-hit { pointer-events: none; }
+.skydial-tip {
+  position: absolute; z-index: 1; transform: translate(-50%, -100%); display: grid; gap: 2px; padding: 6px 10px;
+  border-radius: var(--r2, 8px); background: rgb(0 0 0 / 0.82); color: var(--text, #fff); border: 1px solid var(--hair, rgb(255 255 255 / 0.14));
+  font: 400 var(--fs-label, 12px) / 16px var(--font, system-ui, sans-serif); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+.skydial-tip b { font-weight: 600; font-size: var(--fs-value, 13px); }
+.skydial-tip[hidden] { display: none; }
+
+/* the site detail sheet: right-hand frosted glass, more solid than the small controls so hairline charts
+   stay readable over bright terrain */
+.site-sheet {
+  --sheet-glass: rgb(22 22 24 / 0.80);
+  position: fixed; z-index: 18; top: calc(var(--big-top, 56px) + 12px); right: var(--edge, 16px); bottom: var(--edge, 16px);
+  width: min(600px, calc(100vw - 2 * var(--edge, 16px))); display: flex; flex-direction: column; min-height: 0;
+  padding: 18px 20px 0; border-radius: var(--r1, 14px); color: var(--text, #fff);
+  background: var(--sheet-glass); -webkit-backdrop-filter: var(--glass-fx, blur(32px) saturate(1.7) brightness(0.42)); backdrop-filter: var(--glass-fx, blur(32px) saturate(1.7) brightness(0.42));
+  border: 1px solid var(--hair, rgb(255 255 255 / 0.14));
+  box-shadow: var(--glass-shadow, inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 30px rgb(0 0 0 / 0.3));
+  font-size: var(--fs-value, 13px); line-height: 18px;
+  --faint: #a8a8a8;
+}
+.site-sheet[hidden] { display: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-sheet { --sheet-glass: rgb(20 20 22 / 0.96); }
+}
+.site-sheet-head { display: flex; align-items: flex-start; gap: 12px; }
+.site-sheet-heading { flex: 1; min-width: 0; }
+.site-sheet-title { margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; outline: none; }
+.site-sheet-sub { margin: 2px 0 0; font-size: var(--fs-label, 12px); line-height: 16px; color: var(--muted, #b4b4b4); }
+.site-sheet-close {
+  flex: none; display: grid; place-items: center; width: var(--ctl, 32px); height: var(--ctl, 32px); padding: 0; border: 0;
+  border-radius: var(--r2, 8px); background: none; color: var(--muted, #b4b4b4); cursor: pointer;
+}
+.site-sheet-close:hover { color: var(--text, #fff); background: rgb(255 255 255 / 0.08); }
+.site-sheet-icon { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; }
+.site-sheet :focus-visible { outline: 2px solid var(--text, #fff); outline-offset: -2px; }
+
+/* tabs: a segmented control, as the modes in the top bar */
+.site-sheet-tabs {
+  display: flex; gap: 2px; width: max-content; max-width: 100%; margin: 12px 0 14px; padding: 3px;
+  border-radius: calc(var(--r2, 8px) + 3px); background: rgb(0 0 0 / 0.28);
+}
+.site-sheet-tab {
+  height: var(--ctl, 32px); padding: 0 10px; border: 0; border-radius: var(--r2, 8px); background: none; color: var(--muted, #b4b4b4);
+  font: 500 var(--fs-value, 13px) / 1 var(--font, system-ui, sans-serif); white-space: nowrap; cursor: pointer;
+}
+.site-sheet-tab:hover { color: var(--text, #fff); background: rgb(255 255 255 / 0.08); }
+.site-sheet-tab[aria-selected="true"] { color: var(--text, #fff); background: rgb(255 255 255 / 0.16); font-weight: 600; }
+
+.site-sheet-body { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -20px; padding: 0 20px 18px; overscroll-behavior: contain; }
+.site-sheet-panel { outline: none; }
+.site-sheet-panel[hidden] { display: none; }
+.site-sheet-headline { margin: 0 0 12px; font-size: 14px; line-height: 20px; }
+.site-sheet-headline[hidden], .site-sheet-tiles[hidden] { display: none; }
+
+/* three figures split by hairlines, no boxes */
+.site-sheet-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--hair, rgb(255 255 255 / 0.14)); margin-bottom: 0; }
+.site-sheet-tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 14px 12px 0; }
+.site-sheet-tile + .site-sheet-tile { padding-left: 14px; border-left: 1px solid var(--hair, rgb(255 255 255 / 0.14)); }
+.site-sheet-tile-label { font-size: var(--fs-label, 12px); line-height: 16px; color: var(--muted, #b4b4b4); }
+.site-sheet-tile-value { font-size: 22px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.site-sheet-tile-note { font-size: var(--fs-label, 12px); line-height: 16px; color: var(--muted, #b4b4b4); }
+.site-sheet-tile-note.is-negative { color: var(--negative, #e5484d); }
+
+/* a mounted piece with its small heading; sections are split by hairlines, never boxed */
+.site-sheet-sec { border-top: 1px solid var(--hair, rgb(255 255 255 / 0.14)); padding: 12px 0; }
+.site-sheet-sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.site-sheet-sec-head h3 { margin: 0; font-size: var(--fs-label, 12px); line-height: 16px; font-weight: 500; color: var(--muted, #b4b4b4); }
+.site-sheet-sec-aside { font-size: var(--fs-label, 12px); line-height: 16px; color: var(--muted, #b4b4b4); font-variant-numeric: tabular-nums; text-align: right; }
+/* the old Navigator cards lose their own card chrome inside the sheet */
+.site-sheet-slot :is(.card, .energy-card, .relay-card) { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+
+/* narrow windows: the sheet becomes a full-screen page (phase 5 G item 9) */
+@media (max-width: 1100px) {
+  .site-sheet { inset: 0; width: auto; border-radius: 0; border: 0; padding-top: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skydial { transition: none; }
+}

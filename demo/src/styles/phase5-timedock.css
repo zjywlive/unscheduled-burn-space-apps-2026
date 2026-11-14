@@ -1,0 +1,153 @@
+/* ---------- phase 5 P: the bottom time dock (docs/phase4/mock/structure.html, the footer) ----------
+   Every rule starts with .timedock, so this shard changes nothing else. One glass (phase4-bigmap.css
+   variables, with fallbacks so the dock also renders outside .is-bigmap), one control height, two text
+   sizes, concentric radii. Colours: the existing --text, --muted, --hair, --sun, --earth, --both only. */
+
+.timedock {
+  --td-ctl: var(--ctl, 32px); --td-r2: var(--r2, 8px); --td-r1: var(--r1, 14px);
+  --td-fs-label: var(--fs-label, 12px); --td-fs-value: var(--fs-value, 13px);
+  --td-hair: var(--hair, rgba(255, 255, 255, 0.14));
+  --td-veil: rgba(255, 255, 255, 0.08); --td-veil2: rgba(255, 255, 255, 0.16);
+  --faint: #a8a8a8;
+  box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; gap: 10px;
+  height: calc(2 * var(--td-ctl) + 10px + 16px + 2px); padding: 8px 12px; min-width: 0;
+  background: var(--glass, rgba(24, 24, 26, 0.54));
+  -webkit-backdrop-filter: var(--glass-fx, blur(32px) saturate(1.7) brightness(0.42)); backdrop-filter: var(--glass-fx, blur(32px) saturate(1.7) brightness(0.42));
+  border: 1px solid var(--td-hair); border-radius: var(--td-r1); box-shadow: var(--glass-shadow, 0 10px 30px rgba(0, 0, 0, 0.3));
+  color: var(--text, #fff); font: 400 var(--td-fs-value) / 18px var(--font, system-ui, sans-serif);
+  container-type: inline-size; container-name: timedock;
+  position: relative;   /* the popovers are placed against the dock, above it */
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .timedock, .timedock .td-pop { background: rgba(20, 20, 22, 0.92); }
+}
+/* placement as in the mock: the caller sets --td-left / --td-right (the right edge moves when the detail sheet opens) */
+.timedock.timedock--float {
+  position: fixed; z-index: 12; left: var(--td-left, 16px); right: var(--td-right, 72px); bottom: var(--td-bottom, 16px);
+  transition: right 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+/* an open popover (mission window, speed) must never sit under another panel: the dock is a stacking
+   context at 12, below the inspector (15), the sheets (18–19), the top bar (20), the story card (35) and
+   Ask / Settings (40), so while one is open the whole dock goes above them all */
+.timedock.timedock--float.has-pop { z-index: 50; }
+.timedock *, .timedock *::before, .timedock *::after { box-sizing: border-box; }
+.timedock [hidden] { display: none !important; }
+.timedock .num { font-variant-numeric: tabular-nums; }
+
+.timedock .td-row { display: flex; align-items: center; gap: 12px; height: var(--td-ctl); min-width: 0; }
+
+/* row one */
+.timedock .td-clock { flex: none; font-weight: 600; white-space: nowrap; }
+.timedock .td-sep { flex: none; width: 1px; align-self: stretch; margin: 4px 0; background: var(--td-hair); }
+.timedock .td-status { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted, #b4b4b4); font-size: var(--td-fs-value); }
+.timedock .td-status > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timedock .td-status[data-tone="muted"] { color: var(--faint); }
+.timedock .td-slot { flex: none; display: flex; align-items: center; min-width: 0; font-size: var(--td-fs-label); color: var(--muted, #b4b4b4); white-space: nowrap; }
+.timedock .td-slot:empty { display: none; }
+
+/* controls */
+.timedock .td-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--td-ctl); min-width: var(--td-ctl); padding: 0 10px; margin: 0;
+  border: 0; border-radius: var(--td-r2); background: none; color: var(--muted, #b4b4b4);
+  font: inherit; font-size: var(--td-fs-value); white-space: nowrap; cursor: pointer;
+}
+.timedock .td-btn:hover { background: var(--td-veil); color: var(--text, #fff); }
+.timedock .td-btn:focus-visible, .timedock .td-handle:focus-visible, .timedock .td-ph:focus-visible, .timedock .td-input:focus-visible {
+  outline: 2px solid var(--text, #fff); outline-offset: 1px;
+}
+.timedock .td-btn:disabled { opacity: 0.38; cursor: default; background: none; }
+.timedock .td-btn.td-icon { padding: 0; }
+.timedock .td-btn.td-line { border: 1px solid var(--td-hair); color: var(--text, #fff); }
+.timedock .td-btn.td-pri { background: var(--text, #fff); color: var(--ground, #000); font-weight: 600; }
+.timedock .td-btn.td-pri:hover { background: var(--muted, #b4b4b4); }
+.timedock .td-btn[aria-pressed="true"] { background: var(--td-veil2); color: var(--text, #fff); }
+.timedock .td-btn.td-play { color: var(--text, #fff); background: var(--td-veil2); }
+.timedock .td-btn.td-play:hover { background: rgba(255, 255, 255, 0.2); }
+.timedock .td-ic { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.timedock .td-play .td-ic path[d^="M5 3.5l8"] { fill: currentColor; }
+.timedock .td-caret { font-size: 10px; line-height: 1; color: var(--muted, #b4b4b4); }
+.timedock .td-transport { flex: none; display: flex; gap: 2px; }
+
+/* the timeline: 32 px tall; ribbon 10–22, ticks under it, events 0–7, window box 4–28, playhead −2–34 */
+.timedock .td-end { flex: none; color: var(--muted, #b4b4b4); font-size: var(--td-fs-label); white-space: nowrap; }
+.timedock .td-track { position: relative; flex: 1 1 auto; min-width: 90px; height: var(--td-ctl); touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.timedock .td-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.timedock .td-win {
+  position: absolute; top: 4px; height: 24px; border: 1.5px solid var(--text, #fff); border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12); pointer-events: none;
+}
+.timedock .td-win[data-clip-l="true"] { border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.timedock .td-win[data-clip-r="true"] { border-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.timedock .td-wl {
+  position: absolute; top: -18px; font: 400 var(--td-fs-label) / 14px var(--font, system-ui, sans-serif); font-style: normal;
+  color: var(--muted, #b4b4b4); white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none;
+}
+.timedock .td-wl-in { left: -6px; }
+.timedock .td-wl-out { right: -6px; }
+.timedock .td-win[data-tight="true"] .td-wl-in { left: 50%; transform: translateX(-50%); }
+/* handles: a 4 px bar on each edge, a 16 px hit area */
+.timedock .td-handle { position: absolute; top: -4px; bottom: -4px; width: 16px; cursor: ew-resize; pointer-events: auto; border-radius: 4px; touch-action: none; }
+.timedock .td-handle::after { content: ""; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 4px; border-radius: 2px; background: var(--text, #fff); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+.timedock .td-handle-in { left: -9px; }
+.timedock .td-handle-out { right: -9px; }
+.timedock .td-handle:hover::after { top: 6px; bottom: 6px; }
+.timedock .td-alt {
+  position: absolute; top: 4px; height: 24px; border: 1.5px dashed rgba(255, 255, 255, 0.55); border-radius: 5px; pointer-events: none;
+}
+.timedock .td-alt[data-clip-l="true"] { border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.timedock .td-alt[data-clip-r="true"] { border-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.timedock .td-ph {
+  position: absolute; top: -2px; width: 2px; height: 36px; margin-left: -1px; background: var(--text, #fff);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.85); border-radius: 1px; cursor: ew-resize;
+}
+.timedock .td-ph::before { content: ""; position: absolute; left: -4px; top: -2px; border: 5px solid transparent; border-top-color: var(--text, #fff); }
+.timedock .td-ph::after { content: ""; position: absolute; left: -7px; right: -7px; top: 0; bottom: 0; }   /* a wider hit area */
+.timedock .td-ph[data-out="left"], .timedock .td-ph[data-out="right"] { opacity: 0.45; }
+.timedock .td-hover {
+  position: absolute; top: -22px; transform: translateX(-50%); padding: 1px 6px; border-radius: 4px; pointer-events: none; z-index: 2;
+  background: rgba(0, 0, 0, 0.82); color: var(--text, #fff); font-size: var(--td-fs-label); line-height: 16px; white-space: nowrap;
+}
+.timedock .td-track.is-dragging { cursor: ew-resize; }
+
+/* popovers: the speed menu and the window panel, above their buttons */
+.timedock .td-popwrap { flex: none; display: flex; }
+/* Above the dock, not over its first row. A blur inside the dock's own backdrop blur only samples the dock
+   (the dock is the backdrop root), so the popovers use the near-opaque glass of phase4-bigmap.css's
+   no-blur fallback instead: readable over any map. */
+.timedock .td-pop {
+  position: absolute; bottom: calc(100% + 8px); z-index: 30; padding: 6px; border-radius: var(--td-r1);
+  background: rgba(20, 20, 22, 0.94);
+  border: 1px solid var(--td-hair); box-shadow: var(--glass-shadow, 0 10px 30px rgba(0, 0, 0, 0.3));
+}
+.timedock .td-speed-menu { left: var(--td-pop-left, 12px); display: grid; gap: 2px; min-width: 96px; }
+.timedock .td-item {
+  height: var(--td-ctl); padding: 0 10px; border: 0; border-radius: var(--td-r2); background: none; color: var(--muted, #b4b4b4);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.timedock .td-item:hover, .timedock .td-item:focus-visible { background: var(--td-veil); color: var(--text, #fff); outline: none; }
+.timedock .td-item[aria-checked="true"] { background: var(--td-veil2); color: var(--text, #fff); font-weight: 600; }
+.timedock .td-winpop { right: 12px; width: 300px; padding: 10px 12px 12px; display: grid; gap: 10px; }
+.timedock .td-field { display: grid; gap: 4px; }
+.timedock .td-lbl { color: var(--muted, #b4b4b4); font-size: var(--td-fs-label); line-height: 16px; }
+.timedock .td-input {
+  height: var(--td-ctl); padding: 0 8px; border: 1px solid var(--td-hair); border-radius: var(--td-r2); background: rgba(0, 0, 0, 0.25);
+  color: var(--text, #fff); font: inherit; color-scheme: dark;
+}
+.timedock .td-seg { display: flex; gap: 2px; flex-wrap: nowrap; }
+.timedock .td-seg .td-seg-btn { min-width: 0; flex: 1 1 0; padding: 0 4px; }
+.timedock .td-pop-foot { display: flex; justify-content: flex-end; gap: 6px; padding-top: 10px; border-top: 1px solid var(--td-hair); }
+
+/* the summary button: long form, short form when the dock is narrow */
+.timedock .td-sum-short { display: none; }
+@container timedock (max-width: 700px) {
+  .timedock .td-sum-long { display: none; }
+  .timedock .td-sum-short { display: inline; }
+}
+@container timedock (max-width: 520px) {
+  .timedock .td-end, .timedock .td-legend { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timedock, .timedock * { transition: none !important; }
+}

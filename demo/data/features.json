@@ -1,0 +1,14 @@
+[
+  { "name": "Shackleton", "latDeg": -89.67, "lonDeg": 129.78, "diameterKm": 20.92, "source": "https://planetarynames.wr.usgs.gov/Feature/5450" },
+  { "name": "de Gerlache", "latDeg": -88.48, "lonDeg": 271.66, "diameterKm": 32.71, "source": "https://planetarynames.wr.usgs.gov/Feature/1439" },
+  { "name": "Sverdrup", "latDeg": -88.32, "lonDeg": 206.61, "diameterKm": 32.83, "source": "https://planetarynames.wr.usgs.gov/Feature/5782" },
+  { "name": "Slater", "latDeg": -88.08, "lonDeg": 111.29, "diameterKm": 25.12, "source": "https://planetarynames.wr.usgs.gov/Feature/15325" },
+  { "name": "Shoemaker", "latDeg": -88.14, "lonDeg": 45.91, "diameterKm": 51.82, "source": "https://planetarynames.wr.usgs.gov/Feature/5494" },
+  { "name": "Haworth", "latDeg": -87.20, "lonDeg": 352.51, "diameterKm": 51.42, "source": "https://planetarynames.wr.usgs.gov/Feature/14502" },
+  { "name": "Faustini", "latDeg": -87.18, "lonDeg": 84.31, "diameterKm": 42.48, "source": "https://planetarynames.wr.usgs.gov/Feature/1919" },
+  { "name": "Nobile", "latDeg": -85.28, "lonDeg": 53.27, "diameterKm": 79.27, "source": "https://planetarynames.wr.usgs.gov/Feature/4321" },
+  { "name": "Cabeus", "latDeg": -85.33, "lonDeg": 317.87, "diameterKm": 100.58, "source": "https://planetarynames.wr.usgs.gov/Feature/953" },
+  { "name": "Malapert", "latDeg": -85.00, "lonDeg": 11.40, "diameterKm": 72.38, "source": "https://planetarynames.wr.usgs.gov/Feature/3603" },
+  { "name": "Amundsen", "latDeg": -84.44, "lonDeg": 83.07, "diameterKm": 103.39, "source": "https://planetarynames.wr.usgs.gov/Feature/247" },
+  { "name": "Mons Mouton", "latDeg": -84.60, "lonDeg": 31.00, "diameterKm": 130.00, "source": "https://planetarynames.wr.usgs.gov/Feature/16070" }
+]

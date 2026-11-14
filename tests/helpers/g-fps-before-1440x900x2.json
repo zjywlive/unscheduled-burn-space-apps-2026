@@ -1,0 +1,188 @@
+[
+  {
+    "mode": "both",
+    "z": 1,
+    "frames": 301,
+    "fps": 60.1,
+    "median": 16.7,
+    "p90": 16.7,
+    "worst": 17,
+    "over20": 0,
+    "simH": 30,
+    "paint": "1",
+    "playing": true,
+    "heatMs": {
+      "n": 0,
+      "median": null,
+      "p90": null,
+      "max": null
+    },
+    "veilMs": {
+      "n": 31,
+      "median": 0,
+      "p90": 0.09999990463256836,
+      "max": 0.10000038146972656
+    },
+    "canvas": [
+      2880,
+      1800
+    ],
+    "tier": "2 km",
+    "errors": []
+  },
+  {
+    "mode": "both",
+    "z": 2,
+    "frames": 302,
+    "fps": 60.2,
+    "median": 16.7,
+    "p90": 16.7,
+    "worst": 17,
+    "over20": 0,
+    "simH": 30,
+    "paint": "23",
+    "playing": true,
+    "heatMs": {
+      "n": 0,
+      "median": null,
+      "p90": null,
+      "max": null
+    },
+    "veilMs": {
+      "n": 31,
+      "median": 0,
+      "p90": 0.09999990463256836,
+      "max": 0.09999990463256836
+    },
+    "canvas": [
+      2880,
+      1800
+    ],
+    "tier": "1 km",
+    "errors": []
+  },
+  {
+    "mode": "both",
+    "z": 8,
+    "frames": 301,
+    "fps": 60.2,
+    "median": 16.7,
+    "p90": 16.7,
+    "worst": 17,
+    "over20": 0,
+    "simH": 30,
+    "paint": "26",
+    "playing": true,
+    "heatMs": {
+      "n": 0,
+      "median": null,
+      "p90": null,
+      "max": null
+    },
+    "veilMs": {
+      "n": 31,
+      "median": 0,
+      "p90": 0.09999990463256836,
+      "max": 0.10000038146972656
+    },
+    "canvas": [
+      2880,
+      1800
+    ],
+    "tier": "1 km",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1,
+    "frames": 301,
+    "fps": 60.2,
+    "median": 16.7,
+    "p90": 16.7,
+    "worst": 17,
+    "over20": 0,
+    "simH": 30,
+    "paint": "3",
+    "playing": true,
+    "heatMs": {
+      "n": 31,
+      "median": 3,
+      "p90": 3,
+      "max": 3
+    },
+    "veilMs": {
+      "n": 0,
+      "median": null,
+      "p90": null,
+      "max": null
+    },
+    "canvas": [
+      2880,
+      1800
+    ],
+    "tier": "2 km",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "frames": 301,
+    "fps": 60.1,
+    "median": 16.7,
+    "p90": 16.7,
+    "worst": 17,
+    "over20": 0,
+    "simH": 30,
+    "paint": "8",
+    "playing": true,
+    "heatMs": {
+      "n": 30,
+      "median": 8,
+      "p90": 8,
+      "max": 9
+    },
+    "veilMs": {
+      "n": 0,
+      "median": null,
+      "p90": null,
+      "max": null
+    },
+    "canvas": [
+      2880,
+      1800
+    ],
+    "tier": "2 km",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 8,
+    "frames": 300,
+    "fps": 59.8,
+    "median": 16.7,
+    "p90": 16.7,
+    "worst": 33,
+    "over20": 2,
+    "simH": 30,
+    "paint": "11",
+    "playing": true,
+    "heatMs": {
+      "n": 30,
+      "median": 11,
+      "p90": 12,
+      "max": 24
+    },
+    "veilMs": {
+      "n": 0,
+      "median": null,
+      "p90": null,
+      "max": null
+    },
+    "canvas": [
+      2880,
+      1800
+    ],
+    "tier": "2 km",
+    "errors": []
+  }
+]

@@ -1,0 +1,487 @@
+[
+ {
+  "hash": "#view=map&site=im2&t=2027-01-13T00:00Z&stay=14&slip=14&alt=same&mode=both",
+  "site": "im2",
+  "planned": {
+   "stayMs": 1209600000,
+   "sunMs": 1123284375,
+   "earthMs": 1209600000,
+   "bothMs": 1123284375,
+   "longestDarkMs": 86315625,
+   "clipped": false
+  },
+  "alt": {
+   "stayMs": 1209600000,
+   "sunMs": 120178125,
+   "earthMs": 718537500,
+   "bothMs": 44803125,
+   "longestDarkMs": 1089421875,
+   "clipped": false
+  },
+  "rows": [
+   "Both in view312 h12 h",
+   "Sunlit312 h33 h",
+   "Earth in view336 h200 h"
+  ],
+  "finding": "15% of the mapped area has both Sun and Earth in view for at least half of the 14-day stay from 13 Jan 2027.",
+  "energy": {
+   "assumptions": {
+    "attitude": "track",
+    "panelToLoad": 2,
+    "batteryHours": 24,
+    "sleepLoad": 0.1,
+    "initialCharge": 1,
+    "note": "Assumed, not data. Relative units: hours of average load."
+   },
+   "planned": {
+    "label": "13 Jan",
+    "sunlitH": 312,
+    "atEmptyH": 0,
+    "minBatteryH": 2.4,
+    "chargingH": 312,
+    "asleepH": 24,
+    "bestFixed": {
+     "tiltDeg": 84,
+     "facingDeg": 356.6,
+     "shareOfTracking": 71.5
+    },
+    "horizontalShareOfTracking": 7.5
+   },
+   "alternative": {
+    "label": "27 Jan",
+    "sunlitH": 33.4,
+    "atEmptyH": 62,
+    "minBatteryH": 30.2,
+    "chargingH": 33.4,
+    "asleepH": 302.6,
+    "bestFixed": {
+     "tiltDeg": 89.7,
+     "facingDeg": 269.3,
+     "shareOfTracking": 99.6
+    },
+    "horizontalShareOfTracking": 0.6
+   },
+   "stayDays": 14
+  },
+  "relay": {
+   "ok": true,
+   "presetId": "elliptical-12h",
+   "elements": {
+    "aKm": 6142.6,
+    "e": 0.6,
+    "iDeg": 90,
+    "raanDeg": 0,
+    "argpDeg": 90,
+    "m0Deg": 180,
+    "epochMs": null
+   },
+   "minElDeg": 0,
+   "planned": {
+    "relayH": 261.5,
+    "longestRelayGapH": 2.7,
+    "earthDirectH": 336,
+    "directOrRelayH": 336,
+    "longestBlindH": 0,
+    "stayH": 336,
+    "periodH": 12
+   },
+   "alternative": {
+    "relayH": 261.4,
+    "longestRelayGapH": 2.7,
+    "earthDirectH": 199.6,
+    "directOrRelayH": 306.5,
+    "longestBlindH": 2.7,
+    "stayH": 336,
+    "periodH": 12
+   }
+  }
+ },
+ {
+  "hash": "#view=map&site=shackleton&t=2027-01-13T00:00Z&stay=14&slip=14&alt=same&mode=both",
+  "site": "shackleton",
+  "planned": {
+   "stayMs": 1209600000,
+   "sunMs": 1209600000,
+   "earthMs": 941090625,
+   "bothMs": 941090625,
+   "longestDarkMs": 0,
+   "clipped": false
+  },
+  "alt": {
+   "stayMs": 1209600000,
+   "sunMs": 1209600000,
+   "earthMs": 329653125,
+   "bothMs": 329653125,
+   "longestDarkMs": 0,
+   "clipped": false
+  },
+  "rows": [
+   "Both in view261 h92 h",
+   "Sunlit336 h336 h",
+   "Earth in view261 h92 h"
+  ],
+  "finding": "15% of the mapped area has both Sun and Earth in view for at least half of the 14-day stay from 13 Jan 2027.",
+  "energy": {
+   "assumptions": {
+    "attitude": "track",
+    "panelToLoad": 2,
+    "batteryHours": 24,
+    "sleepLoad": 0.1,
+    "initialCharge": 1,
+    "note": "Assumed, not data. Relative units: hours of average load."
+   },
+   "planned": {
+    "label": "13 Jan",
+    "sunlitH": 336,
+    "atEmptyH": 0,
+    "minBatteryH": 0,
+    "chargingH": 336,
+    "asleepH": 0,
+    "bestFixed": {
+     "tiltDeg": 89.7,
+     "facingDeg": 169.2,
+     "shareOfTracking": 67.2
+    },
+    "horizontalShareOfTracking": 0.4
+   },
+   "alternative": {
+    "label": "27 Jan",
+    "sunlitH": 336,
+    "atEmptyH": 0,
+    "minBatteryH": 0,
+    "chargingH": 336,
+    "asleepH": 0,
+    "bestFixed": {
+     "tiltDeg": 89.2,
+     "facingDeg": 359.1,
+     "shareOfTracking": 67
+    },
+    "horizontalShareOfTracking": 1
+   },
+   "stayDays": 14
+  },
+  "relay": {
+   "ok": true,
+   "presetId": "elliptical-12h",
+   "elements": {
+    "aKm": 6142.6,
+    "e": 0.6,
+    "iDeg": 90,
+    "raanDeg": 0,
+    "argpDeg": 90,
+    "m0Deg": 180,
+    "epochMs": null
+   },
+   "minElDeg": 0,
+   "planned": {
+    "relayH": 263.1,
+    "longestRelayGapH": 2.7,
+    "earthDirectH": 261.4,
+    "directOrRelayH": 320.2,
+    "longestBlindH": 2.7,
+    "stayH": 336,
+    "periodH": 12
+   },
+   "alternative": {
+    "relayH": 263.4,
+    "longestRelayGapH": 2.6,
+    "earthDirectH": 91.6,
+    "directOrRelayH": 284.1,
+    "longestBlindH": 2.6,
+    "stayH": 336,
+    "periodH": 12
+   }
+  }
+ },
+ {
+  "hash": "#view=map&site=haworth&t=2027-03-02T06:00Z&stay=7&slip=-7&alt=same&mode=both",
+  "site": "haworth",
+  "planned": {
+   "stayMs": 604800000,
+   "sunMs": 268734375,
+   "earthMs": 0,
+   "bothMs": 0,
+   "longestDarkMs": 336065625,
+   "clipped": false
+  },
+  "alt": {
+   "stayMs": 604800000,
+   "sunMs": 500709375,
+   "earthMs": 0,
+   "bothMs": 0,
+   "longestDarkMs": 104090625,
+   "clipped": false
+  },
+  "rows": [
+   "Both in view0 h0 h",
+   "Sunlit75 h139 h",
+   "Earth in view0 h0 h"
+  ],
+  "finding": "0% of the mapped area has both Sun and Earth in view for at least half of the 7-day stay from 2 Mar 2027.",
+  "energy": {
+   "assumptions": {
+    "attitude": "track",
+    "panelToLoad": 2,
+    "batteryHours": 24,
+    "sleepLoad": 0.1,
+    "initialCharge": 1,
+    "note": "Assumed, not data. Relative units: hours of average load."
+   },
+   "planned": {
+    "label": "2 Mar",
+    "sunlitH": 74.6,
+    "atEmptyH": 0,
+    "minBatteryH": 9.3,
+    "chargingH": 74.6,
+    "asleepH": 93.4,
+    "bestFixed": {
+     "tiltDeg": 90,
+     "facingDeg": 255.1,
+     "shareOfTracking": 98.2
+    },
+    "horizontalShareOfTracking": 0
+   },
+   "alternative": {
+    "label": "23 Feb",
+    "sunlitH": 139.1,
+    "atEmptyH": 0,
+    "minBatteryH": 2.8,
+    "chargingH": 139.1,
+    "asleepH": 28.9,
+    "bestFixed": {
+     "tiltDeg": 88.5,
+     "facingDeg": 309.2,
+     "shareOfTracking": 93.9
+    },
+    "horizontalShareOfTracking": 2.5
+   },
+   "stayDays": 7
+  },
+  "relay": {
+   "ok": true,
+   "presetId": "elliptical-12h",
+   "elements": {
+    "aKm": 6142.6,
+    "e": 0.6,
+    "iDeg": 90,
+    "raanDeg": 0,
+    "argpDeg": 90,
+    "m0Deg": 180,
+    "epochMs": null
+   },
+   "minElDeg": 0,
+   "planned": {
+    "relayH": 129.2,
+    "longestRelayGapH": 2.8,
+    "earthDirectH": 0,
+    "directOrRelayH": 129.2,
+    "longestBlindH": 2.8,
+    "stayH": 168,
+    "periodH": 12
+   },
+   "alternative": {
+    "relayH": 129.2,
+    "longestRelayGapH": 2.8,
+    "earthDirectH": 0,
+    "directOrRelayH": 129.2,
+    "longestBlindH": 2.8,
+    "stayH": 168,
+    "periodH": 12
+   }
+  }
+ },
+ {
+  "hash": "#view=map&site=shackleton&t=2027-06-01T00:00Z&stay=30&slip=0&alt=im2&mode=both",
+  "site": "shackleton",
+  "planned": {
+   "stayMs": 2592000000,
+   "sunMs": 2175075000,
+   "earthMs": 1445625000,
+   "bothMs": 1418512500,
+   "longestDarkMs": 129656250,
+   "clipped": false
+  },
+  "alt": {
+   "stayMs": 2592000000,
+   "sunMs": 1041018750,
+   "earthMs": 2148975000,
+   "bothMs": 597993750,
+   "longestDarkMs": 898678125,
+   "clipped": false
+  },
+  "rows": [
+   "Both in view394 h166 h",
+   "Sunlit604 h289 h",
+   "Earth in view402 h597 h"
+  ],
+  "finding": "0% of the mapped area has both Sun and Earth in view for at least half of the 30-day stay from 1 Jun 2027.",
+  "energy": {
+   "assumptions": {
+    "attitude": "track",
+    "panelToLoad": 2,
+    "batteryHours": 24,
+    "sleepLoad": 0.1,
+    "initialCharge": 1,
+    "note": "Assumed, not data. Relative units: hours of average load."
+   },
+   "planned": {
+    "label": "1 Jun",
+    "sunlitH": 604.2,
+    "atEmptyH": 0,
+    "minBatteryH": 3.6,
+    "chargingH": 604.2,
+    "asleepH": 115.8,
+    "bestFixed": {
+     "tiltDeg": 90,
+     "facingDeg": 358.8,
+     "shareOfTracking": 39.4
+    },
+    "horizontalShareOfTracking": 0
+   },
+   "alternative": {
+    "label": "IM-2 Athena, 1 Jun",
+    "sunlitH": 289.2,
+    "atEmptyH": 9,
+    "minBatteryH": 24.9,
+    "chargingH": 289.2,
+    "asleepH": 430.8,
+    "bestFixed": {
+     "tiltDeg": 86.4,
+     "facingDeg": 353.1,
+     "shareOfTracking": 74
+    },
+    "horizontalShareOfTracking": 4.7
+   },
+   "stayDays": 30
+  },
+  "relay": {
+   "ok": true,
+   "presetId": "elliptical-12h",
+   "elements": {
+    "aKm": 6142.6,
+    "e": 0.6,
+    "iDeg": 90,
+    "raanDeg": 0,
+    "argpDeg": 90,
+    "m0Deg": 180,
+    "epochMs": null
+   },
+   "minElDeg": 0,
+   "planned": {
+    "relayH": 563.8,
+    "longestRelayGapH": 2.8,
+    "earthDirectH": 401.6,
+    "directOrRelayH": 650.6,
+    "longestBlindH": 2.8,
+    "stayH": 720,
+    "periodH": 12
+   },
+   "alternative": {
+    "relayH": 560.3,
+    "longestRelayGapH": 2.7,
+    "earthDirectH": 596.9,
+    "directOrRelayH": 693.2,
+    "longestBlindH": 2.7,
+    "stayH": 720,
+    "periodH": 12
+   }
+  }
+ },
+ {
+  "hash": "#view=map&site=im2&t=2028-12-25T00:00Z&stay=14&slip=1&alt=same&mode=both",
+  "site": "im2",
+  "planned": {
+   "stayMs": 518400000,
+   "sunMs": 518400000,
+   "earthMs": 518400000,
+   "bothMs": 518400000,
+   "longestDarkMs": 0,
+   "clipped": false
+  },
+  "alt": {
+   "stayMs": 518400000,
+   "sunMs": 518400000,
+   "earthMs": 518400000,
+   "bothMs": 518400000,
+   "longestDarkMs": 0,
+   "clipped": false
+  },
+  "rows": [
+   "Both in view144 h144 h",
+   "Sunlit144 h144 h",
+   "Earth in view144 h144 h"
+  ],
+  "finding": "19% of the mapped area has both Sun and Earth in view for at least half of the 7-day stay from 25 Dec 2028.",
+  "energy": {
+   "assumptions": {
+    "attitude": "track",
+    "panelToLoad": 2,
+    "batteryHours": 24,
+    "sleepLoad": 0.1,
+    "initialCharge": 1,
+    "note": "Assumed, not data. Relative units: hours of average load."
+   },
+   "planned": {
+    "label": "25 Dec",
+    "sunlitH": 144,
+    "atEmptyH": 0,
+    "minBatteryH": 0,
+    "chargingH": 144,
+    "asleepH": 0,
+    "bestFixed": {
+     "tiltDeg": 84.6,
+     "facingDeg": 10.9,
+     "shareOfTracking": 93.8
+    },
+    "horizontalShareOfTracking": 8.8
+   },
+   "alternative": {
+    "label": "26 Dec",
+    "sunlitH": 144,
+    "atEmptyH": 0,
+    "minBatteryH": 0,
+    "chargingH": 144,
+    "asleepH": 0,
+    "bestFixed": {
+     "tiltDeg": 84.6,
+     "facingDeg": 358.7,
+     "shareOfTracking": 93.8
+    },
+    "horizontalShareOfTracking": 8.9
+   },
+   "stayDays": 6
+  },
+  "relay": {
+   "ok": true,
+   "presetId": "elliptical-12h",
+   "elements": {
+    "aKm": 6142.6,
+    "e": 0.6,
+    "iDeg": 90,
+    "raanDeg": 0,
+    "argpDeg": 90,
+    "m0Deg": 180,
+    "epochMs": null
+   },
+   "minElDeg": 0,
+   "planned": {
+    "relayH": 112,
+    "longestRelayGapH": 2.7,
+    "earthDirectH": 144,
+    "directOrRelayH": 144,
+    "longestBlindH": 0,
+    "stayH": 144,
+    "periodH": 12
+   },
+   "alternative": {
+    "relayH": 112,
+    "longestRelayGapH": 2.7,
+    "earthDirectH": 144,
+    "directOrRelayH": 144,
+    "longestBlindH": 0,
+    "stayH": 144,
+    "periodH": 12
+   }
+  }
+ }
+]

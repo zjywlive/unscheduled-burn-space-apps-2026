@@ -1,0 +1,39 @@
+/* Fix R9: the Coordinates form (ui/shapeentry.js). Same compact rows as the Route plan points: tag,
+   latitude, longitude, row tools. No background of its own, so it sits on the glass panel. */
+.shape-entry { display: grid; gap: 10px; min-width: 0; }
+.se-head { display: grid; gap: 2px; }
+.se-title { margin: 0; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--text); }
+.se-sub { margin: 0; color: var(--faint); font-size: 12px; line-height: 16px; text-wrap: pretty; }
+.se-form { display: grid; gap: 8px; min-width: 0; }
+.se-body { display: grid; gap: 6px; min-width: 0; }
+.se-cols, .se-row { display: grid; grid-template-columns: var(--se-tag, 52px) minmax(0, 1fr) minmax(0, 1fr) var(--se-tools, 0px); column-gap: 6px; align-items: center; }
+.se-body.is-polygon { --se-tag: 16px; --se-tools: 72px; }
+.se-body.is-polygon .se-cols, .se-body.is-polygon .se-row { column-gap: 4px; }
+.se-cols { color: var(--faint); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.se-cols > span:first-child { visibility: hidden; }
+.se-rows { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.se-tag { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.se-input { width: 100%; min-width: 0; height: var(--control-height); padding: 0 7px; font-size: 13px; }
+.se-tools { display: inline-flex; gap: 0; }
+.se-tool-gap { width: 0; }
+.se-tool {
+  position: relative; width: 24px; height: var(--control-height); padding: 0; border: 0; border-radius: var(--radius-control);
+  background: transparent; color: var(--muted); font-size: 13px; line-height: 1;
+  transition: background-color var(--t) var(--ease-out), color var(--t) var(--ease-out);
+}
+.se-tool:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+.se-tool:disabled { color: var(--control); cursor: default; }
+.se-errors { grid-column: 2 / -1; display: grid; gap: 2px; }
+.se-errors:empty { display: none; }
+.se-radius { display: grid; grid-template-columns: 52px 88px auto; column-gap: 6px; align-items: center; justify-content: start; }
+.se-radius .se-errors { grid-column: 2 / -1; }
+.se-unit { color: var(--muted); font-size: 12px; }
+.se-add-row { display: flex; }
+.se-add, .se-open-route { height: var(--control-height); padding: 0 12px; font-size: 12px; }
+.se-open-route { justify-self: start; }
+.se-actions { display: flex; }
+.se-actions[hidden] { display: none; }
+.se-apply { flex: 1; height: var(--control-height); font-size: 13px; }
+.se-status { margin: 0; color: var(--faint); font-size: 12px; line-height: 16px; }
+.se-status:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .se-tool { transition: none; } }

@@ -1,0 +1,117 @@
+/* Phase 4 R: the Route plan card (ui/routeplan.js) and the candidate routes on the map (map/routes-layer.js).
+   Existing variables only, no new hue: the three candidates are told apart by line dash and by name. */
+
+/* ---------- card (designed for the 300 px point panel: 272 px of content) ---------- */
+.rp-card { display: grid; gap: 12px; }
+.rp-card > .card-head { margin-bottom: 0; }
+.rp-form { display: grid; gap: 10px; }
+/* fix R8: one line per point (tag, latitude, longitude, remove), the column heads above */
+.rp-cols, .rp-point { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 24px; column-gap: 6px; align-items: center; }
+.rp-cols { color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+.rp-cols > span:first-child { visibility: hidden; }
+.rp-points { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.rp-point > .rp-errors { grid-column: 2 / -1; }
+.rp-assumed {
+  display: inline-block; padding: 0 5px; border: 1px solid var(--control); border-radius: var(--radius-control);
+  color: var(--faint); font-size: 10px; line-height: 14px; letter-spacing: 0.02em; vertical-align: 1px;
+}
+.rp-point-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.rp-tag { color: var(--muted); font-size: var(--fs-small); line-height: 16px; white-space: nowrap; }
+.rp-num {
+  display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--raised); color: var(--text); font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.rp-num-end { background: var(--text); color: var(--ground); }
+.rp-tools { display: inline-flex; gap: 2px; }
+.rp-tool {
+  position: relative; width: 24px; height: var(--control-height); padding: 0; border: 0; border-radius: var(--radius-control);
+  background: transparent; color: var(--muted); font-size: 14px; line-height: 1;
+  transition: background-color var(--t) var(--ease-out), color var(--t) var(--ease-out);
+}
+.rp-tool::before { content: ""; position: absolute; inset: -4px -2px; } /* 36 px hit area */
+.rp-tool:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+.rp-tool:disabled { color: var(--control); cursor: default; }
+.rp-coords { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rp-input { width: 100%; min-width: 0; height: var(--control-height); padding: 0 8px; font-size: 13px; }
+.rp-errors:empty { display: none; }
+.rp-errors { display: grid; gap: 2px; }
+.rp-add-row { display: flex; }
+.rp-add { height: 32px; padding: 0 12px; font-size: var(--fs-small); }
+.rp-hint { color: var(--faint); font-size: var(--fs-small); line-height: 16px; margin-top: -4px; }
+.rp-limit .filter-head { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.rp-limit .range { height: 32px; }
+.rp-actions { display: flex; gap: 8px; }
+.rp-actions .rp-plan { flex: 1; }
+
+.rp-status:empty { display: none; }
+.rp-status { font-size: var(--fs-small); line-height: 16px; color: var(--muted); }
+.rp-blocked { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--radius-inner); background: var(--raised); color: var(--text); }
+.rp-blocked p { margin: 0; }
+.rp-blocked .rp-blocked-sub { color: var(--muted); }
+.rp-blocked .btn { justify-self: start; height: 32px; background: var(--control); font-size: var(--fs-small); }
+.rp-blocked .btn:hover { background: var(--faint); color: var(--ground); }
+.rp-error { color: var(--text); }
+.rp-stale { color: var(--text); }
+.rp-done { color: var(--faint); }
+
+/* candidate rows: Route | Length km | Max slope ° | Mean slope ° | Sun lit % | PSR km (fix R3: two-line
+   heads with the unit underneath, a wider gap between the number columns) */
+.rp-results:empty { display: none; }
+.rp-results { display: grid; gap: 4px; }
+.rp-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 38px 38px 38px 32px 32px; align-items: center; column-gap: 3px;
+  font-size: var(--fs-small); line-height: 16px;
+}
+.rp-row > span:not(.rp-name):not(.rp-same):not(.rp-unavailable) { text-align: right; white-space: nowrap; }
+.rp-row-head { padding: 0 6px; color: var(--faint); align-items: end; }
+.rp-head-name, .rp-head-unit { display: block; white-space: nowrap; }
+.rp-head-name { color: var(--muted); }
+.rp-head-unit { font-size: 11px; line-height: 14px; }
+.rp-rows { display: grid; gap: 2px; }
+.rp-choice {
+  position: relative; width: 100%; min-height: 36px; padding: 6px; border: 0; border-radius: var(--radius-inner);
+  background: transparent; color: var(--text); text-align: left; cursor: pointer;
+  transition: background-color var(--t) var(--ease-out), opacity var(--t) var(--ease-out);
+}
+.rp-choice:hover:not(:disabled), .rp-choice.is-hovered { background: var(--surface); }
+.rp-choice.is-selected { background: var(--raised); }
+.rp-choice:disabled { color: var(--faint); cursor: default; }
+.rp-rows.is-stale .rp-choice { opacity: 0.55; }
+.rp-name { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; font-weight: 500; }
+.rp-choice:not(.is-selected) .rp-name { font-weight: 400; }
+.rp-same, .rp-unavailable { grid-column: 2 / -1; color: var(--faint); text-align: left; }
+.rp-same { grid-column: 1 / -1; padding-left: 21px; }
+.rp-swatch { flex: none; overflow: visible; }
+.rp-swatch .rp-line { stroke-width: 2; opacity: 1; }
+.rp-choice.is-selected .rp-swatch .rp-line { stroke-width: 2.5; }
+.rp-note-inline { color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+
+.rp-notes { display: grid; gap: 4px; margin: 0; padding: 0 0 0 14px; color: var(--faint); font-size: var(--fs-small); line-height: 16px; text-wrap: pretty; }
+.rp-notes li::marker { color: var(--control); }
+
+/* ---------- map layer ---------- */
+.routes-layer { pointer-events: none; }
+.rp-line, .rp-casing { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+/* fix R4: every line sits on a dark casing wide enough to read over the grey heat map; the selected one is
+   the widest, solid, and the only one in full white */
+.rp-line { stroke: var(--both); stroke-width: 2; opacity: 0.9; }
+.rp-line-flat { stroke-dasharray: 8 4; }
+.rp-line-sunny { stroke-dasharray: 0.5 4.5; stroke-width: 2.75; }
+.rp-casing { stroke: var(--ground); stroke-width: 5; opacity: 0.7; }
+.rp-route.is-hovered .rp-line { stroke-width: 2.75; opacity: 1; }
+.rp-route.is-hovered .rp-line-sunny { stroke-width: 3.5; }
+.rp-route.is-hovered .rp-casing { stroke-width: 6; opacity: 0.8; }
+.rp-route.is-selected .rp-line { stroke: var(--text); stroke-width: 3.5; stroke-dasharray: none; opacity: 1; }
+.rp-route.is-selected .rp-casing { stroke-width: 8; opacity: 0.85; }
+.rp-label {
+  fill: var(--muted); font-size: 11px; font-weight: 500; paint-order: stroke; stroke: var(--ground); stroke-width: 3.5px; stroke-linejoin: round;
+}
+.rp-label.is-selected { fill: var(--text); }
+.rp-wp circle { fill: var(--raised); stroke: var(--text); stroke-width: 1.25; }
+.rp-wp.rp-wp-end circle { fill: var(--text); stroke: var(--ground); stroke-width: 1.5; }
+.rp-wp text { fill: var(--text); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rp-wp.rp-wp-end text { fill: var(--ground); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-choice, .rp-tool { transition: none; }
+}

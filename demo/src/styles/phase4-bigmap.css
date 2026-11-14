@@ -1,0 +1,281 @@
+/* ---------- phase 4: the big-map layout (≥ 1101 px, Map view; workflow G) ----------
+   The map fills the window; the top bar, the site list, the point panel, the modes, the landing date
+   bar, the legend, the readout, the tools and the zoom float over it in grey glass. Glass as approved in
+   docs/phase4/mock/bigmap.html: near-black at 72 %, a 14 px blur, a 1 px hairline. No new hues. */
+
+.is-bigmap {
+  --big-top: 56px; --edge: 16px; --left-w: 208px; --right-w: 300px; --left-gap: 10px; --right-gap: 10px;
+  /* fix L10c, L11: one material and one scale for everything that floats over the map. A dark vibrancy
+     glass: translucent, the backdrop blurred, saturated and dimmed (the dimming keeps text readable over
+     the brightest heat), a light hairline, a faint top highlight and a soft layered shadow. One control
+     height, two text sizes, and concentric radii: container = control radius + padding. */
+  /* phase 5 (G): one step lighter, so terrain and heat show through at zoom (the user asked for macOS-like
+     translucency). The backdrop's range is pulled in first (contrast 0.7 lifts the dark ground, tames the
+     brightest heat), then dimmed less than before (0.55 for 0.42), under a lighter tint (0.40 for 0.54).
+     Worst case, #e6e6e6 behind: about rgb 77, where the glass greys below keep 4.5:1 (measured in G.md).
+     The text-dense panels (site list, inspector) tint a little more; the detail sheet more again. */
+  --glass: rgba(24, 24, 26, 0.40); --glass-panel: rgba(24, 24, 26, 0.48);
+  --glass-fx: blur(28px) saturate(1.8) contrast(0.7) brightness(0.55);
+  --hair: rgba(255, 255, 255, 0.14);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.30);
+  --ctl: 32px; --pad1: 6px; --r2: 8px; --r1: calc(var(--r2) + var(--pad1));
+  --fs-label: 12px; --fs-value: 13px;
+  --zoom-w: calc(3 * var(--ctl) + 2 * 4px + 2 * var(--pad1) + 2px);
+  display: block; min-height: 100vh;
+}
+.is-bigmap[data-left="closed"] { --left-w: 0px; --left-gap: 0px; }
+.is-bigmap[data-right="closed"] { --right-w: 0px; --right-gap: 0px; }
+html.lsn-bigmap, html.lsn-bigmap body { height: 100%; overflow: hidden; }
+
+/* one glass for every floating container */
+.is-bigmap .topbar, .is-bigmap .sidebar, .is-bigmap .point-panel, .is-bigmap .right-reopen,
+.is-bigmap .map-controls, .is-bigmap .map-toolcol, .is-bigmap .map-zoom, .is-bigmap .map-dock, .is-bigmap .map-chip {
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-fx); backdrop-filter: var(--glass-fx);
+  border: 1px solid var(--hair); box-shadow: var(--glass-shadow);
+}
+.is-bigmap .sidebar, .is-bigmap .point-panel { background: var(--glass-panel); }
+/* over the brightest heat (#e6e6e6 behind the glass) the glass is at most rgb ≈ 57: white text ≥ 12:1, muted
+   ≥ 5.5:1; the faint grey is lifted a step inside the glass so it keeps 4.5:1 too (measured, fix-L.md) */
+/* phase 5: with the lighter glass the two greys are lifted a step inside it (4.5:1 on the worst backdrop) */
+.is-bigmap :is(.topbar, .sidebar, .point-panel, .right-reopen, .map-controls, .map-toolcol, .map-zoom, .map-dock, .hover-card, .timedock, .site-sheet, .lsn-settings) { --faint: #bebebe; --muted: #c6c6c6; }
+/* without backdrop blur the glass would let bright heat through behind text: a near-opaque fill instead */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .is-bigmap { --glass: rgba(20, 20, 22, 0.90); --glass-panel: rgba(20, 20, 22, 0.94); }
+}
+/* the pieces inside a container carry no glass of their own */
+.is-bigmap :is(.map-toolcol, .map-dock, .map-controls) :is(.map-group, .map-chip, .map-player, .card-ribbon, .finding) {
+  background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border: 0; box-shadow: none;
+}
+
+/* top bar */
+.is-bigmap .topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20; height: var(--big-top); padding: 0 var(--edge);
+  border-width: 0 0 1px; border-radius: 0; gap: 22px; flex-wrap: nowrap; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+/* fix L11: the top bar's controls on the same scale as the map chrome */
+.is-bigmap .topbar :is(.view-tab, .top-action, .seg-btn, .input) { height: var(--ctl); font-size: var(--fs-value); border-radius: var(--r2); }
+.is-bigmap .topbar .label, .is-bigmap .topbar .field > label { font-size: var(--fs-label); }
+.is-bigmap .topbar-brand { display: flex; width: auto; height: auto; flex: none; }
+.is-bigmap .topbar-brand .site-picker { display: none; }
+.is-bigmap .brand-top .brand-sub { display: block; }
+.is-bigmap .topbar-nav { order: 0; width: auto; margin: 0; }
+.is-bigmap .views { width: auto; margin: 0; overflow: visible; }
+.is-bigmap .controls { order: 0; margin-left: auto; flex-wrap: nowrap; }
+
+/* site list, left */
+.is-bigmap .sidebar {
+  position: fixed; top: calc(var(--big-top) + 12px); left: var(--edge); bottom: var(--edge); z-index: 15;
+  width: 208px; height: auto; border-radius: var(--r1); overflow-y: auto; display: flex;
+}
+.is-bigmap .sidebar .brand-side { display: none; }
+.is-bigmap .site-list { padding-top: 12px; }
+.is-bigmap .site-list-missions { padding-top: 14px; }
+.is-bigmap .site { height: 34px; padding: 0 14px; }
+.is-bigmap .group-head { padding: 0 14px; }
+/* the first heading shares its row with the fold button: "Landing sites · sunlit", as in the mock */
+.is-bigmap .site-list-missions .group-head { padding-right: 14px; min-height: 24px; align-items: center; }
+.is-bigmap .site-list-missions .group-head > span[aria-hidden] { display: none; }
+.is-bigmap .site-list-missions .group-head > span:first-child::after { content: " · sunlit"; }
+.is-bigmap .custom { padding: 16px 14px 14px; }
+.is-bigmap[data-left="closed"] .sidebar { display: none; }
+.panel-toggle, .panel-reopen, .app:not(.is-bigmap) .side-reopen { display: none; }
+/* fix L10b: the fold buttons: the panel icon, a label on hover and keyboard focus */
+.is-bigmap .panel-toggle {
+  position: relative; display: grid; place-items: center; width: var(--ctl); height: var(--ctl); padding: 0; border: 0; border-radius: var(--r2);
+  background: none; color: var(--muted);
+}
+.is-bigmap .panel-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.is-bigmap .panel-toggle:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }
+.is-bigmap .panel-toggle[data-tip]:hover::after, .is-bigmap .panel-toggle[data-tip]:focus-visible::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 4px); right: 0; z-index: 6; padding: 4px 8px; border-radius: var(--radius-inner);
+  background: rgb(0 0 0 / 0.82); color: var(--text); font: 400 var(--fs-label) / 16px var(--font); white-space: nowrap; pointer-events: none;
+}
+.is-bigmap .side-toggle { position: absolute; top: 6px; right: 6px; z-index: 1; display: grid; }   /* phase 5: the list's close button */
+/* phase 5: the site list's toggle is always the first button of the tool rail, under a hairline (the mock's ☰) */
+.is-bigmap .map-toolcol .side-reopen { display: grid; color: var(--muted); margin-bottom: 6px; }
+.is-bigmap:not([data-left="closed"]) .map-toolcol .side-reopen { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.is-bigmap .map-toolcol .side-reopen::before { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1px; background: var(--hair); }
+
+/* the Map view's own pieces */
+.is-bigmap main { padding: 0; }
+.is-bigmap .view-map .title-row { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.is-bigmap .map-grid { display: block; }
+.is-bigmap .card-map { background: none; padding: 0; border-radius: 0; }
+.is-bigmap .card-map > .card-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.is-bigmap .map-frame { position: fixed; inset: 0; z-index: 0; border-radius: 0; outline-offset: -3px; }
+.is-bigmap .map-progress { top: var(--big-top); }
+
+/* modes, top centre: one container; in Now mode the time controls are its second row (fix L11) */
+.is-bigmap .map-controls {
+  position: fixed; top: calc(var(--big-top) + 12px); left: 50%; transform: translateX(-50%); z-index: 12;
+  margin: 0; padding: var(--pad1); border-radius: var(--r1); flex-direction: column; align-items: stretch; gap: 0;
+}
+.is-bigmap .mode-more { display: none; }
+.is-bigmap .map-controls .seg-btn { height: var(--ctl); padding: 0 10px; border-radius: var(--r2); font-size: var(--fs-value); }
+.is-bigmap .map-controls .seg-divider { height: 18px; background: var(--hair); }
+.is-bigmap .map-controls .map-player { margin: 6px 0 0; padding: 6px 0 0; border-top: 1px solid var(--hair); }
+.is-bigmap .map-controls .map-player[hidden] { display: none; }
+.is-bigmap .map-controls .player { margin: 0; gap: 4px; flex-wrap: nowrap; }
+.is-bigmap .map-controls .player .btn { height: var(--ctl); min-width: 0; padding: 0 10px; border-radius: var(--r2); background: none; color: var(--muted); font-size: var(--fs-value); font-weight: 500; }
+.is-bigmap .map-controls .player .btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+/* Play is an icon-sized button (its word stays its accessible name) */
+.is-bigmap .map-controls .player .play { width: var(--ctl); padding: 0; font-size: 0; color: var(--text); }
+.is-bigmap .map-controls .player .play::after { content: "▶"; font-size: 11px; line-height: 1; }
+.is-bigmap .map-controls .player .play[data-playing="true"]::after { content: "❚❚"; font-size: 10px; letter-spacing: -1px; }
+.is-bigmap .map-controls .scrub { flex: 1 1 160px; min-width: 120px; }
+.is-bigmap .map-controls .scrub label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.is-bigmap .map-controls .range { height: var(--ctl); }
+.is-bigmap .map-controls .readout { min-width: 0; padding: 0 6px; font-size: var(--fs-label); white-space: nowrap; color: var(--muted); }
+
+/* point panel, right */
+.is-bigmap .point-panel {
+  position: fixed; top: calc(var(--big-top) + 12px); right: var(--edge); z-index: 15; width: 300px;
+  max-height: calc(100vh - var(--big-top) - 12px - var(--edge)); overflow-y: auto; overscroll-behavior: contain;
+  display: block; gap: 0; border-radius: var(--r1);
+}
+.is-bigmap .point-panel > .card { background: none; border-radius: 0; padding: 12px 14px; }
+.is-bigmap .point-panel > .card + .card { border-top: 1px solid var(--hair); }
+.is-bigmap .point-panel .card-head { margin-bottom: 4px; min-height: 36px; }
+.is-bigmap .card-point .card-head h2 { font-size: var(--fs-small); font-weight: 400; color: var(--muted); }
+.is-bigmap .point-panel .tool-pick { margin-top: 8px; }
+.is-bigmap .point-panel .best { margin-top: 10px; }
+.is-bigmap .point-panel > .card-filters, .is-bigmap .point-panel > .card-fold { padding-top: 6px; padding-bottom: 6px; }   /* fix L1: the folded rows were 12 px taller than meant (specificity) */
+/* fix L1: Best cells folds like Filters in the big layout (the phase 3 layout keeps the plain heading) */
+.best-fold-head { display: none; }
+.is-bigmap .best-title { display: none; }
+.is-bigmap .best-fold-head { display: block; margin: 0; }
+.is-bigmap .best.is-folded .best-body { display: none; }
+.is-bigmap .point-panel .best { margin-top: 8px; padding-top: 6px; }
+.is-bigmap .route-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.is-bigmap[data-right="closed"] .point-panel { display: none; }
+/* fix L10b: folded, a labelled handle at the same corner: the panel icon, "Show panel", the point in short */
+.is-bigmap[data-right="closed"] .right-reopen {
+  display: flex; align-items: center; gap: 8px; position: fixed; top: calc(var(--big-top) + 12px); right: var(--edge); z-index: 15;
+  height: calc(var(--ctl) + 2 * var(--pad1)); max-width: 380px; padding: 0 14px 0 12px; border-radius: var(--r1); color: var(--text); text-align: left;
+  font-size: var(--fs-value);
+}
+.is-bigmap .right-reopen:hover { background: var(--glass-panel); }
+.is-bigmap .right-reopen:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.right-reopen .panel-icon { flex: none; }
+.right-reopen-label { flex: none; font-weight: 500; }
+.right-summary-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-label); }
+
+/* fix L11: one dock at the bottom. Row one: a single status line (drawing hint or note, the hover
+   read-out, the loading line, else the map's summary sentence), the legend, the scale bar. Row two: the
+   landing date ribbon with the slip. The zoom container beside it has the same height. */
+.map-dock[hidden] { display: none; }
+.is-bigmap .map-dock {
+  position: fixed; left: calc(var(--edge) + var(--left-w) + var(--left-gap)); right: calc(var(--edge) + var(--right-w) + var(--right-gap) + var(--zoom-w) + 8px);
+  bottom: var(--edge); z-index: 12; display: grid; grid-template-rows: var(--ctl) var(--ctl); gap: 4px;
+  padding: var(--pad1) calc(var(--pad1) + 6px); border-radius: var(--r1); color: var(--text);
+}
+.map-dock .dock-row { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.map-dock .dock-status { flex: 1 1 auto; min-width: 0; font-size: var(--fs-value); line-height: 18px; }
+.map-dock .dock-status > * {
+  display: none; margin: 0; padding: 0; min-height: 0; color: var(--text); font: inherit; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.map-dock[data-status="finding"] .dock-status > .finding, .map-dock:not([data-status]) .dock-status > .finding,
+.map-dock[data-status="readout"] .dock-status > .map-readout, .map-dock[data-status="loading"] .dock-status > .map-loading,
+.map-dock[data-status="hint"] .dock-status > .tool-hint, .map-dock[data-status="note"] .dock-status > .draw-note { display: block; }
+.map-dock[data-status="hint"] .tool-hint, .map-dock[data-status="loading"] .map-loading { color: var(--muted); }
+.map-dock .draw-note { font-weight: 500; }
+/* while a drawing hint or note is up (transient), the legend steps aside so the sentence fits */
+.map-dock:is([data-status="hint"], [data-status="note"]) .legend-slot { display: none; }
+.map-dock .legend-slot { flex: none; padding: 0; }
+.map-dock .map-legend, .map-dock .legend-stack, .map-dock .legend-states { flex-wrap: nowrap; white-space: nowrap; gap: 4px 10px; font-size: var(--fs-label); }
+.map-dock .legend-steps .legend-mid { flex-basis: auto; order: 0; }
+/* the scale bar: a bracket whose length is a round number of km */
+.map-scale { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: var(--fs-label); line-height: 16px; white-space: nowrap; }
+.map-scale[hidden] { display: none; }
+.map-scale-bar { display: block; height: 7px; border: 1.5px solid currentColor; border-top: 0; box-sizing: border-box; }
+.map-dock .map-scale { flex: none; padding: 0; }
+.is-bigmap .map-dock .card-ribbon {
+  position: static; height: var(--ctl); margin: 0; padding: 0; border-radius: 0; display: flex; align-items: center; gap: 12px;
+}
+.is-bigmap .card-ribbon > .card-head { display: block; margin: 0; min-height: 0; flex: none; }
+.is-bigmap .card-ribbon > .card-head h2 { font-size: var(--fs-label); font-weight: 400; line-height: 16px; color: var(--muted); }
+.is-bigmap .card-ribbon > .card-head .card-sub { display: none; }
+.is-bigmap .card-ribbon .ribbon-slot { flex: 1 1 auto; min-width: 0; }
+.is-bigmap .card-ribbon .ribbon { height: 28px; }
+.is-bigmap .card-ribbon .slip { flex: none; gap: 2px; }
+.is-bigmap .card-ribbon .slip .label { font-size: var(--fs-label); }
+.is-bigmap .card-ribbon .slip .seg-btn { height: 28px; min-width: 0; padding: 0 7px; border-radius: var(--r2); font-size: var(--fs-label); }
+
+/* the tools (left) and the zoom (bottom right), each one container */
+.is-bigmap .map-ui-tl { top: calc(var(--big-top) + 12px); left: calc(var(--edge) + var(--left-w) + var(--left-gap)); }
+.is-bigmap .map-ui-tc, .is-bigmap .map-ui-bl { display: none; }
+.is-bigmap .map-ui-br { right: var(--edge); bottom: var(--edge); }
+.is-bigmap .map-toolcol { position: relative; gap: 0; padding: var(--pad1); border-radius: var(--r1); }
+.is-bigmap .map-toolcol .map-group { padding: 0; border-radius: 0; gap: 2px; }
+.is-bigmap .map-toolcol :is(.map-slots, .map-clears) { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair); }
+.is-bigmap .map-btn { width: var(--ctl); height: var(--ctl); border-radius: var(--r2); font-size: var(--fs-value); }
+.is-bigmap .map-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.is-bigmap .map-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); }
+/* the one selected state on the glass: a light veil (the solid #2a2a2a of the opaque cards vanishes on it) */
+.is-bigmap :is(.topbar, .sidebar, .point-panel, .map-controls, .map-dock) .seg-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.is-bigmap :is(.topbar, .sidebar, .point-panel, .map-controls, .map-dock) .seg-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.is-bigmap :is(.topbar, .sidebar, .point-panel, .map-controls, .map-dock) .seg-btn[aria-pressed="true"]:hover { background: rgba(255, 255, 255, 0.2); }
+.is-bigmap .map-btn .map-btn-tag { right: 3px; bottom: 2px; }
+.is-bigmap .map-zoom {
+  display: grid; grid-template-columns: repeat(3, var(--ctl)); grid-template-rows: var(--ctl) var(--ctl); gap: 4px;
+  padding: var(--pad1); border-radius: var(--r1);
+}
+.is-bigmap .map-zoom .zoom-out { grid-area: 1 / 1; }
+.is-bigmap .map-zoom .zoom-level { grid-area: 1 / 2; font-size: var(--fs-label); }
+.is-bigmap .map-zoom .zoom-in { grid-area: 1 / 3; }
+.is-bigmap .map-zoom .fs-btn { grid-area: 2 / 1 / 3 / 4; width: auto; }
+.is-bigmap .map-zoom .map-btn[data-tip]:hover::after, .is-bigmap .map-zoom .map-btn[data-tip]:focus-visible::after {
+  top: auto; bottom: calc(100% + 8px); left: 50%; right: auto; transform: translateX(-50%);
+}
+.is-bigmap .hover-card {
+  background: var(--glass-panel); -webkit-backdrop-filter: var(--glass-fx); backdrop-filter: var(--glass-fx);
+  border: 1px solid var(--hair); box-shadow: var(--glass-shadow); border-radius: var(--r1);
+}
+.app:not(.is-bigmap) .fs-btn { display: none; }
+
+/* full screen: only the zoom controls stay */
+.is-bigmap[data-ui="hidden"] :is(.topbar, .sidebar, .point-panel, .right-reopen, .map-controls, .map-dock, .map-ui-tl, .map-ui-tc, .map-ui-bl, .timedock, .site-sheet, .skydial) { display: none !important; }
+.is-bigmap[data-ui="hidden"] .map-ui-br { right: var(--edge); }
+
+/* phase 4 step 2, both layouts: the official values in the point card, the terrain readout, the PSR switch */
+.point-terrain { margin-left: 10px; color: var(--muted); font-size: var(--fs-small); }
+.point-official { margin: 12px 0 0; display: grid; gap: 4px; }
+.point-official > div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.point-official dt { color: var(--muted); font-size: var(--fs-small); }
+.point-official dd { margin: 0; text-align: right; white-space: nowrap; }
+.point-official-note { margin: 6px 0 0; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.psr-field { margin-top: 12px; }
+.psr-label { display: flex; align-items: flex-start; gap: 8px; min-height: 32px; padding-top: 6px; cursor: pointer; line-height: 20px; }
+/* fix L7: the box never shrinks, and sits on the first line when the label wraps */
+.psr-box { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--text); }
+
+/* the Energy, Relay link and Route plan folds (one line until opened, like Filters) */
+.card-fold { padding-top: 10px; padding-bottom: 10px; }
+.fold-body { padding: 4px 0 8px; }
+.fold-empty { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+
+/* inputs and caveats inside a workflow card: one click away, closed by default */
+.fold-more { min-width: 0; }
+.fold-more > summary {
+  display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; list-style: none;
+  color: var(--muted); font-size: var(--fs-small); line-height: 16px;
+}
+.fold-more > summary::-webkit-details-marker { display: none; }
+.fold-more > summary::after {
+  content: ""; width: 6px; height: 6px; margin-bottom: 3px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(45deg); transition: transform var(--t) var(--ease-out);
+}
+.fold-more[open] > summary::after { transform: rotate(-135deg); margin-bottom: -3px; }
+.fold-more > summary:hover { color: var(--text); }
+.fold-more-body, .fold-more > fieldset { display: grid; gap: 6px; padding-bottom: 6px; }
+
+.route-planned-note { margin: 8px 0 0; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .is-bigmap * { transition: none !important; }
+}
+
+/* fix L12: the phase 3 layout shows the scale bar in the map's bottom-left corner; on a phone the 320 px
+   map keeps its corners as they were */
+@media (max-width: 640px) { .app:not(.is-bigmap) .map-scale { display: none; } }

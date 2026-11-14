@@ -1,0 +1,281 @@
+/* ---------- phase 5 (G): the structure of docs/phase4/mock/structure.html ----------
+   Three levels: always there (top bar with the modes and Layers, the tool rail and site list, the time dock,
+   the zoom); following the selected object (the inspector on the right); on demand (the detail sheet,
+   Settings, Ask: one at a time). Same glass and sizes as phase4-bigmap.css; no new colours. */
+
+.is-bigmap {
+  --right-w: 316px;
+  --rail-w: calc(var(--ctl) + 2 * var(--pad1) + 2px);
+  --dock-h: calc(2 * var(--ctl) + 10px + 16px + 2px);
+  --zoom-w: calc(var(--ctl) + 2 * var(--pad1) + 2px);
+  --sheet-w: 600px;
+  --td-left: var(--edge); --td-right: calc(var(--edge) + var(--zoom-w) + 8px); --td-bottom: var(--edge);
+}
+.is-bigmap[data-sheet="open"] { --td-right: calc(var(--edge) + var(--sheet-w) + 10px + var(--zoom-w) + 8px); }
+
+/* ---------- top bar: brand, views | modes and Layers | Tour, Ask, Settings ---------- */
+.topbar-modes:empty { display: none; }
+.is-bigmap .topbar-nav { display: contents; }
+.is-bigmap .topbar-modes {
+  display: flex; align-items: center; gap: 2px; margin: 0 auto; padding: 3px; border-radius: var(--r1);
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.is-bigmap .topbar-modes .field-modes { margin: 0; }
+.is-bigmap .topbar-modes .mode-seg { gap: 2px; flex-wrap: nowrap; }
+.is-bigmap .topbar-modes .seg-btn { height: calc(var(--ctl) - 2px); padding: 0 10px; border-radius: var(--r2); font-size: var(--fs-value); }
+.is-bigmap .topbar-modes .seg-divider { width: 1px; height: 18px; margin: 0 4px; background: var(--hair); }
+.is-bigmap .topbar-modes > .layers-wrap { padding-left: 6px; margin-left: 4px; border-left: 1px solid var(--hair); }
+.mode-seg .seg-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+.is-bigmap .map-controls { display: none; }
+.is-bigmap .top-actions { flex: none; gap: 2px; }
+.is-bigmap .topbar .top-action { border: 0; background: none; color: var(--muted); }
+.is-bigmap .topbar .top-action:hover, .is-bigmap .topbar .top-action[aria-expanded="true"] { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.top-icon { display: inline-grid; place-items: center; min-width: 32px; padding: 0 8px; }
+
+/* ---------- Layers: a popover under its button (near-opaque: the top bar is its backdrop root) ---------- */
+.layers-wrap { position: relative; display: flex; align-items: center; }
+.layers-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: calc(var(--ctl, 32px) - 2px); padding: 0 10px; border: 0; border-radius: var(--r2, 8px);
+  background: none; color: var(--muted); font: inherit; font-size: var(--fs-value, 13px); cursor: pointer; white-space: nowrap;
+}
+.layers-btn:hover, .layers-btn[aria-expanded="true"] { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.layers-btn:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }
+.layers-count { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--text); color: var(--ground, #000); font-size: 11px; line-height: 16px; text-align: center; }
+.layers-count[hidden] { display: none; }
+.layers-pop {
+  --set-fill2: rgba(255, 255, 255, 0.16);
+  position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%); z-index: 30;
+  width: 300px; max-height: calc(100vh - 100px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px 14px 10px; border-radius: var(--r1, 14px); border: 1px solid var(--hair, rgba(255, 255, 255, 0.14));
+  background: rgba(20, 20, 22, 0.94); box-shadow: var(--glass-shadow, 0 10px 30px rgba(0, 0, 0, 0.3));
+  color: var(--text); font-size: var(--fs-value, 13px); line-height: 18px; text-align: left; --faint: #a8a8a8;
+}
+.layers-pop[hidden] { display: none; }
+.app:not(.is-bigmap) .layers-pop { left: 0; transform: none; }
+.layers-sec + .layers-sec { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); }
+.layers-sec[hidden] { display: none; }
+.layers-head { margin: 8px 0 2px; font-size: var(--fs-label, 12px); font-weight: 400; color: var(--muted); }
+.layers-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; padding: 3px 0; }
+.layers-row-text { display: grid; gap: 1px; min-width: 0; }
+.layers-note { color: var(--faint); font-size: var(--fs-label, 12px); line-height: 15px; }
+.layers-pop .filters { padding: 0; }
+.layers-pop .filters .filter-note { font-size: var(--fs-label, 12px); }
+
+/* ---------- left: the tool rail at the edge, the site list beside it ---------- */
+.is-bigmap .map-ui-tl { left: var(--edge); }
+.is-bigmap .sidebar { left: calc(var(--edge) + var(--rail-w) + var(--left-gap)); bottom: calc(var(--edge) + var(--dock-h) + 10px); }
+
+/* ---------- right: the inspector (follows the selected object) ---------- */
+.is-bigmap .point-panel { width: var(--right-w); max-height: calc(100vh - var(--big-top) - 12px - var(--edge) - var(--dock-h) - 10px); }
+.is-bigmap[data-sheet="open"] :is(.point-panel, .right-reopen) { display: none !important; }
+.is-bigmap .card-point > .card-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.is-bigmap .point-panel > .card-point { padding-top: 14px; }
+.insp-title-row { display: flex; align-items: flex-start; gap: 8px; }
+.insp-title { flex: 1 1 auto; min-width: 0; }
+.insp-title .point-name { margin: 0; font-size: 15px; font-weight: 600; line-height: 20px; }
+.insp-title .point-coords { margin: 2px 0 0; font-size: var(--fs-label, 12px); line-height: 16px; color: var(--muted); }
+.insp-btns { display: flex; align-items: center; gap: 4px; flex: none; }
+.insp-icon {
+  position: relative; display: grid; place-items: center; width: var(--ctl, 32px); height: var(--ctl, 32px); padding: 0;
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); border-radius: var(--r2, 8px); background: none; color: var(--muted); cursor: pointer;
+}
+.insp-icon:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.insp-icon[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.insp-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: var(--ctl, 32px); padding: 0 10px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.14));
+  border-radius: var(--r2, 8px); background: none; color: var(--text); font: inherit; font-size: var(--fs-value, 13px); cursor: pointer; white-space: nowrap;
+}
+.insp-btn:hover { background: rgba(255, 255, 255, 0.08); }
+:is(.insp-icon, .insp-btn, .insp-primary):focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.insp-icon[data-tip]:hover::after, .insp-icon[data-tip]:focus-visible::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 4px); right: 0; z-index: 6; padding: 4px 8px; border-radius: 6px;
+  background: rgb(0 0 0 / 0.82); color: var(--text); font: 400 var(--fs-label, 12px) / 16px var(--font); white-space: nowrap; pointer-events: none;
+}
+.is-bigmap .insp-btns .panel-toggle { width: 28px; }
+.app:not(.is-bigmap) .insp-btns .panel-toggle { display: none; }
+.insp-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: var(--fs-value, 13px); line-height: 18px; }
+.insp-row + .insp-row, .insp-table .insp-row { border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); }
+.insp-label { flex: none; color: var(--muted); font-size: var(--fs-label, 12px); }
+.insp-val { text-align: right; min-width: 0; }
+.insp-now { margin-top: 10px; }
+.insp-row.insp-count { border-top: 0; padding-top: 0; justify-content: flex-end; color: var(--muted); font-size: var(--fs-label, 12px); line-height: 16px; }
+.insp-row.insp-count[hidden] { display: none; }
+.insp-table .point-table { margin-top: 2px; }
+.insp-note { margin: 8px 0; color: var(--muted); font-size: var(--fs-label, 12px); line-height: 16px; }
+.insp-primary {
+  width: 100%; height: var(--ctl, 32px); margin: 0 0 8px; border: 0; border-radius: var(--r2, 8px);
+  background: var(--text); color: var(--ground, #000); font: 500 var(--fs-value, 13px) var(--font); cursor: pointer;
+}
+.insp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 10px 0 14px; }
+.insp-kind-title { margin: 0; font-size: 15px; font-weight: 600; }
+.app:not(.is-bigmap) .insp-head { display: none; }
+/* only the selected object's sections */
+.is-bigmap .point-panel[data-kind="point"] > :not(.card-point, .card-fold[data-fold="coords"]) { display: none; }
+.is-bigmap .point-panel[data-kind="route"] > :not(.insp-head, .card-fold[data-fold="plan"], .card-route) { display: none; }
+.is-bigmap .point-panel[data-kind="region"] > :not(.insp-head, .card-region, .card-fold[data-fold="coords"]) { display: none; }
+.is-bigmap .point-panel:not([data-kind="point"]) > .card-fold > .filters-head { display: none; }
+.is-bigmap .point-panel:not([data-kind="point"]) > .card + .card { border-top: 0; }
+.is-bigmap .point-panel[data-kind="region"] > .card-region h2 { font-size: var(--fs-label); font-weight: 400; color: var(--muted); }
+
+/* the status line's sources stay in the page, out of sight: the time dock shows the one that matters */
+.status-stash { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- bottom right: the zoom, one column as tall as the time dock ---------- */
+.is-bigmap[data-sheet="open"] .map-ui-br { right: calc(var(--edge) + var(--sheet-w) + 10px); }
+.is-bigmap .map-zoom { grid-template-columns: var(--ctl); grid-template-rows: repeat(4, 1fr); gap: 0; height: var(--dock-h); }
+.is-bigmap .map-zoom .map-btn { width: var(--ctl); height: auto; min-height: 0; }
+.is-bigmap .map-zoom .zoom-in { grid-area: 1 / 1; }
+.is-bigmap .map-zoom .zoom-level { grid-area: 2 / 1; }
+.is-bigmap .map-zoom .zoom-out { grid-area: 3 / 1; }
+.is-bigmap .map-zoom .fs-btn { grid-area: 4 / 1; width: var(--ctl); }
+.is-bigmap .map-zoom .map-btn[data-tip]:hover::after, .is-bigmap .map-zoom .map-btn[data-tip]:focus-visible::after {
+  top: 50%; bottom: auto; left: auto; right: calc(100% + 8px); transform: translateY(-50%);
+}
+
+/* ---------- the time dock: floats in the big layout, sits under the map otherwise ---------- */
+.app:not(.is-bigmap) .timedock { margin-top: var(--gap, 16px); }
+.timedock .legend-slot { display: flex; flex-direction: column; justify-content: center; gap: 0; padding: 0; background: none; border: 0; box-shadow: none; }
+.timedock .map-scale { padding: 0; background: none; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.timedock .map-legend, .timedock .legend-stack { flex-wrap: nowrap; white-space: nowrap; gap: 4px 10px; font-size: var(--fs-label, 12px); }
+.timedock .legend-steps .legend-mid { flex-basis: auto; order: 0; }
+.legend-smooth { display: block; color: var(--faint); font-size: 11px; line-height: 14px; white-space: nowrap; }
+.legend-smooth[hidden] { display: none; }
+.legend-live { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+.swatch-shade { background: rgb(0 0 0 / 0.55); border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-sizing: border-box; }
+.app[data-scale="off"] .map-scale { display: none; }
+
+/* ---------- the map's own switches (Layers) ---------- */
+.map-frame[data-best="off"] .top-cells { display: none; }
+.map-frame[data-labels="off"] :is(.mark-label, .feature-name) { display: none; }
+.map-frame[data-graticule="off"] .graticule { display: none; }
+.map-live { pointer-events: none; }
+
+/* ---------- the detail sheet's contents ---------- */
+.site-sheet[data-window="off"] .needs-window { display: none; }
+.site-sheet .sheet-aside { color: var(--muted); }
+.site-sheet .sheet-legend { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.site-sheet .sheet-legend .dot + .dot, .site-sheet .sheet-legend .dot:nth-of-type(2) { margin-left: 6px; }
+.site-sheet .sheet-pano .caption, .site-sheet .sheet-elev .card-sub { margin: 4px 0 0; color: var(--faint); font-size: var(--fs-label, 12px); }
+.sheet-compare { display: grid; gap: 10px; }
+.sheet-compare .field-alt { display: flex; align-items: center; gap: 10px; }
+.sheet-pick:empty { display: none; }
+.sheet-pick .tool-pick { margin: 0; }
+.is-bigmap .site-sheet { z-index: 18; }
+.is-bigmap .site-sheet .seg-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+
+/* narrow (≤ 1100 px): the detail sheet and Settings are full-screen pages; the modes and Layers stay with the map */
+@media (max-width: 1100px) {
+  .map-controls .layers-wrap { margin-left: 4px; }
+}
+
+/* ---------- item 13: Evidence and Brief, reading sheets over the map (same family as the detail sheet) ---------- */
+.doc-scrim { position: fixed; inset: 0; z-index: 17; background: rgb(0 0 0 / 0.38); }
+.doc-scrim[hidden] { display: none; }
+.is-bigmap .doc-scrim { top: var(--big-top); }
+.site-sheet.doc-sheet {
+  z-index: 19; left: 50%; right: auto; transform: translateX(-50%);
+  width: min(920px, calc(100vw - 2 * var(--edge, 16px)));
+  display: flex; flex-direction: column;
+}
+.doc-sheet .site-sheet-head { flex: none; }
+.doc-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 10px -20px 0; padding: 4px 20px 28px; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); }
+.site-sheet.doc-sheet { overflow: hidden; }
+.doc-sheet .view-doc { max-width: none; padding: 0; }
+.doc-sheet .view-doc[hidden] { display: none; }
+.doc-sheet :is(.qa, .terrain-check, .phase3-check) { margin-top: 0; padding: 18px 0 4px; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); }
+.doc-sheet .view-doc > :first-child { border-top: 0; padding-top: 10px; }
+@media (max-width: 1100px) { .site-sheet.doc-sheet { left: 0; right: 0; transform: none; width: auto; } }
+.doc-sheet-body :is(h2, .qa h2) { margin: 0 0 6px; font-size: 15px; line-height: 20px; font-weight: 600; }
+.doc-sheet-body h3 { margin: 14px 0 6px; font-size: var(--fs-value, 13px); line-height: 18px; font-weight: 600; }
+.doc-sheet :is(p, li) { font-size: var(--fs-value, 13px); line-height: 20px; }
+.doc-sheet :is(.qa p, .limits li, .terrain-check > p) { max-width: 72ch; color: var(--muted); }
+.doc-sheet .qa p + p { margin-top: 8px; }
+.doc-sheet .lead, .doc-sheet .view-doc > p:first-of-type { font-size: 15px; line-height: 22px; color: var(--text); max-width: 68ch; }
+.doc-sheet .table-scroll { margin-top: 10px; }
+.doc-sheet table { width: 100%; border-collapse: collapse; font-size: var(--fs-value, 13px); line-height: 18px; }
+.doc-sheet :is(th, td) { padding: 7px 10px 7px 0; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); text-align: left; vertical-align: top; }
+.doc-sheet thead th { border-top: 0; color: var(--muted); font-size: var(--fs-label, 12px); font-weight: 400; white-space: nowrap; }
+.doc-sheet .doc-table th[scope="row"] { font-size: var(--fs-value, 13px); line-height: 18px; }
+.doc-sheet .doc-foot { margin-top: 24px; border-top-color: var(--hair, rgba(255, 255, 255, 0.14)); }
+.doc-sheet .doc-foot p { font-size: var(--fs-label, 12px); }
+.doc-sheet :is(.card, .notice) { background: none; border: 0; padding: 0; }
+.doc-sheet a { color: var(--text); text-underline-offset: 3px; }
+.is-bigmap[data-doc="open"] :is(.timedock, .map-ui-tl, .map-ui-br, .sidebar, .point-panel, .skydial) { opacity: 0.45; }
+
+/* ---------- item 13: the Ask panel, the tour and its prompt in the same glass and sizes ---------- */
+.agent-panel {
+  background: rgba(22, 22, 24, 0.86); -webkit-backdrop-filter: var(--glass-fx, blur(28px) saturate(1.8) contrast(0.7) brightness(0.55)); backdrop-filter: var(--glass-fx, blur(28px) saturate(1.8) contrast(0.7) brightness(0.55));
+  border-left: 1px solid rgba(255, 255, 255, 0.14); font-size: 13px; --faint: #bebebe; --muted: #c6c6c6;
+}
+@media (min-width: 1101px) {
+  html.lsn-bigmap .agent-panel {
+    top: calc(56px + 12px); right: 16px; bottom: 16px; width: 400px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.30); overflow: hidden;
+  }
+  html.lsn-bigmap .agent-head { height: 52px; }
+}
+.agent-head h2 { font-size: 15px; line-height: 20px; }
+.agent-note { background: rgba(255, 255, 255, 0.08); border-radius: 8px; font-size: 12px; }
+.agent-suggestions { border-top-color: rgba(255, 255, 255, 0.14); }
+.agent-suggestion { min-height: 32px; border-radius: 8px; font-size: 12px; }
+.driver-popover.lsn-tour, .tour-prompt {
+  background-color: rgba(22, 22, 24, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.30);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8); backdrop-filter: blur(28px) saturate(1.8);
+  padding: 16px 18px 14px;
+}
+.driver-popover.lsn-tour .driver-popover-title { font-size: 15px; line-height: 20px; }
+.driver-popover.lsn-tour .driver-popover-description { font-size: 13px; line-height: 19px; color: #c6c6c6; }
+.driver-popover.lsn-tour .driver-popover-footer-btn { height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; background-color: rgba(255, 255, 255, 0.10); }
+.driver-popover.lsn-tour .driver-popover-next-btn { background-color: var(--text); color: var(--ground); }
+.driver-popover.lsn-tour .driver-popover-close-btn { width: 32px; height: 32px; line-height: 32px; border-radius: 8px; }
+.hover-card { border-radius: 14px; }
+
+/* Settings (600 px) and Ask (400 px) take the right of the window like the detail sheet: the time dock
+   and the zoom step left of them and the inspector steps aside (verify-2026-11-13 #2) */
+.is-bigmap:has(> .lsn-settings:not([hidden])) { --td-right: calc(var(--edge) + 600px + 10px + var(--zoom-w) + 8px); }
+.is-bigmap:has(> .lsn-settings:not([hidden])) .map-ui-br { right: calc(var(--edge) + 600px + 10px); }
+.is-bigmap:has(> .lsn-settings:not([hidden])) :is(.point-panel, .right-reopen) { display: none !important; }
+html[data-agent-open="true"] .is-bigmap { --td-right: calc(var(--edge) + 400px + 10px + var(--zoom-w) + 8px); }
+html[data-agent-open="true"] .is-bigmap .map-ui-br { right: calc(var(--edge) + 400px + 10px); }
+html[data-agent-open="true"] .is-bigmap :is(.point-panel, .right-reopen) { display: none !important; }
+
+/* ---------- narrow widths (≤ 1100 px: the phase 3 page; ≤ 640 px: a phone) ---------- */
+/* the sky dial keeps its drawing and shrinks around its point (scale composes with moveTo's translate);
+   the square map clips it */
+.app:not(.is-bigmap) .map-frame { overflow: hidden; }
+.app:not(.is-bigmap) .skydial { scale: 0.8; }
+.app:not(.is-bigmap) .timedock .td-row1 :is(.td-status:empty, .td-sep) { display: none; }
+@media (max-width: 640px) {
+  .app:not(.is-bigmap) .skydial { scale: 0.6; }
+  /* the time dock: transport, speed, loop and window on one line, the timeline on its own full-width line */
+  .app:not(.is-bigmap) .timedock { height: auto; gap: 8px; }
+  .app:not(.is-bigmap) .timedock .td-row2 { flex-wrap: wrap; height: auto; gap: 26px 2px; }
+  .app:not(.is-bigmap) .timedock .td-row2 .td-track { order: 10; flex: 1 1 100%; min-width: 0; }
+  .app:not(.is-bigmap) .timedock .td-row2 > :is(.td-sum, [class*="td-sum"]) { margin-left: auto; }
+}
+/* full-screen pages below 1101 px: the same glass, near-opaque, so the page under it does not show through */
+@media (max-width: 1100px) { .site-sheet { --sheet-glass: rgb(20 20 22 / 0.97); } .lsn-settings { background: rgba(20, 20, 22, 0.97); } }
+
+
+/* ---------- 2026-11-13 round 3: sites list, labelled controls ---------- */
+/* the site list: closed by default, opened from the labelled "Sites" button at the top of the tool rail,
+   closed with the cross in its header (or Esc); the typed-coordinates form lives in the inspector */
+.is-bigmap .map-toolcol .sites-btn { width: var(--ctl); font: 500 var(--fs-label) / 1 var(--font); letter-spacing: 0; }
+.is-bigmap .sidebar .site-list-missions .group-head { padding-right: 44px; }
+.is-bigmap .custom { display: none; }
+.is-bigmap .sidebar { bottom: auto; max-height: calc(100vh - var(--big-top) - 12px - var(--edge) - var(--dock-h) - 10px); }
+/* the inspector's head: the site name (opens the list) and the hide cross; then Sky dial and Details */
+.insp-name-btn { display: block; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; text-underline-offset: 3px; }
+.insp-name-btn:hover { text-decoration: underline; }
+.insp-name-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 4px; }
+.insp-actions { display: flex; gap: 6px; margin-top: 10px; }
+.insp-actions .insp-btn { flex: 1 1 0; justify-content: center; }
+.dial-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); }
+.is-bigmap .insp-btns .panel-toggle { width: var(--ctl); }
+/* Layers: a header with a close cross */
+.layers-top { display: flex; align-items: center; justify-content: space-between; margin: 2px -6px 0 0; }
+.layers-top h2 { margin: 0; font-size: var(--fs-value); font-weight: 600; }
+.layers-close { display: grid; place-items: center; width: var(--ctl, 32px); height: var(--ctl, 32px); padding: 0; border: 0; border-radius: var(--r2, 8px); background: none; color: var(--muted); cursor: pointer; }
+.layers-close:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.layers-close:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }

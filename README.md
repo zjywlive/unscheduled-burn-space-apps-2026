@@ -6,8 +6,25 @@ Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 - **Demo:** _TBD_
 - **Project page:** _TBD_
 
-All work in this repository was done during the official hackathon window
-(from Saturday 14 November 2026, 09:00 local time).
+## Project history
+
+- **12–13 November 2026:** a first visualisation MVP (`demo/`, `tools/`, `tests/`, `mcp/`) was built
+  before the event.
+- **14 November 2026:** we raised this with the judges at the Bristol Local Event, who agreed we could
+  build on that MVP as long as the hackathon work itself happens during the event.
+- **From 14 November 2026, 09:00 local time:** all hackathon work. It is in this repository's commit
+  history, starting with the import of the MVP.
+
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `demo/` | The web app: `index.html` (built single file), `src/` (ES modules), `data/` (terrain and ephemeris packs), `vendor/` |
+| `tools/` | Zero-dependency Node build and data scripts (`node tools/build.mjs` rebuilds `demo/index.html`) |
+| `tests/` | Node test suite: `node --test 'tests/*.test.mjs'` |
+| `mcp/` | MCP server exposing the compute tools |
+
+To run the app locally: `python3 -m http.server 8731 --directory demo`, then open http://localhost:8731/.
 
 ## Team
 

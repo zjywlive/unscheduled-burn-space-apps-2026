@@ -1,0 +1,33 @@
+[
+  {
+    "mode": "now",
+    "z": 2,
+    "frames": 294,
+    "fps": 58.6,
+    "median": 16.7,
+    "p90": 16.7,
+    "worst": 50,
+    "over20": 6,
+    "simH": 30,
+    "paint": "12",
+    "playing": true,
+    "heatMs": {
+      "n": 30,
+      "median": 13,
+      "p90": 16,
+      "max": 37
+    },
+    "veilMs": {
+      "n": 0,
+      "median": null,
+      "p90": null,
+      "max": null
+    },
+    "canvas": [
+      2880,
+      1800
+    ],
+    "tier": "2 km",
+    "errors": []
+  }
+]

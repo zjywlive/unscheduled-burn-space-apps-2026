@@ -1,0 +1,61 @@
+/* Relay link card (phase 4 §6 K). Designed for the 300 px right panel (14 px padding, 272 px content).
+   Only variables from styles.css; the relay is neutral ink (--both) with text labels, no new hue. */
+.relay-card { display: grid; gap: 10px; min-width: 0; }
+.relay-card .card-head { margin-bottom: 0; }
+.relay-card .field { gap: 4px; }
+.relay-card .select { width: 100%; min-width: 0; text-overflow: ellipsis; }
+.relay-unit { color: var(--faint); }
+.relay-derived { color: var(--muted); font-size: var(--fs-small); line-height: 16px; margin: -4px 0 0; }
+
+.relay-fold { border-top: 1px solid var(--rule-on-surface); border-bottom: 1px solid var(--rule-on-surface); }
+.relay-toggle { min-height: 36px; font-size: var(--fs-body); }
+.relay-assumed { font-size: var(--fs-small); }
+.relay-elements { padding: 4px 0 12px; display: grid; gap: 10px; }
+.relay-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 10px; }
+.relay-input { width: 100%; padding: 0 10px; }
+.relay-epoch { padding-right: 6px; font-size: var(--fs-small); }
+.relay-grid > .field:has(.relay-epoch) { grid-column: 1 / -1; }
+.relay-hint { color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+.relay-use-landing { justify-self: start; margin-top: 0; height: 24px; font-size: var(--fs-small); }
+.relay-error { margin: 0; }
+
+.relay-status:empty { display: none; }
+.relay-status, .relay-note { color: var(--muted); font-size: var(--fs-small); line-height: 16px; text-wrap: pretty; }
+
+.relay-table { width: 100%; border-collapse: collapse; }
+.relay-table th, .relay-table td { padding: 5px 0; border-bottom: 1px solid var(--rule-on-surface); vertical-align: top; text-align: left; font-weight: 400; }
+.relay-table thead th { color: var(--faint); font-size: var(--fs-small); line-height: 16px; padding-top: 0; }
+.relay-table tbody th { color: var(--muted); font-size: var(--fs-small); line-height: 16px; padding-right: 8px; }
+.relay-table .th-sub { font-size: 11px; line-height: 14px; }
+.relay-table .n { text-align: right; white-space: nowrap; padding-left: 8px; }
+.relay-table td { color: var(--text); }
+.relay-table .value { display: block; }
+.relay-table .sub { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+
+.relay-seg { justify-self: start; }
+.relay-seg[hidden] { display: none; }
+.relay-strip { min-width: 0; }
+.relay-strip-svg { display: block; max-width: 100%; height: auto; }
+.relay-track { fill: var(--raised); }
+.relay-bar-sun rect { fill: var(--sun); }
+.relay-bar-earth rect { fill: var(--earth); }
+.relay-bar-relay rect { fill: var(--both); }
+.relay-bar-any rect { fill: var(--muted); }
+.relay-row-label { fill: var(--muted); }
+.relay-tick { stroke: var(--control); stroke-width: 1; }
+.relay-cursor { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 2; }
+.relay-step { margin-top: 4px; color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+
+.relay-subhead { font-size: var(--fs-small); line-height: 16px; font-weight: 400; color: var(--muted); margin-bottom: 4px; }
+.relay-windows { list-style: none; margin: 0; padding: 0; }
+.relay-windows li + li { border-top: 1px solid var(--rule-on-surface); }
+.relay-win {
+  display: flex; justify-content: space-between; gap: 8px; width: 100%; min-height: 32px; align-items: center;
+  padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-small); text-align: left;
+}
+button.relay-win { cursor: pointer; }
+button.relay-win:hover .relay-win-time { text-decoration: underline; text-underline-offset: 3px; }
+.relay-win-detail { color: var(--muted); }
+.relay-empty, .relay-more { color: var(--muted); font-size: var(--fs-small); line-height: 16px; padding: 8px 0; }
+
+.relay-foot { margin: 0; padding: 0 0 0 14px; color: var(--faint); font-size: var(--fs-small); line-height: 16px; display: grid; gap: 4px; text-wrap: pretty; }

@@ -1,0 +1,83 @@
+/* Phase 3: the Ask panel, the first-visit tour prompt, and driver.js pressed into the project's tokens.
+   No new colours: surface, raised and rule steps only; no shadows, gradients or glow. */
+
+/* ---------- Ask drawer ---------- */
+.agent-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
+  display: flex; flex-direction: column; width: 380px; max-width: 100vw;
+  background: var(--surface); border-left: 1px solid var(--rule-on-surface); color: var(--text);
+}
+.agent-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: var(--topbar); padding: 0 16px 0 var(--pad); flex: none;
+}
+.agent-head h2 { font-size: var(--fs-section); font-weight: 600; line-height: 24px; }
+.agent-note {
+  flex: none; margin: 0 var(--pad) 4px; padding: 6px 12px; border-radius: var(--radius-inner);
+  background: var(--raised); color: var(--muted); font-size: var(--fs-small); line-height: 16px;
+}
+.agent-chat { position: relative; flex: 1 1 auto; min-height: 0; padding: 0 var(--pad) 0 calc(var(--pad) - 8px); }
+.agent-chat deep-chat { display: block; width: 100%; height: 100%; }
+.agent-status { padding: 12px 8px; color: var(--muted); }
+.agent-suggestions {
+  flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px var(--pad) 12px;
+  border-top: 1px solid var(--rule-on-surface);
+}
+.agent-suggestion {
+  height: auto; min-height: var(--control-height); padding: 4px 12px; white-space: normal; text-align: left;
+  font-size: var(--fs-small); line-height: 16px; font-weight: 400; color: var(--muted);
+}
+.agent-suggestion:hover { color: var(--text); }
+.agent-suggestion:disabled { cursor: default; opacity: 0.5; }
+.agent-hint { flex: none; padding: 0 var(--pad) 12px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+
+.focus-guard { position: absolute; width: 1px; height: 1px; overflow: hidden; }
+.focus-guard:focus { outline: none; }
+
+@media (max-width: 640px) {
+  .agent-panel { width: 100vw; border-left: 0; }
+  .agent-head { padding-left: 16px; }
+  .agent-note { margin-left: 16px; margin-right: 16px; }
+  .agent-chat { padding: 0 16px 0 8px; }
+  .agent-suggestions, .agent-hint { padding-left: 16px; padding-right: 16px; }
+}
+
+/* ---------- first-visit tour prompt ---------- */
+.tour-prompt {
+  position: fixed; right: 16px; bottom: 16px; z-index: 35;
+  display: grid; gap: 12px; width: min(320px, calc(100vw - 32px)); padding: 16px 18px;
+  background: var(--surface); border: 1px solid var(--rule-on-surface); border-radius: var(--radius-card); color: var(--text);
+}
+.tour-prompt p { font-weight: 500; }
+.tour-prompt-actions { display: flex; gap: 8px; }
+
+/* ---------- driver.js, pressed flat ---------- */
+.driver-popover.lsn-tour {
+  font-family: var(--font); color: var(--text); background-color: var(--surface);
+  border: 1px solid var(--rule-on-surface); border-radius: var(--radius-card); box-shadow: none;
+  min-width: 260px; max-width: min(340px, calc(100vw - 32px)); padding: 18px 20px 16px;
+}
+.driver-popover.lsn-tour .driver-popover-title { font-size: var(--fs-section); font-weight: 600; line-height: 24px; padding-right: 28px; }
+.driver-popover.lsn-tour .driver-popover-description { color: var(--muted); font-size: var(--fs-body); line-height: 20px; }
+.driver-popover.lsn-tour .driver-popover-progress-text { color: var(--faint); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.driver-popover.lsn-tour .driver-popover-arrow { display: none; }
+.driver-popover.lsn-tour .driver-popover-footer { margin-top: 16px; gap: 12px; }
+.driver-popover.lsn-tour .driver-popover-navigation-btns { gap: 8px; }
+.driver-popover.lsn-tour .driver-popover-navigation-btns button + button { margin-left: 0; }
+.driver-popover.lsn-tour .driver-popover-footer-btn {
+  display: inline-flex; align-items: center; height: var(--control-height); padding: 0 14px; border: 0; border-radius: var(--radius-control);
+  background-color: var(--raised); color: var(--text); font: 500 var(--fs-body) / 20px var(--font); text-shadow: none;
+}
+.driver-popover.lsn-tour .driver-popover-footer-btn:hover { background-color: var(--control); }
+.driver-popover.lsn-tour .driver-popover-next-btn { background-color: var(--text); color: var(--ground); }
+.driver-popover.lsn-tour .driver-popover-next-btn:hover { background-color: var(--muted); }
+.driver-popover.lsn-tour .driver-popover-footer-btn:focus-visible,
+.driver-popover.lsn-tour .driver-popover-close-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.driver-popover.lsn-tour .driver-popover-close-btn {
+  top: 8px; right: 8px; width: var(--control-height); height: var(--control-height); border-radius: var(--radius-control); color: var(--muted); font-size: 18px; line-height: var(--control-height);
+}
+.driver-popover.lsn-tour .driver-popover-close-btn:hover { color: var(--text); background-color: var(--raised); }
+
+@media (prefers-reduced-motion: reduce) {
+  .driver-fade .driver-overlay, .driver-fade .driver-popover { animation: none; }
+}

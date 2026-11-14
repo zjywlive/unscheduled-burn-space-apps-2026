@@ -1,0 +1,145 @@
+/* ---------- phase 5: settings (workstream T) ----------
+   Colour presets, the reduce-motion switch, the panel transparency and the Settings sheet of
+   docs/phase4/mock/structure.html?s=settings. Everything here is inert until settings.js applyDisplay()
+   sets an attribute on <html> or the sheet is mounted: the default page is unchanged. */
+
+/* Colour presets: override the four data tokens of styles.css. Values match settings.js PALETTES.
+   Okabe–Ito orange and sky blue for the colour-blind-safe set; contrast figures in docs/phase5/handoff/T.md.
+   The default preset needs no override. Keep these 6-digit hex: map/layers.js readColours() parses only that. */
+:root[data-palette="cb-safe"] { --sun: #e69f00; --earth: #56b4e9; --both: #e6e6e6; --negative: #ec5170; }
+:root[data-palette="high-contrast"] { --sun: #ffd400; --earth: #1ad1ff; --both: #ffffff; --negative: #ff5c8a; }
+
+/* Reduce motion forced on in Settings (the system preference is handled where each animation is) */
+:root[data-reduce-motion="on"] *, :root[data-reduce-motion="on"] *::before, :root[data-reduce-motion="on"] *::after {
+  animation-duration: 1ms !important; animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important; transition-delay: 0ms !important; scroll-behavior: auto !important;
+}
+
+/* Panel transparency: only with backdrop blur (without it the glass stays near-opaque, phase4-bigmap.css) */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-panel-alpha] .is-bigmap {
+    --glass: rgba(24, 24, 26, var(--lsn-panel-alpha, 0.40));
+    --glass-panel: rgba(24, 24, 26, calc(var(--lsn-panel-alpha, 0.40) + 0.04));
+  }
+}
+
+/* ---------- the sheet ---------- */
+.lsn-settings {
+  --set-ctl: var(--ctl, 32px); --set-r2: var(--r2, 8px); --set-r1: var(--r1, 14px);
+  --set-hair: var(--hair, rgba(255, 255, 255, 0.14));
+  --set-fill: rgba(255, 255, 255, 0.08); --set-fill2: rgba(255, 255, 255, 0.16);
+  position: fixed; z-index: 40; right: var(--edge, 16px); top: calc(var(--big-top, 56px) + 12px); bottom: var(--edge, 16px);
+  width: 600px; max-width: calc(100vw - 2 * var(--edge, 16px));
+  display: flex; flex-direction: column; padding: 18px 20px; box-sizing: border-box;
+  border-radius: var(--set-r1); border: 1px solid var(--set-hair);
+  /* more solid than the small controls, so thin text stays readable over bright heat (as the mock's sheet) */
+  background: rgba(24, 24, 26, 0.74);
+  -webkit-backdrop-filter: var(--glass-fx, blur(32px) saturate(1.7) brightness(0.42)); backdrop-filter: var(--glass-fx, blur(32px) saturate(1.7) brightness(0.42));
+  box-shadow: var(--glass-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 30px rgba(0, 0, 0, 0.30));
+  color: var(--text); font-size: var(--fs-value, 13px); line-height: 18px; --faint: #a8a8a8;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lsn-settings { background: rgba(20, 20, 22, 0.96); }
+}
+.lsn-settings h2, .lsn-settings h4, .lsn-settings p { margin: 0; }
+
+.lsn-set-head { display: flex; align-items: flex-start; gap: 12px; flex: none; }
+.lsn-set-titles { flex: 1; min-width: 0; }
+.lsn-set-head h2 { font-size: 20px; line-height: 26px; font-weight: 600; }
+.lsn-set-head h2:focus { outline: none; }   /* focused on open so a screen reader announces the sheet */
+.lsn-set-sub { font-size: var(--fs-label, 12px); color: var(--muted); }
+
+.lsn-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none;
+  height: var(--set-ctl); min-width: var(--set-ctl); padding: 0 10px; border: 0; border-radius: var(--set-r2);
+  background: none; color: var(--muted); font: inherit; font-size: var(--fs-value, 13px); white-space: nowrap; cursor: pointer;
+  transition: background-color var(--t, 160ms) var(--ease-out, ease), color var(--t, 160ms) var(--ease-out, ease);
+}
+.lsn-btn:hover { background: var(--set-fill); color: var(--text); }
+.lsn-btn:disabled { opacity: 0.5; cursor: default; }
+.lsn-btn-line { border: 1px solid var(--set-hair); color: var(--text); }
+.lsn-set-close { padding: 0; }
+.lsn-set-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+
+.lsn-set-cols { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 24px; margin-top: 14px; min-height: 0; flex: 1; }
+.lsn-set-nav { display: flex; flex-direction: column; gap: 2px; }
+.lsn-set-navbtn { justify-content: flex-start; transition: none; }
+.lsn-set-navbtn[aria-current="true"] { background: var(--set-fill2); color: var(--text); font-weight: 600; }
+.lsn-set-body { overflow-y: auto; min-height: 0; padding-right: 2px; overscroll-behavior: contain; }
+
+.lsn-set-sec { padding: 0 0 12px; }
+.lsn-set-sec + .lsn-set-sec { border-top: 1px solid var(--set-hair); padding-top: 12px; }
+.lsn-set-sec:last-child { min-height: 100%; box-sizing: border-box; }   /* lets the section list scroll every section to the top */
+.lsn-set-sec h4 { margin: 0 0 6px; font-size: var(--fs-label, 12px); font-weight: 500; color: var(--muted); }
+.lsn-set-group { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--set-hair); }
+
+.lsn-set-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: var(--set-ctl); padding: 2px 0; }
+.lsn-set-field-top { align-items: flex-start; }
+.lsn-set-label { display: flex; flex-direction: column; min-width: 0; }
+.lsn-set-hint { font-size: var(--fs-label, 12px); line-height: 16px; color: var(--faint); }
+.lsn-set-value { text-align: right; color: var(--text); }
+.lsn-set-ctl { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.lsn-set-note { font-size: var(--fs-label, 12px); line-height: 17px; color: var(--muted); max-width: 46ch; }
+.lsn-set-note + .lsn-set-note { margin-top: 6px; }
+.lsn-set-faint { color: var(--faint); }
+.lsn-set-error { font-size: var(--fs-label, 12px); color: var(--text); padding: 0 0 4px; }
+.lsn-set-error::before { content: "! "; font-weight: 700; }
+.lsn-set-status { min-height: 18px; margin-top: 6px; font-size: var(--fs-label, 12px); color: var(--muted); overflow-wrap: anywhere; }
+.lsn-set-status[data-kind="ok"] { color: var(--text); }
+.lsn-set-status[data-kind="error"] { color: var(--text); }
+.lsn-set-status[data-kind="error"]::before { content: "! "; font-weight: 700; }
+.lsn-set-actions { margin-top: 6px; }
+.lsn-set-actions + input + .lsn-set-status { text-align: right; }
+
+/* preset cards */
+.lsn-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lsn-preset {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px; min-height: 74px;
+  border: 1px solid var(--set-hair); border-radius: 10px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.lsn-preset:hover { background: var(--set-fill); }
+.lsn-preset[aria-checked="true"] { border-color: var(--text); }
+.lsn-swatches { display: flex; gap: 3px; }
+.lsn-swatches i { display: block; width: 22px; height: 12px; border-radius: 3px; }
+
+/* switch: on = the ink colour (no new hue) */
+.lsn-switch { position: relative; flex: none; width: 34px; height: 20px; padding: 0; border: 0; border-radius: 10px; background: var(--set-fill2); cursor: pointer; }
+.lsn-switch::before { content: ""; position: absolute; inset: -6px -4px; }   /* 32 px hit area */
+.lsn-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text);
+  transition: left var(--t, 160ms) var(--ease-out, ease), background-color var(--t, 160ms) var(--ease-out, ease); }
+.lsn-switch[aria-checked="true"] { background: var(--text); }
+.lsn-switch[aria-checked="true"]::after { left: 16px; background: var(--ground, #000); }
+
+/* range */
+.lsn-range { -webkit-appearance: none; appearance: none; width: 180px; height: var(--set-ctl); margin: 0; background: none; cursor: pointer; }
+.lsn-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--set-fill2); }
+.lsn-range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--set-fill2); }
+.lsn-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--text); border: 0; }
+.lsn-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--text); border: 0; }
+
+/* text inputs and the provider menu */
+.lsn-input {
+  width: 240px; height: var(--set-ctl); padding: 0 10px; box-sizing: border-box;
+  border: 1px solid var(--set-hair); border-radius: var(--set-r2); background: rgba(0, 0, 0, 0.25);
+  color: var(--text); font: inherit; font-size: var(--fs-value, 13px); font-variant-numeric: tabular-nums;
+}
+.lsn-input::placeholder { color: var(--faint); }
+.lsn-set-ctl .lsn-input { width: 180px; }
+select.lsn-input { -webkit-appearance: none; appearance: none; padding-right: 28px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 11px) 50%; background-size: 4px 4px; background-repeat: no-repeat; }
+select.lsn-input option { background: #18181a; color: var(--text); }
+
+/* narrow windows: a full-screen page */
+@media (max-width: 1100px) {
+  .lsn-settings { inset: 0; width: auto; max-width: none; border-radius: 0; border: 0; }
+  .lsn-set-cols { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .lsn-set-nav { flex-direction: row; flex-wrap: wrap; }
+}
+@media (max-width: 560px) {
+  .lsn-settings { padding: 14px 16px; }
+  .lsn-presets { grid-template-columns: minmax(0, 1fr); }
+  .lsn-set-field { flex-wrap: wrap; }
+  .lsn-input, .lsn-set-ctl .lsn-input { width: 100%; }
+  .lsn-set-ctl { width: 100%; flex-wrap: wrap; }
+}

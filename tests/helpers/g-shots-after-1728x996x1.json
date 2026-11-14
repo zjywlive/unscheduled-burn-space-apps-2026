@@ -1,0 +1,242 @@
+[
+  {
+    "mode": "both",
+    "z": 1,
+    "off": false,
+    "tier": "2 km",
+    "file": "A-smooth-both-window-z1-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "both",
+    "z": 1.5,
+    "off": false,
+    "tier": "2 km",
+    "file": "A-smooth-both-window-z1.5-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "both",
+    "z": 2,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-both-window-z2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "both",
+    "z": 2.2,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-both-window-z2.2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "both",
+    "z": 4,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-both-window-z4-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1,
+    "off": true,
+    "tier": "2 km",
+    "file": "A-smooth-both-nowin-z1-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1.5,
+    "off": true,
+    "tier": "2 km",
+    "file": "A-smooth-both-nowin-z1.5-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-both-nowin-z2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2.2,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-both-nowin-z2.2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 4,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-both-nowin-z4-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "sun",
+    "z": 1,
+    "off": false,
+    "tier": "2 km",
+    "file": "A-smooth-sun-window-z1-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "sun",
+    "z": 1.5,
+    "off": false,
+    "tier": "2 km",
+    "file": "A-smooth-sun-window-z1.5-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "sun",
+    "z": 2,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-sun-window-z2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "sun",
+    "z": 2.2,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-sun-window-z2.2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "sun",
+    "z": 4,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-sun-window-z4-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1,
+    "off": true,
+    "tier": "2 km",
+    "file": "A-smooth-sun-nowin-z1-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1.5,
+    "off": true,
+    "tier": "2 km",
+    "file": "A-smooth-sun-nowin-z1.5-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-sun-nowin-z2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2.2,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-sun-nowin-z2.2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 4,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-sun-nowin-z4-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1,
+    "off": false,
+    "tier": "2 km",
+    "file": "A-smooth-now-window-z1-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1.5,
+    "off": false,
+    "tier": "2 km",
+    "file": "A-smooth-now-window-z1.5-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-now-window-z2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2.2,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-now-window-z2.2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 4,
+    "off": false,
+    "tier": "1 km",
+    "file": "A-smooth-now-window-z4-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1,
+    "off": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-nowin-z1-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1.5,
+    "off": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-nowin-z1.5-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-now-nowin-z2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2.2,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-now-nowin-z2.2-1728x996x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 4,
+    "off": true,
+    "tier": "1 km",
+    "file": "A-smooth-now-nowin-z4-1728x996x1.png",
+    "errors": []
+  }
+]

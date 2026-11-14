@@ -1,0 +1,117 @@
+/* Phase 6 (docs/phase6/brief-opus-stories.md; mock docs/phase4/mock/personas.html?s=verdict|story|tour).
+   A: the verdict and the way out in the point inspector. B: the Tour menu, the story card above the time
+   bar and the dimming while a story runs. Existing tokens only; --negative stays on a worse figure. */
+
+/* ---------- A: the verdict, the loudest text in the inspector; then the way out ---------- */
+.insp-verdict-block[hidden], .insp-wayout[hidden], .insp-wayout-btn[hidden] { display: none; }
+.insp-verdict { margin: 12px 0 0; font-size: 17px; line-height: 23px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); text-wrap: pretty; }
+.insp-verdict-worse { color: var(--negative); font-weight: 700; }
+.insp-wayout { margin: 10px 0 2px; padding: 7px 7px 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.08); }
+.insp-wayout-label { display: block; color: var(--muted); font-size: var(--fs-label, 12px); line-height: 16px; }
+.insp-wayout-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 3px; }
+.insp-wayout-value { font-size: 14px; line-height: 19px; font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.insp-wayout .insp-wayout-btn { flex: none; height: 28px; padding: 0 8px; font-size: 12px; }
+.insp-verdict-block + .insp-table .point-table { margin-top: 10px; }
+
+/* ---------- B: the Tour menu (on demand, under the Tour button) ---------- */
+.top-action[data-action="tour"] { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.tour-caret { width: 7px; height: 7px; margin: -3px 1px 0 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); opacity: 0.8; }
+.top-action[data-action="tour"][aria-pressed="true"], .top-action[data-action="tour"][aria-expanded="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.tour-menu {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 40; width: 300px; padding: 6px;
+  border-radius: var(--r1, 14px); border: 1px solid var(--hair, rgba(255, 255, 255, 0.14));
+  background: rgba(20, 20, 22, 0.94); box-shadow: var(--glass-shadow, 0 10px 30px rgba(0, 0, 0, 0.3));
+  color: var(--text); text-align: left;
+}
+.tour-menu[hidden] { display: none; }
+.tour-menu-head { margin: 6px 8px 4px; color: var(--muted); font-size: var(--fs-label, 12px); line-height: 16px; }
+.tour-item {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: var(--r2, 8px);
+  background: none; color: var(--text); font: inherit; font-size: var(--fs-value, 13px); line-height: 18px; text-align: left; cursor: pointer;
+}
+.tour-item:hover, .tour-item:focus-visible { background: rgba(255, 255, 255, 0.08); outline: none; }
+.tour-item:focus-visible { box-shadow: inset 0 0 0 2px var(--text); }
+.tour-item-n {
+  flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); color: var(--muted); font-size: 11px; line-height: 1;
+}
+.tour-item-text { flex: 1; min-width: 0; }
+.tour-item-sub { display: block; margin-top: 1px; color: var(--muted); font-size: var(--fs-label, 12px); line-height: 16px; }
+.tour-sep { height: 1px; margin: 6px 8px; background: var(--hair, rgba(255, 255, 255, 0.14)); }
+
+/* ---------- B: the story card, above the time bar ---------- */
+.story-card {
+  position: fixed; z-index: 35; bottom: calc(var(--edge, 16px) + var(--dock-h, 88px) + 10px);
+  left: calc((var(--td-left, 16px) + 100vw - var(--td-right, 72px)) / 2); transform: translateX(-50%);
+  width: min(452px, calc(100vw - 32px)); max-height: calc(100vh - 140px); overflow-y: auto; padding: 14px 16px 12px;
+  border-radius: var(--r1, 14px); border: 1px solid var(--hair, rgba(255, 255, 255, 0.14));
+  background: rgba(20, 20, 22, 0.94); box-shadow: var(--glass-shadow, 0 10px 30px rgba(0, 0, 0, 0.3)); color: var(--text);
+  transition: opacity 0.2s;
+}
+.story-card[hidden] { display: none; }
+.story-hd { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-label, 12px); line-height: 16px; }
+.story-kicker { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.story-count { flex: none; }
+.story-close {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin: -6px -8px -6px 0; padding: 0;
+  border: 0; border-radius: var(--r2, 8px); background: none; color: var(--muted); cursor: pointer;
+}
+.story-close:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.story-title { margin: 6px 0; font-size: 17px; line-height: 23px; font-weight: 600; outline: none; }
+.story-text { margin: 0; font-size: 14px; line-height: 21px; color: #e8e8ea; text-wrap: pretty; }
+.story-ft { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.story-dots { flex: 1; display: flex; gap: 5px; }
+.story-dots i { width: 6px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); }
+.story-dots i.is-on { width: 16px; background: var(--text); }
+.story-btn {
+  height: 32px; padding: 0 12px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); border-radius: var(--r2, 8px);
+  background: none; color: var(--text); font: inherit; font-size: var(--fs-value, 13px); font-weight: 500; cursor: pointer;
+}
+.story-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.story-btn:disabled { opacity: 0.38; cursor: default; background: none; }
+.story-btn-pri { border-color: transparent; background: var(--text); color: var(--ground, #000); }
+.story-btn-pri:hover { background: var(--muted); }
+:is(.story-btn, .story-close):focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.app:not(.is-bigmap) .story-card { bottom: 16px; left: 50%; }
+
+/* ---------- B: while a story runs, everything it does not use is dimmed and cannot be pressed ---------- */
+/* kept bright: the map and its dial, the time bar's clock, transport, speed and timeline, the Tour button,
+   and whatever the step lights (.story-lit) */
+.app[data-story="on"] :is(
+  .topbar-brand, .views, .topbar-modes, .top-actions > .top-action:not([data-action="tour"]),
+  .map-ui-tl, .map-ui-br, .sidebar, .side-reopen, .right-reopen,
+  .card-point .insp-head-block, .card-point .insp-verdict, .card-point .insp-wayout, .card-point .insp-row, .card-point .insp-note, .card-point .insp-primary,
+  .card-point .point-table th, .card-point .point-table td, .card-point .best, .point-panel > .card-fold,
+  .timedock .td-row1 > :not(.td-clock), .timedock .td-loop, .timedock .td-sumwrap, .timedock .td-setwin
+) { opacity: 0.3; pointer-events: none; transition: opacity 0.2s; }
+/* (!important: the dimming rule's :is() carries the specificity of its strongest selector) */
+.app[data-story="on"] .card-point .story-lit { opacity: 1 !important; pointer-events: auto !important; }
+.app[data-story="on"] .card-point .story-lit:is(td, th) { background: rgba(255, 255, 255, 0.06); }
+.app[data-story="on"] .card-point .insp-wayout-btn.story-lit { box-shadow: 0 0 0 2px var(--text); }
+/* the inspector itself still scrolls */
+.app[data-story="on"] .point-panel { pointer-events: auto; }
+
+/* the time bar: the window a step points at, and the rises and sets it names */
+.timedock .td-win.is-focus { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35); }
+.timedock .td-alt.is-focus { border-color: var(--text, #fff); background: rgba(255, 255, 255, 0.10); }
+.timedock .td-marks { position: absolute; inset: 0; pointer-events: none; }
+.timedock .td-mark { position: absolute; top: -6px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.7), 0 0 10px 2px currentColor; }
+.timedock .td-mark-sun { background: var(--sun); color: var(--sun); }
+.timedock .td-mark-earth { background: var(--earth); color: var(--earth); }
+
+/* the sky dial: the part a step talks about forward, the rest quieter */
+.skydial[data-focus="sun-track"] .skydial-track-sun .skydial-stay { stroke-width: 3.5; }
+.skydial[data-focus="sun-track"] .skydial-track-sun .skydial-beyond { stroke-opacity: 0.7; stroke-width: 2; }
+.skydial[data-focus="sun"] .skydial-dot-sun, .skydial[data-focus="earth"] .skydial-dot-earth { stroke-width: 5; }
+.skydial[data-focus="earth-track"] .skydial-track-earth .skydial-stay { stroke-width: 3; }
+.skydial[data-focus="earth-track"] .skydial-track-earth .skydial-beyond { stroke-opacity: 0.8; stroke-width: 2; }
+.skydial:is([data-focus="earth-track"], [data-focus="earth"]) :is(.skydial-track-sun, .skydial-body-sun, .skydial-ray) { opacity: 0.35; }
+.skydial:is([data-focus="sun-track"], [data-focus="sun"]) :is(.skydial-track-earth, .skydial-body-earth) { opacity: 0.35; }
+.skydial[data-focus="skyline"] .skydial-skyline { stroke: #fff; stroke-width: 2.5; }
+.skydial[data-focus="skyline"] .skydial-ground { fill: rgb(255 255 255 / 0.30); }
+.skydial[data-focus="skyline"] :is(.skydial-track-sun, .skydial-track-earth) { opacity: 0.45; }
+
+@media (prefers-reduced-motion: reduce) {
+  .story-card, .app[data-story="on"] * { transition: none !important; }
+}
+html[data-reduce-motion="true"] :is(.story-card, .app[data-story="on"] *) { transition: none !important; }

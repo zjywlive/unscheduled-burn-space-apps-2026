@@ -1,0 +1,1113 @@
+{
+  "generatedAt": "2026-11-12T21:39:40.282Z",
+  "comparisons": 968,
+  "toleranceDeg": 0.02,
+  "maxElDiffDeg": 0.005945,
+  "maxAzDiffDeg": 0.005979,
+  "perSite": [
+    {
+      "siteId": "apollo11",
+      "name": "Apollo 11",
+      "maxElDiffDeg": 0.005945,
+      "maxAzDiffDeg": 0.001274
+    },
+    {
+      "siteId": "change4",
+      "name": "Chang'e-4",
+      "maxElDiffDeg": 0.000997,
+      "maxAzDiffDeg": 0.005961
+    },
+    {
+      "siteId": "im2",
+      "name": "IM-2 Athena",
+      "maxElDiffDeg": 0.00073,
+      "maxAzDiffDeg": 0.005968
+    },
+    {
+      "siteId": "shackleton",
+      "name": "Shackleton ridge",
+      "maxElDiffDeg": 0.000722,
+      "maxAzDiffDeg": 0.005979
+    }
+  ],
+  "samples": [
+    {
+      "utc": "2027-03-08T06:00Z",
+      "siteName": "Apollo 11",
+      "body": "earth",
+      "horizonsElDeg": 61.548998,
+      "demoElDeg": 61.554943,
+      "diffDeg": 0.005945
+    },
+    {
+      "utc": "2027-03-25T18:00Z",
+      "siteName": "Chang'e-4",
+      "body": "earth",
+      "horizonsElDeg": -50.8237,
+      "demoElDeg": -50.824697,
+      "diffDeg": -0.000997
+    },
+    {
+      "utc": "2027-03-29T12:00Z",
+      "siteName": "IM-2 Athena",
+      "body": "sun",
+      "horizonsElDeg": -3.0641,
+      "demoElDeg": -3.06337,
+      "diffDeg": 0.00073
+    },
+    {
+      "utc": "2027-03-06T06:00Z",
+      "siteName": "Shackleton ridge",
+      "body": "sun",
+      "horizonsElDeg": -0.154283,
+      "demoElDeg": -0.153561,
+      "diffDeg": 0.000722
+    },
+    {
+      "utc": "2027-03-08T00:00Z",
+      "siteName": "Apollo 11",
+      "body": "earth",
+      "horizonsElDeg": 61.767127,
+      "demoElDeg": 61.773062,
+      "diffDeg": 0.005935
+    },
+    {
+      "utc": "2027-03-08T18:00Z",
+      "siteName": "Apollo 11",
+      "body": "earth",
+      "horizonsElDeg": 61.151594,
+      "demoElDeg": 61.157454,
+      "diffDeg": 0.00586
+    }
+  ],
+  "terrain": {
+    "generatedAt": "2026-11-12T21:39:24.963Z",
+    "stepHours": 1,
+    "checks": [
+      {
+        "name": "Shackleton floor",
+        "latDeg": -89.67,
+        "lonDeg": 129.78,
+        "kind": "shadow",
+        "limit": "< 1%",
+        "published": null,
+        "source": "https://planetarynames.wr.usgs.gov/Feature/5450",
+        "sunlitShare": 0,
+        "pass": true,
+        "note": null
+      },
+      {
+        "name": "Shoemaker floor",
+        "latDeg": -88.14,
+        "lonDeg": 45.91,
+        "kind": "shadow",
+        "limit": "< 1%",
+        "published": null,
+        "source": "https://planetarynames.wr.usgs.gov/Feature/5494",
+        "sunlitShare": 0,
+        "pass": true,
+        "note": null
+      },
+      {
+        "name": "Haworth floor",
+        "latDeg": -87.2,
+        "lonDeg": 352.51,
+        "kind": "shadow",
+        "limit": "< 1%",
+        "published": null,
+        "source": "https://planetarynames.wr.usgs.gov/Feature/14502",
+        "sunlitShare": 0,
+        "pass": true,
+        "note": null
+      },
+      {
+        "name": "Faustini floor",
+        "latDeg": -87.18,
+        "lonDeg": 84.31,
+        "kind": "shadow",
+        "limit": "< 1%",
+        "published": null,
+        "source": "https://planetarynames.wr.usgs.gov/Feature/1919",
+        "sunlitShare": 0,
+        "pass": true,
+        "note": null
+      },
+      {
+        "name": "Shackleton ridge",
+        "latDeg": -89.45,
+        "lonDeg": 222.69,
+        "kind": "lit",
+        "limit": "≥ 50%",
+        "published": 0.8901,
+        "source": "https://doi.org/10.1016/j.icarus.2010.10.030",
+        "sunlitShare": 0.94,
+        "pass": true,
+        "note": "Published value is an 18.6-year average; this demo covers Nov 2026 to Jan 2029, uses the disc centre and 480 m terrain."
+      },
+      {
+        "name": "Ridge point 2",
+        "latDeg": -89.43,
+        "lonDeg": 222.73,
+        "kind": "compare",
+        "limit": null,
+        "published": 0.886,
+        "source": "https://doi.org/10.1016/j.icarus.2010.10.030",
+        "sunlitShare": 0.8441,
+        "pass": null,
+        "note": "Published value is an 18.6-year average; this demo covers Nov 2026 to Jan 2029, uses the disc centre and 480 m terrain."
+      },
+      {
+        "name": "Ridge point 3",
+        "latDeg": -89.44,
+        "lonDeg": 223.28,
+        "kind": "compare",
+        "limit": null,
+        "published": 0.8713,
+        "source": "https://doi.org/10.1016/j.icarus.2010.10.030",
+        "sunlitShare": 0.8402,
+        "pass": null,
+        "note": "Published value is an 18.6-year average; this demo covers Nov 2026 to Jan 2029, uses the disc centre and 480 m terrain."
+      },
+      {
+        "name": "Ridge point 4",
+        "latDeg": -89.78,
+        "lonDeg": 204.27,
+        "kind": "compare",
+        "limit": null,
+        "published": 0.8671,
+        "source": "https://doi.org/10.1016/j.icarus.2010.10.030",
+        "sunlitShare": 0.8709,
+        "pass": null,
+        "note": "Published value is an 18.6-year average; this demo covers Nov 2026 to Jan 2029, uses the disc centre and 480 m terrain."
+      }
+    ]
+  },
+  "phase3": {
+    "generatedAt": "2026-11-12T21:39:31.327Z",
+    "hardChecks": "§7 item 4: crater floors at shadow distance 0, Shackleton ridge cell not persistent shadow",
+    "slope": [
+      {
+        "name": "Slope sanity, 2km grid",
+        "grid": "2km",
+        "shackletonFloorDeg": 6.5,
+        "shackletonWallRingDeg": 31.62,
+        "wallRingCells": 21,
+        "wallRingKm": [
+          6,
+          8
+        ],
+        "mapDeg": {
+          "p10": 2.75,
+          "p25": 4.75,
+          "p50": 7.75,
+          "p75": 12,
+          "p90": 16.75,
+          "p99": 26,
+          "mean": 8.9608,
+          "max": 32.75
+        },
+        "pass": null,
+        "limit": null
+      },
+      {
+        "name": "Slope sanity, 1km grid",
+        "grid": "1km",
+        "shackletonFloorDeg": 2.5,
+        "shackletonWallRingDeg": 31.52,
+        "wallRingCells": 88,
+        "wallRingKm": [
+          6,
+          8
+        ],
+        "mapDeg": {
+          "p10": 2.5,
+          "p25": 4.5,
+          "p50": 7.75,
+          "p75": 12.25,
+          "p90": 17.5,
+          "p99": 26.75,
+          "mean": 8.9601,
+          "max": 33.75
+        },
+        "pass": null,
+        "limit": null
+      }
+    ],
+    "shadow": {
+      "points": [
+        {
+          "name": "Shackleton floor shadow distance, 2km grid",
+          "grid": "2km",
+          "latDeg": -89.67,
+          "lonDeg": 129.78,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Shoemaker floor shadow distance, 2km grid",
+          "grid": "2km",
+          "latDeg": -88.14,
+          "lonDeg": 45.91,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Haworth floor shadow distance, 2km grid",
+          "grid": "2km",
+          "latDeg": -87.2,
+          "lonDeg": 352.51,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Faustini floor shadow distance, 2km grid",
+          "grid": "2km",
+          "latDeg": -87.18,
+          "lonDeg": 84.31,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Shackleton ridge not persistent shadow, 2km grid",
+          "grid": "2km",
+          "latDeg": -89.45,
+          "lonDeg": 222.69,
+          "shadowKm": 6,
+          "limit": "> 0 km",
+          "pass": true
+        },
+        {
+          "name": "Shackleton floor shadow distance, 1km grid",
+          "grid": "1km",
+          "latDeg": -89.67,
+          "lonDeg": 129.78,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Shoemaker floor shadow distance, 1km grid",
+          "grid": "1km",
+          "latDeg": -88.14,
+          "lonDeg": 45.91,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Haworth floor shadow distance, 1km grid",
+          "grid": "1km",
+          "latDeg": -87.2,
+          "lonDeg": 352.51,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Faustini floor shadow distance, 1km grid",
+          "grid": "1km",
+          "latDeg": -87.18,
+          "lonDeg": 84.31,
+          "shadowKm": 0,
+          "limit": "= 0 km",
+          "pass": true
+        },
+        {
+          "name": "Shackleton ridge not persistent shadow, 1km grid",
+          "grid": "1km",
+          "latDeg": -89.45,
+          "lonDeg": 222.69,
+          "shadowKm": 6,
+          "limit": "> 0 km",
+          "pass": true
+        }
+      ],
+      "shares": [
+        {
+          "name": "Persistent shadow share south of 80°S, 2km grid",
+          "grid": "2km",
+          "cells": 3942,
+          "of": 72580,
+          "share": 0.0543,
+          "shadowKm": {
+            "p10": 1,
+            "p25": 3,
+            "p50": 6,
+            "p75": 10,
+            "p90": 13,
+            "p99": 20,
+            "mean": 6.5788,
+            "max": 28
+          },
+          "pass": null,
+          "limit": null
+        },
+        {
+          "name": "Persistent shadow share south of 80°S, 1km grid",
+          "grid": "1km",
+          "cells": 17324,
+          "of": 290364,
+          "share": 0.0597,
+          "shadowKm": {
+            "p10": 1,
+            "p25": 3,
+            "p50": 6,
+            "p75": 10,
+            "p90": 13,
+            "p99": 20,
+            "mean": 6.5709,
+            "max": 28
+          },
+          "pass": null,
+          "limit": null
+        }
+      ]
+    },
+    "consistency": {
+      "name": "1 km and 2 km sunlit share, default stay",
+      "landingUtc": "2027-01-13T00:00:00.000Z",
+      "stayDays": 14,
+      "stepHours": 2,
+      "mapMeanSun": {
+        "2km": 0.2626,
+        "1km": 0.2625,
+        "diff": -0.0001
+      },
+      "blockAbsDiff": {
+        "p50": 0.0045,
+        "p90": 0.067,
+        "p99": 0.2321,
+        "mean": 0.0234,
+        "max": 0.7961
+      },
+      "sites": [
+        {
+          "siteId": "im1",
+          "name": "IM-1 Odysseus",
+          "latDeg": -80.13,
+          "lonDeg": 1.44,
+          "grid2km": 0.7976,
+          "grid1km": 0.7381,
+          "point480m": 0.7066,
+          "point240m": 0.6829,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "im2",
+          "name": "IM-2 Athena",
+          "latDeg": -84.7906,
+          "lonDeg": 29.1957,
+          "grid2km": 0.7202,
+          "grid1km": 0.881,
+          "point480m": 0.9286,
+          "point240m": 0.9285,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "shackleton",
+          "name": "Shackleton ridge",
+          "latDeg": -89.45,
+          "lonDeg": 222.69,
+          "grid2km": 0.4048,
+          "grid1km": 1,
+          "point480m": 1,
+          "point240m": 1,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "peak-near-cabeus-b",
+          "name": "Peak near Cabeus B",
+          "latDeg": -83.6,
+          "lonDeg": 291.2,
+          "grid2km": 0.1012,
+          "grid1km": 0.1964,
+          "point480m": 0.3454,
+          "point240m": 0.2909,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "haworth",
+          "name": "Haworth",
+          "latDeg": -86.7,
+          "lonDeg": 336.3,
+          "grid2km": 0.119,
+          "grid1km": 0.1012,
+          "point480m": 0.0951,
+          "point240m": 0.0949,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "malapert-massif",
+          "name": "Malapert Massif",
+          "latDeg": -86,
+          "lonDeg": 0.3,
+          "grid2km": 0.0893,
+          "grid1km": 0.6667,
+          "point480m": 0.5272,
+          "point240m": 0.1149,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "mons-mouton-plateau",
+          "name": "Mons Mouton Plateau",
+          "latDeg": -84.3,
+          "lonDeg": 30.6,
+          "grid2km": 1,
+          "grid1km": 0.5893,
+          "point480m": 0.7274,
+          "point240m": 0.6368,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "mons-mouton",
+          "name": "Mons Mouton",
+          "latDeg": -85.4,
+          "lonDeg": 35.3,
+          "grid2km": 0.256,
+          "grid1km": 0.2738,
+          "point480m": 0.2748,
+          "point240m": 0.2768,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "nobile-rim-1",
+          "name": "Nobile Rim 1",
+          "latDeg": -85.4,
+          "lonDeg": 35.3,
+          "grid2km": 0.256,
+          "grid1km": 0.2738,
+          "point480m": 0.2748,
+          "point240m": 0.2768,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "nobile-rim-2",
+          "name": "Nobile Rim 2",
+          "latDeg": -84.20156,
+          "lonDeg": 60.69989,
+          "grid2km": 0.0298,
+          "grid1km": 0.4405,
+          "point480m": 0.5372,
+          "point240m": 0.5303,
+          "closerToPoint": "1km"
+        },
+        {
+          "siteId": "de-gerlache-rim-2",
+          "name": "de Gerlache Rim 2",
+          "latDeg": -88.5,
+          "lonDeg": 293.3,
+          "grid2km": 0.7857,
+          "grid1km": 0.8155,
+          "point480m": 0.8421,
+          "point240m": 0.8364,
+          "closerToPoint": "1km"
+        }
+      ],
+      "jobMs": 6204,
+      "pass": null,
+      "limit": null,
+      "note": "point480m is what the point card shows (480 m DEM skyline at the exact point, 15-minute scan). point240m uses the 240 m crop, whose rays stop at ±324 km."
+    },
+    "suitability": [
+      {
+        "name": "Suitability at default weights, 2km grid",
+        "grid": "2km",
+        "weights": {
+          "sun": 40,
+          "earth": 30,
+          "slope": 20,
+          "shadow": 10
+        },
+        "map": {
+          "p10": 0.17,
+          "p25": 0.244,
+          "p50": 0.3761,
+          "p75": 0.567,
+          "p90": 0.7247,
+          "p99": 0.8719,
+          "mean": 0.4108,
+          "max": 0.962
+        },
+        "floors": [
+          {
+            "name": "Shackleton floor",
+            "score": 0.135,
+            "sun": 0,
+            "earth": 0,
+            "slopeDeg": 6.5,
+            "shadowKm": 0
+          },
+          {
+            "name": "Shoemaker floor",
+            "score": 0.2796,
+            "sun": 0,
+            "earth": 0.3571,
+            "slopeDeg": 2.75,
+            "shadowKm": 0
+          },
+          {
+            "name": "Haworth floor",
+            "score": 0.0925,
+            "sun": 0,
+            "earth": 0,
+            "slopeDeg": 10.75,
+            "shadowKm": 0
+          },
+          {
+            "name": "Faustini floor",
+            "score": 0.165,
+            "sun": 0,
+            "earth": 0,
+            "slopeDeg": 3.5,
+            "shadowKm": 0
+          }
+        ],
+        "ridge": {
+          "name": "Shackleton ridge",
+          "score": 0.3845,
+          "sun": 0.4048,
+          "earth": 0.0238,
+          "slopeDeg": 7.25,
+          "shadowKm": 6
+        },
+        "pass": null,
+        "limit": null
+      },
+      {
+        "name": "Suitability at default weights, 1km grid",
+        "grid": "1km",
+        "weights": {
+          "sun": 40,
+          "earth": 30,
+          "slope": 20,
+          "shadow": 10
+        },
+        "map": {
+          "p10": 0.1648,
+          "p25": 0.2445,
+          "p50": 0.377,
+          "p75": 0.5685,
+          "p90": 0.7272,
+          "p99": 0.8786,
+          "mean": 0.4109,
+          "max": 0.977
+        },
+        "floors": [
+          {
+            "name": "Shackleton floor",
+            "score": 0.175,
+            "sun": 0,
+            "earth": 0,
+            "slopeDeg": 2.5,
+            "shadowKm": 0
+          },
+          {
+            "name": "Shoemaker floor",
+            "score": 0.2829,
+            "sun": 0,
+            "earth": 0.3095,
+            "slopeDeg": 1,
+            "shadowKm": 0
+          },
+          {
+            "name": "Haworth floor",
+            "score": 0.09,
+            "sun": 0,
+            "earth": 0,
+            "slopeDeg": 11,
+            "shadowKm": 0
+          },
+          {
+            "name": "Faustini floor",
+            "score": 0.13,
+            "sun": 0,
+            "earth": 0,
+            "slopeDeg": 7,
+            "shadowKm": 0
+          }
+        ],
+        "ridge": {
+          "name": "Shackleton ridge",
+          "score": 0.8719,
+          "sun": 1,
+          "earth": 0.7798,
+          "slopeDeg": 5,
+          "shadowKm": 6
+        },
+        "pass": null,
+        "limit": null
+      }
+    ]
+  },
+  "phase4": {
+    "generatedAt": "2026-11-12T21:39:40.282Z",
+    "note": "Comparisons only, no pass/fail gates. The official products cover 18.6 years and count any part of the disc; ours cover Nov 2026 to Jan 2029 and use the disc centre.",
+    "sunVsOfficial": {
+      "name": "Our sunlit share vs the official 18.6-year average, 2 km grid",
+      "grid": "2km",
+      "cells": 72580,
+      "ours": "Sun disc centre above the cell skyline (72 azimuths from the 240 m DEM), every hour from 2026-11-01 to 2029-01-01 (19009 samples)",
+      "official": "AVGVISIB_75S_120M_201608.IMG: any part of the solar disc visible, 18.6 years at 1 h steps, 120 m; per cell, the mean of the 120 m pixels whose centres fall in it",
+      "correlation": 0.9693,
+      "meanAbsDiff": 0.0223,
+      "meanDiff": 0.0047,
+      "correlationAtCellCentre": 0.9842,
+      "meanAbsDiffAtCellCentre": 0.0123,
+      "correlationShiftedOneCell": {
+        "east": 0.8274,
+        "west": 0.8276,
+        "north": 0.8259,
+        "south": 0.8232
+      },
+      "oursMean": 0.2774,
+      "officialMean": 0.2727,
+      "worst": [
+        {
+          "cell": 60703,
+          "latDeg": -85.3844,
+          "lonDeg": 114.918,
+          "xKm": 127,
+          "yKm": -59,
+          "ours": 0,
+          "official": 0.363,
+          "officialAtCentre": 0,
+          "diff": -0.363
+        },
+        {
+          "cell": 11304,
+          "latDeg": -81.0279,
+          "lonDeg": 335.9735,
+          "xKm": -111,
+          "yKm": 249,
+          "ours": 0.0141,
+          "official": 0.3669,
+          "officialAtCentre": 0,
+          "diff": -0.3528
+        },
+        {
+          "cell": 14281,
+          "latDeg": -81.9187,
+          "lonDeg": 19.7637,
+          "xKm": 83,
+          "yKm": 231,
+          "ours": 0.0154,
+          "official": 0.3521,
+          "officialAtCentre": 0,
+          "diff": -0.3367
+        },
+        {
+          "cell": 44178,
+          "latDeg": -80.5814,
+          "lonDeg": 278.6396,
+          "xKm": -283,
+          "yKm": 43,
+          "ours": 0.0185,
+          "official": 0.3543,
+          "officialAtCentre": 0,
+          "diff": -0.3358
+        },
+        {
+          "cell": 16385,
+          "latDeg": -80.5316,
+          "lonDeg": 318.9452,
+          "xKm": -189,
+          "yKm": 217,
+          "ours": 0.0513,
+          "official": 0.3858,
+          "officialAtCentre": 0,
+          "diff": -0.3344
+        }
+      ],
+      "pass": null,
+      "limit": null
+    },
+    "earthVsOfficial": {
+      "name": "Our Earth-in-view share vs the official 18.6-year average, 2 km grid",
+      "grid": "2km",
+      "cells": 72580,
+      "ours": "Earth disc centre above the cell skyline (72 azimuths from the 240 m DEM), every hour from 2026-11-01 to 2029-01-01 (19009 samples)",
+      "official": "AVGVISIB_75S_120M_201608_EARTH.IMG: any part of the Earth disc visible, 18.6 years at 1 h steps, 120 m; per cell, the mean of the 120 m pixels whose centres fall in it",
+      "correlation": 0.9777,
+      "meanAbsDiff": 0.0419,
+      "meanDiff": -0.0279,
+      "correlationAtCellCentre": 0.9833,
+      "meanAbsDiffAtCellCentre": 0.0377,
+      "correlationShiftedOneCell": {
+        "east": 0.9179,
+        "west": 0.9187,
+        "north": 0.8935,
+        "south": 0.8753
+      },
+      "oursMean": 0.2545,
+      "officialMean": 0.2824,
+      "worst": [
+        {
+          "cell": 21814,
+          "latDeg": -80.8089,
+          "lonDeg": 310.9351,
+          "xKm": -211,
+          "yKm": 183,
+          "ours": 0,
+          "official": 0.7625,
+          "officialAtCentre": 0,
+          "diff": -0.7625
+        },
+        {
+          "cell": 7872,
+          "latDeg": -80.8291,
+          "lonDeg": 13.4877,
+          "xKm": 65,
+          "yKm": 271,
+          "ours": 0.0545,
+          "official": 0.7619,
+          "officialAtCentre": 0,
+          "diff": -0.7074
+        },
+        {
+          "cell": 19973,
+          "latDeg": -83.3435,
+          "lonDeg": 344.7946,
+          "xKm": -53,
+          "yKm": 195,
+          "ours": 0,
+          "official": 0.7,
+          "officialAtCentre": 0,
+          "diff": -0.7
+        },
+        {
+          "cell": 35456,
+          "latDeg": -82.856,
+          "lonDeg": 62.8443,
+          "xKm": 193,
+          "yKm": 99,
+          "ours": 0,
+          "official": 0.5594,
+          "officialAtCentre": 0,
+          "diff": -0.5594
+        },
+        {
+          "cell": 37198,
+          "latDeg": -83.9126,
+          "lonDeg": 298.0907,
+          "xKm": -163,
+          "yKm": 87,
+          "ours": 0,
+          "official": 0.5551,
+          "officialAtCentre": 0,
+          "diff": -0.5551
+        }
+      ],
+      "pass": null,
+      "limit": null
+    },
+    "oldShadowVsPsr": [
+      {
+        "name": "Phase 3 persistent shadow vs official PSR, 2km grid",
+        "grid": "2km",
+        "cells": 72580,
+        "oldShadowCells": 5193,
+        "officialPsrCells": 3942,
+        "both": 3916,
+        "oldOnly": 1277,
+        "psrOnly": 26,
+        "neither": 67361,
+        "agreement": 0.982,
+        "missedShareOfPsr": 0.0066,
+        "falseShareOfOld": 0.2459,
+        "rule": "old: the Sun centre never clears the cell skyline at any 6 h sample, Nov 2026 to Jan 2029; official: more than half of the cell’s 120 m pixels are PSR",
+        "pass": null,
+        "limit": null
+      },
+      {
+        "name": "Phase 3 persistent shadow vs official PSR, 1km grid",
+        "grid": "1km",
+        "cells": 290364,
+        "oldShadowCells": 20851,
+        "officialPsrCells": 17324,
+        "both": 17228,
+        "oldOnly": 3623,
+        "psrOnly": 96,
+        "neither": 269417,
+        "agreement": 0.9872,
+        "missedShareOfPsr": 0.0055,
+        "falseShareOfOld": 0.1738,
+        "rule": "old: the Sun centre never clears the cell skyline at any 6 h sample, Nov 2026 to Jan 2029; official: more than half of the cell’s 120 m pixels are PSR",
+        "pass": null,
+        "limit": null
+      }
+    ],
+    "newShadowShares": [
+      {
+        "grid": "2km",
+        "zeroCells": 3942,
+        "of": 72580,
+        "share": 0.0543,
+        "shadowKm": {
+          "p10": 1,
+          "p25": 3,
+          "p50": 6,
+          "p75": 10,
+          "p90": 13,
+          "p99": 20,
+          "mean": 6.5788,
+          "max": 28
+        }
+      },
+      {
+        "grid": "1km",
+        "zeroCells": 17324,
+        "of": 290364,
+        "share": 0.0597,
+        "shadowKm": {
+          "p10": 1,
+          "p25": 3,
+          "p50": 6,
+          "p75": 10,
+          "p90": 13,
+          "p99": 20,
+          "mean": 6.5709,
+          "max": 28
+        }
+      }
+    ],
+    "georef": {
+      "tiles": [
+        {
+          "name": "dem_40m 3 × 3 block means vs dem_120m",
+          "level": "dem_40m",
+          "tiles": 140,
+          "stride": 2,
+          "zeroShift": {
+            "r": 1,
+            "meanAbsDiffM": 0.93,
+            "biasM": -0.04,
+            "pixels": 213224
+          },
+          "shiftedOneFinePixel": {
+            "east": {
+              "r": 0.999995,
+              "meanAbsDiffM": 5.44,
+              "biasM": 0.06,
+              "pixels": 213224
+            },
+            "north": {
+              "r": 0.999995,
+              "meanAbsDiffM": 5.62,
+              "biasM": 0.37,
+              "pixels": 213404
+            }
+          },
+          "shiftedOne120mPixel": {
+            "east": {
+              "r": 0.999959,
+              "meanAbsDiffM": 16.15,
+              "biasM": 0.28,
+              "pixels": 212831
+            },
+            "west": {
+              "r": 0.999959,
+              "meanAbsDiffM": 16.16,
+              "biasM": -0.34,
+              "pixels": 212704
+            },
+            "north": {
+              "r": 0.999958,
+              "meanAbsDiffM": 16.69,
+              "biasM": 1.17,
+              "pixels": 213447
+            },
+            "south": {
+              "r": 0.999958,
+              "meanAbsDiffM": 16.72,
+              "biasM": -1.23,
+              "pixels": 213319
+            }
+          },
+          "pass": null,
+          "limit": null
+        },
+        {
+          "name": "dem_20m 6 × 6 block means vs dem_120m",
+          "level": "dem_20m",
+          "tiles": 71,
+          "stride": 2,
+          "zeroShift": {
+            "r": 0.999999,
+            "meanAbsDiffM": 0.97,
+            "biasM": -0.03,
+            "pixels": 32050
+          },
+          "shiftedOneFinePixel": {
+            "east": {
+              "r": 0.999991,
+              "meanAbsDiffM": 3.11,
+              "biasM": 0.11,
+              "pixels": 32050
+            },
+            "north": {
+              "r": 0.999989,
+              "meanAbsDiffM": 3.63,
+              "biasM": -0.66,
+              "pixels": 32008
+            }
+          },
+          "shiftedOne120mPixel": {
+            "east": {
+              "r": 0.999698,
+              "meanAbsDiffM": 18.2,
+              "biasM": 0.82,
+              "pixels": 32008
+            },
+            "west": {
+              "r": 0.999697,
+              "meanAbsDiffM": 18.26,
+              "biasM": -0.86,
+              "pixels": 32008
+            },
+            "north": {
+              "r": 0.999645,
+              "meanAbsDiffM": 21.37,
+              "biasM": -3.76,
+              "pixels": 32114
+            },
+            "south": {
+              "r": 0.999645,
+              "meanAbsDiffM": 21.39,
+              "biasM": 3.79,
+              "pixels": 32114
+            }
+          },
+          "pass": null,
+          "limit": null
+        }
+      ],
+      "psr": {
+        "floors": [
+          {
+            "name": "Shackleton floor",
+            "latDeg": -89.67,
+            "lonDeg": 129.78,
+            "psrAtPoint": 1,
+            "psrShareWithin1Km": 1,
+            "psrShareWithin3Km": 1
+          },
+          {
+            "name": "Shoemaker floor",
+            "latDeg": -88.14,
+            "lonDeg": 45.91,
+            "psrAtPoint": 1,
+            "psrShareWithin1Km": 1,
+            "psrShareWithin3Km": 1
+          },
+          {
+            "name": "Haworth floor",
+            "latDeg": -87.2,
+            "lonDeg": 352.51,
+            "psrAtPoint": 1,
+            "psrShareWithin1Km": 1,
+            "psrShareWithin3Km": 1
+          },
+          {
+            "name": "Faustini floor",
+            "latDeg": -87.18,
+            "lonDeg": 84.31,
+            "psrAtPoint": 1,
+            "psrShareWithin1Km": 1,
+            "psrShareWithin3Km": 1
+          }
+        ],
+        "shackletonRim": {
+          "name": "Shackleton rim ring, 10–11.5 km from the centre (diameter 20.92 km)",
+          "psrShare": 0.0191,
+          "floorPsrShareWithin2Km": 1
+        },
+        "ridgePsr": 0,
+        "shiftTest": {
+          "name": "Mean height of PSR pixels minus the 3 km window mean on dem_120m (m), mask shifted by whole 120 m pixels",
+          "within": "±150 km",
+          "metres": {
+            "0,0": -37.46,
+            "+1 row": -36.79,
+            "-1 row": -36.84,
+            "+1 col": -36.59,
+            "-1 col": -37.05,
+            "+2 rows": -35.41,
+            "+2 cols": -35.05
+          }
+        }
+      },
+      "topIlluminationPoints": [
+        {
+          "name": "Shackleton ridge",
+          "latDeg": -89.45,
+          "lonDeg": 222.69,
+          "published": 0.8901,
+          "officialAtPoint": 0.677,
+          "officialMaxWithin300m": 0.8473,
+          "maxAtKm": 0.17,
+          "psrAtPoint": 0
+        },
+        {
+          "name": "Ridge point 2",
+          "latDeg": -89.43,
+          "lonDeg": 222.73,
+          "published": 0.886,
+          "officialAtPoint": 0.4708,
+          "officialMaxWithin300m": 0.7832,
+          "maxAtKm": 0.27,
+          "psrAtPoint": 0
+        },
+        {
+          "name": "Ridge point 3",
+          "latDeg": -89.44,
+          "lonDeg": 223.28,
+          "published": 0.8713,
+          "officialAtPoint": 0.6682,
+          "officialMaxWithin300m": 0.7832,
+          "maxAtKm": 0.12,
+          "psrAtPoint": 0
+        },
+        {
+          "name": "Ridge point 4",
+          "latDeg": -89.78,
+          "lonDeg": 204.27,
+          "published": 0.8671,
+          "officialAtPoint": 0.857,
+          "officialMaxWithin300m": 0.8581,
+          "maxAtKm": 0.12,
+          "psrAtPoint": 0
+        }
+      ],
+      "nasaSun480m": [
+        {
+          "name": "Shackleton floor",
+          "nasaSun480m": 0
+        },
+        {
+          "name": "Shoemaker floor",
+          "nasaSun480m": 0
+        },
+        {
+          "name": "Haworth floor",
+          "nasaSun480m": 0
+        },
+        {
+          "name": "Faustini floor",
+          "nasaSun480m": 0
+        },
+        {
+          "name": "Shackleton ridge",
+          "nasaSun480m": 0.628
+        }
+      ]
+    },
+    "timing": {
+      "sharesMs": 6450,
+      "georefMs": 2014
+    }
+  }
+}

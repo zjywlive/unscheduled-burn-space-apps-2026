@@ -1,0 +1,41 @@
+[
+  {
+    "mode": "earth",
+    "z": 2,
+    "tier": "1 km",
+    "file": "A-smooth-earth-window-z2-1440x900x1.png",
+    "errors": []
+  },
+  {
+    "mode": "change",
+    "z": 2,
+    "tier": "1 km",
+    "file": "A-smooth-change-window-z2-1440x900x1.png",
+    "errors": []
+  },
+  {
+    "mode": "score",
+    "z": 2,
+    "tier": "1 km",
+    "file": "A-smooth-score-window-z2-1440x900x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": false,
+    "playing": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-window-playing-z2-1440x900x1.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": true,
+    "playing": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-nowin-playing-z2-1440x900x1.png",
+    "errors": []
+  }
+]

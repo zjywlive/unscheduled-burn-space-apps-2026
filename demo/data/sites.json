@@ -1,0 +1,18 @@
+[
+  {"id":"apollo11","name":"Apollo 11","subtitle":"Tranquility Base, 1969","latDeg":0.67416,"lonDeg":23.47314,"source":"https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html","verified":true,"group":"missions"},
+  {"id":"apollo17","name":"Apollo 17","subtitle":"Taurus-Littrow, 1972","latDeg":20.1911,"lonDeg":30.7723,"source":"https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html","verified":true,"group":"missions"},
+  {"id":"blueghost1","name":"Blue Ghost M1","subtitle":"Mare Crisium, 2025 (CLPS)","latDeg":18.5623,"lonDeg":61.8103,"source":"https://lroc.im-ldi.com/images/1400","verified":true,"group":"missions"},
+  {"id":"chandrayaan3","name":"Chandrayaan-3","subtitle":"Shiv Shakti point, 2023","latDeg":-69.3733,"lonDeg":32.3191,"source":"https://lroc.im-ldi.com/images/1314","verified":true,"group":"missions"},
+  {"id":"change4","name":"Chang'e-4","subtitle":"Von Kármán crater, 2019","latDeg":-45.4446,"lonDeg":177.5991,"source":"https://lroc.im-ldi.com/images/1087","verified":true,"group":"missions"},
+  {"id":"im1","name":"IM-1 Odysseus","subtitle":"Malapert A, 2024 (CLPS)","latDeg":-80.13,"lonDeg":1.44,"source":"https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/","verified":true,"group":"missions"},
+  {"id":"im2","name":"IM-2 Athena","subtitle":"Mons Mouton, 2025 (CLPS)","latDeg":-84.7906,"lonDeg":29.1957,"source":"https://lroc.im-ldi.com/images/1408","verified":true,"group":"missions"},
+  {"id":"shackleton","name":"Shackleton ridge","subtitle":"Connecting ridge, candidate","latDeg":-89.45,"lonDeg":222.69,"source":"https://doi.org/10.1016/j.icarus.2010.10.030","verified":true,"group":"missions"},
+  {"id":"peak-near-cabeus-b","name":"Peak near Cabeus B","subtitle":"Artemis III candidate region","latDeg":-83.6,"lonDeg":291.2,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_CABEUSPKLO1","verified":false,"group":"candidates"},
+  {"id":"haworth","name":"Haworth","subtitle":"Artemis III candidate region","latDeg":-86.7,"lonDeg":336.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_HAWORTH_LO1","verified":false,"group":"candidates"},
+  {"id":"malapert-massif","name":"Malapert Massif","subtitle":"Artemis III candidate region","latDeg":-86,"lonDeg":0.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MALAPERTLO1","verified":false,"group":"candidates"},
+  {"id":"mons-mouton-plateau","name":"Mons Mouton Plateau","subtitle":"Artemis III candidate region","latDeg":-84.3,"lonDeg":30.6,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MOUTNPLTLO1","verified":false,"group":"candidates"},
+  {"id":"mons-mouton","name":"Mons Mouton","subtitle":"Artemis III candidate region","latDeg":-85.4,"lonDeg":35.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MTMOUTONLO1","verified":false,"group":"candidates"},
+  {"id":"nobile-rim-1","name":"Nobile Rim 1","subtitle":"Artemis III candidate region","latDeg":-85.4,"lonDeg":35.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MTMOUTONLO1","verified":false,"group":"candidates"},
+  {"id":"nobile-rim-2","name":"Nobile Rim 2","subtitle":"Artemis III candidate region","latDeg":-84.20156,"lonDeg":60.69989,"source":"https://www.hou.usra.edu/meetings/lpsc2025/pdf/1149.pdf","verified":true,"group":"candidates"},
+  {"id":"de-gerlache-rim-2","name":"de Gerlache Rim 2","subtitle":"Artemis III candidate region","latDeg":-88.5,"lonDeg":293.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_DEGERRIMLO1","verified":false,"group":"candidates"}
+]

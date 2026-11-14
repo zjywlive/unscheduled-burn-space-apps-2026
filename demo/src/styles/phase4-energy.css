@@ -1,0 +1,71 @@
+/* ---------- phase 4: the Energy card (workflow E) ----------
+   Designed for the right panel's fold area, 300 px wide with 14 px padding. Only variables from styles.css:
+   --sun marks sunlit spans, --negative a figure that got worse; the two scenarios are told apart by stroke
+   (solid / dashed), by ink (--text / --muted) and by their labels "Plan" and "Alt". */
+
+.energy-card { display: grid; gap: 10px; min-width: 0; }
+.energy-card .card-head { margin-bottom: 0; }
+
+.energy-assumptions { display: grid; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.energy-legend {
+  display: flex; justify-content: space-between; align-items: baseline; width: 100%; padding: 0; margin-bottom: 2px;
+  color: var(--muted); font-size: var(--fs-small); line-height: 16px;
+}
+.energy-reset { font-size: var(--fs-small); }
+.energy-reset::before { inset: -8px 0 -8px -12px; }   /* the shared text-btn hit area reaches 6 px past the card edge */
+.energy-field { display: grid; gap: 2px; min-width: 0; }
+.energy-field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.energy-field-head label { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.energy-assumed {
+  display: inline-block; padding: 0 5px; border: 1px solid var(--control); border-radius: var(--radius-control);
+  color: var(--faint); font-size: 10px; line-height: 14px; letter-spacing: 0.02em; vertical-align: 1px;
+}
+.energy-value { color: var(--text); font-size: var(--fs-small); line-height: 16px; white-space: nowrap; }
+.energy-card .range { height: 28px; }
+.energy-select { width: 100%; height: 32px; padding-left: 12px; border: 1px solid var(--control); border-radius: var(--radius-control); font-size: var(--fs-small); }
+.energy-select:hover { border-color: var(--faint); }
+.energy-note { color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+
+.energy-body { display: grid; gap: 8px; min-width: 0; }
+.energy-chart { min-width: 0; }
+.energy-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+.energy-lit { fill: var(--sun); fill-opacity: 0.08; }
+.energy-band { fill: var(--sun); }
+.energy-track { fill: var(--raised); }
+.energy-line { fill: none; stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+.energy-line.is-planned { stroke: var(--text); }
+.energy-line.is-alt { stroke: var(--muted); stroke-dasharray: 4 3; }
+.energy-end { fill: var(--text); font-size: 11px; font-weight: 600; }
+.energy-end.is-alt { fill: var(--muted); font-weight: 400; }
+
+.energy-key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 4px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.energy-key-item { display: inline-flex; align-items: center; gap: 6px; }
+.energy-swatch { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--text); }
+.energy-swatch.is-alt { border-top: 2px dashed var(--muted); }
+.energy-swatch.is-sun { height: 6px; border: 0; border-radius: 1px; background: var(--sun); }
+
+.energy-table { margin-top: 2px; }
+.energy-table thead th { padding: 0 0 6px 8px; color: var(--muted); white-space: normal; vertical-align: bottom; }
+.energy-table thead th:first-child { padding-left: 0; }
+.energy-table td, .energy-table tbody th { padding: 5px 0 5px 8px; }
+.energy-table tbody th { padding-left: 0; color: var(--muted); font-size: var(--fs-small); line-height: 16px; white-space: nowrap; }
+.energy-table td { color: var(--text); font-size: var(--fs-body); line-height: 20px; }
+.energy-table .value { display: block; white-space: nowrap; }
+.energy-table .value-text { font-size: var(--fs-small); line-height: 16px; white-space: normal; }
+.energy-table .sub, .energy-table .change { display: block; color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+.energy-table .change { color: var(--muted); }
+.energy-table .change.is-worse { color: var(--negative); }
+.energy-table tr.is-lead .value { font-size: var(--fs-kpi); line-height: 28px; font-weight: 500; }
+.energy-table tr.is-lead th { color: var(--text); vertical-align: middle; }
+
+.energy-polar { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.energy-caveats { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+.energy-caveats li::before { content: "· "; }
+
+/* fix R6: a short line under a row name says what the hours mean; it may wrap, the name does not */
+.energy-table tbody th .th-sub { max-width: 124px; font-weight: 400; font-size: 11px; line-height: 14px; white-space: normal; }
+.energy-table tr.is-lead th .th-sub { color: var(--faint); }
+/* phase 5 (review 2 F7): the playhead on the battery chart */
+.energy-cursor { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.7; }
+.energy-cursor-dot { fill: var(--text); }
+.energy-cursor-label { fill: var(--text); font-size: 11px; font-variant-numeric: tabular-nums; }

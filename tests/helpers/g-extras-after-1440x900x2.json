@@ -1,0 +1,90 @@
+[
+  {
+    "mode": "earth",
+    "z": 1,
+    "tier": "2 km",
+    "file": "A-smooth-earth-window-z1-1440x900x2.png",
+    "errors": []
+  },
+  {
+    "mode": "earth",
+    "z": 2,
+    "error": "screenshot: timeout 20000 ms"
+  },
+  {
+    "mode": "change",
+    "z": 1,
+    "tier": "2 km",
+    "file": "A-smooth-change-window-z1-1440x900x2.png",
+    "errors": []
+  },
+  {
+    "mode": "change",
+    "z": 2,
+    "error": "screenshot: timeout 20000 ms"
+  },
+  {
+    "mode": "score",
+    "z": 1,
+    "tier": "2 km",
+    "file": "A-smooth-score-window-z1-1440x900x2.png",
+    "errors": []
+  },
+  {
+    "mode": "score",
+    "z": 2,
+    "tier": "1 km",
+    "file": "A-smooth-score-window-z2-1440x900x2.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1,
+    "off": false,
+    "playing": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-window-playing-z1-1440x900x2.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": false,
+    "playing": true,
+    "error": "screenshot: timeout 20000 ms"
+  },
+  {
+    "mode": "now",
+    "z": 8,
+    "off": false,
+    "playing": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-window-playing-z8-1440x900x2.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 1,
+    "off": true,
+    "playing": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-nowin-playing-z1-1440x900x2.png",
+    "errors": []
+  },
+  {
+    "mode": "now",
+    "z": 2,
+    "off": true,
+    "playing": true,
+    "error": "screenshot: timeout 20000 ms"
+  },
+  {
+    "mode": "now",
+    "z": 8,
+    "off": true,
+    "playing": true,
+    "tier": "2 km",
+    "file": "A-smooth-now-nowin-playing-z8-1440x900x2.png",
+    "errors": []
+  }
+]

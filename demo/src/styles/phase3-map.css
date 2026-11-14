@@ -1,0 +1,119 @@
+/* ---------- phase 3: map interaction (workflow D) ----------
+   Toolbar, shapes layer, hover card, region and route cards, filters and weights.
+   Existing tokens only; colour stays on data (--sun on sunlight, --negative on a worse figure). */
+
+/* ---------- toolbar ---------- */
+.map-tools { display: grid; gap: 6px; margin-bottom: 12px; }
+.tools-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
+.tools-row-sub { justify-content: flex-start; min-height: 0; }
+.tool-zoom { gap: 8px; }
+.tool-icon { min-width: 40px; padding: 0; font-size: var(--fs-section); }
+.seg-btn:disabled { color: var(--faint); cursor: not-allowed; }
+.seg-btn:disabled:active { scale: 1; }
+.zoom-level { min-width: 4ch; color: var(--muted); font-size: var(--fs-small); text-align: right; }
+.tool-clears { display: flex; flex-wrap: wrap; gap: 0 16px; }
+.tool-clear { margin-top: 0; }
+.tool-hint { color: var(--faint); font-size: var(--fs-small); line-height: 16px; }
+
+/* ---------- shapes layer (inside the map overlay SVG) ---------- */
+.shapes-art { pointer-events: none; }
+.region-shape { fill: var(--text); fill-opacity: 0.06; stroke: var(--text); stroke-width: 1.5; stroke-linejoin: round; }
+.region-b .region-shape { stroke-dasharray: 5 4; }            /* B dashed, as the alternative crosshair */
+.region.is-active .region-shape { stroke-width: 2; }
+.region-label { fill: var(--text); font-size: var(--fs-small); font-weight: 600; paint-order: stroke; stroke: var(--ground); stroke-width: 3px; stroke-linejoin: round; }
+.route-line { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.route-vertex { fill: var(--text); }
+.route-end { fill: var(--ground); stroke: var(--text); stroke-width: 1.5; }
+.draft-shape { fill: var(--text); fill-opacity: 0.04; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; stroke-linejoin: round; }
+.draft-route .draft-shape, .draft-polygon .draft-shape { fill: none; }
+.draft-close { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 2 3; }
+.draft-vertex { fill: var(--text); }
+.snap-ring { fill: none; stroke: var(--text); stroke-width: 1.5; }
+.profile-mark { fill: var(--text); stroke: var(--ground); stroke-width: 2; }
+.region-best { cursor: pointer; outline: none; }
+.region-best .mark-hit { fill: transparent; }
+.region-best .best-diamond { fill: var(--ground); stroke: var(--text); stroke-width: 1.5; }
+.region-best .best-slot { fill: var(--text); font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--ground); stroke-width: 3px; stroke-linejoin: round; }
+.region-best:hover .best-diamond { fill: var(--text); }
+.region-best:focus-visible .best-diamond { stroke-width: 3; }
+.region-best:focus-visible .mark-hit { stroke: var(--text); stroke-width: 2; }
+@media (pointer: coarse) { .region-best .mark-hit { r: 20px; } }   /* 40 px touch target */
+
+/* ---------- hover card ---------- */
+.hover-card {
+  position: absolute; left: 0; top: 0; z-index: 4; width: 212px; padding: 10px 12px; display: grid; gap: 2px;
+  border-radius: 8px; background: var(--raised); color: var(--text); font-size: var(--fs-small); line-height: 16px;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.5); /* taste-skill-ignore: the card floats over the map */
+}
+.hover-name { font-size: var(--fs-body); line-height: 20px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hover-coords { color: var(--muted); }
+.hover-rows { display: grid; gap: 2px; margin: 6px 0 0; }
+.hover-row { display: flex; justify-content: space-between; gap: 12px; }
+.hover-row dt { color: var(--muted); white-space: nowrap; }
+.hover-row dd { margin: 0; text-align: right; }
+
+/* ---------- region card ---------- */
+.region-body { display: grid; gap: 10px; }
+.region-table td { color: var(--text); white-space: nowrap; }
+.region-table tbody th { color: var(--muted); font-size: var(--fs-body); line-height: 20px; }
+.region-table .value { display: block; }
+.region-table .sub { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.region-diff { color: var(--muted); }
+.region-diff.is-worse { color: var(--negative); }
+.region-best-cell .text-btn { margin-top: 0; height: auto; min-height: 32px; }
+.region-note { color: var(--muted); text-wrap: pretty; }
+.region-foot { color: var(--faint); font-size: var(--fs-small); line-height: 16px; text-wrap: pretty; }
+.region-progress { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.region-progress-bar { position: relative; flex: none; width: 96px; height: 2px; background: var(--raised); overflow: hidden; }
+.region-progress-bar > span { position: absolute; inset: 0; background: var(--muted); transform-origin: left; transition: transform var(--t) var(--ease-out); }
+
+/* ---------- route card ---------- */
+.route-body { display: grid; gap: 14px; }
+.route-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.route-stat dt { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.route-stat dd { margin: 2px 0 0; font-size: var(--fs-kpi); line-height: 26px; font-weight: 500; }
+.route-chart svg { width: 100%; height: auto; }
+.route-svg { touch-action: pan-y; }
+.route-elev { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; }
+.route-fails rect { fill: var(--raised); }
+.route-band-track { fill: var(--raised); }
+.route-band-sun { fill: var(--sun); }
+.route-band-fail { fill: var(--muted); }
+.route-tip { top: 0; }
+.cursor[hidden], .route-svg [hidden] { display: none; }
+
+/* ---------- filters and weights ---------- */
+.filters, .weights { display: grid; gap: 8px; align-content: start; }
+.panel-title { font-size: var(--fs-body); line-height: 20px; font-weight: 600; }
+.filter { display: grid; gap: 0; }
+.filter-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.filter-head label { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.filter-value { color: var(--text); font-size: var(--fs-small); line-height: 16px; }
+.filter-control { display: flex; align-items: center; gap: 10px; }
+.filter-control .range { flex: 1; min-width: 0; }
+.filter-any { flex: none; }
+.filter-note { color: var(--faint); font-size: var(--fs-small); line-height: 16px; text-wrap: pretty; }
+.filter-why { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.filter-share { color: var(--text); }
+.weights-empty { color: var(--text); font-weight: 500; }
+.weights .text-btn { justify-self: start; margin-top: 0; }
+.range:disabled { cursor: not-allowed; }
+.range:disabled::-webkit-slider-thumb { background: var(--faint); }
+.range:disabled::-moz-range-thumb { background: var(--faint); }
+.is-disabled .filter-head label, .is-disabled .filter-value { color: var(--faint); }
+.range:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: var(--radius-control); }
+
+@media (max-width: 640px) {
+  .route-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tools-row { justify-content: flex-start; }
+  .map-tools .seg { overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .hover-card { width: 188px; }
+  .region-table td, .region-table tbody th { padding-left: 8px; white-space: normal; }
+  .region-table tbody th, .region-table thead th:first-child { padding-left: 0; }
+  .region-table .sub { overflow-wrap: anywhere; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .region-progress-bar > span { transition: none; }
+}
