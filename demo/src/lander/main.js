@@ -15,7 +15,7 @@ import { three, bindControls, createLabels, cameraStep, cameraKey } from './view
 import { buildEarthScene } from './view-earth.js';
 import { buildMoonScene } from './view-moon.js';
 import { buildSurfaceScene } from './view-surface.js';
-import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle } from './ui.js';
+import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep } from './ui.js';
 import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.js';
 import { attitudeState } from './model.js';
 import { createCloseup } from './closeup.js';
@@ -182,7 +182,8 @@ export function boot() {
       await new Promise((r) => setTimeout(r, 30));   // let the status paint before the mesh build
       if (token !== S.token) return;
       S.terrain = terr;
-      S.scenes.surface.setTerrain(terr.sample, { overlay: $('#slope').checked, fine: terr.fine, resAt: terr.resAt });
+      S.scenes.surface.setTerrain(terr.sample, { fine: terr.fine, resAt: terr.resAt });
+      S.scenes.surface.setStyle(S.terrStyle);
       S.terrainSample = terr.sample;
       S.liftAfterFrame = true;
       setTimeout(lift, 400);   // a background tab draws no frames; do not leave the screen up until the cap
@@ -299,11 +300,37 @@ export function boot() {
     for (const sc of Object.values(S.scenes)) sc.controls.state.user = false;
   });
   $('#play').addEventListener('click', () => togglePlay());
-  $('#speed').addEventListener('change', (e) => { S.speed = Number(e.target.value); });
+  // playback: 0.5–4× of the compressed timeline, or real time (one simulated second per second)
+  $('#speed').addEventListener('change', (e) => { S.speed = e.target.value === 'real' ? 'real' : Number(e.target.value); });
   $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replan(); });
   $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replan(); } });
   $('#find').addEventListener('click', () => { S.landingMs = pickLandingTime(eph, S.site, skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3); replan(); });
-  $('#slope').addEventListener('change', () => { if (S.terrain) S.scenes.surface.setTerrain(S.terrain.sample, { overlay: $('#slope').checked, fine: S.terrain.fine, resAt: S.terrain.resAt }); });
+  // terrain key (descent view): colour mode, contours, legend, contour interval and scale bar
+  S.terrStyle = { mode: 'plain', contours: true };
+  document.querySelectorAll('#terrkey [data-tmode]').forEach((b) => b.addEventListener('click', () => {
+    S.terrStyle.mode = b.dataset.tmode;
+    document.querySelectorAll('#terrkey [data-tmode]').forEach((x) => x.classList.toggle('on', x === b));
+    S.scenes?.surface.setStyle(S.terrStyle);
+    keyAt = 0;
+  }));
+  $('#tk-contours').addEventListener('change', (e) => { S.terrStyle.contours = e.target.checked; S.scenes?.surface.setStyle(S.terrStyle); keyAt = 0; });
+  let keyAt = 0, keyText = '';
+  function renderKey(now) {
+    const box = $('#terrkey');
+    box.hidden = S.scene !== 'surface';
+    if (box.hidden || now - keyAt < 200) return;
+    keyAt = now;
+    const k = S.scenes.surface.terrainKey();
+    const r = k.elevRange, fmtH = (x) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(Math.round(x))} m`;
+    const lim = k.slopeLimitDeg;
+    const legend = k.style.mode === 'height' && r ? { cls: 'height', lo: fmtH(r.min), mid: 'site 0', hi: fmtH(r.max), cap: 'height relative to the landing site' }
+      : k.style.mode === 'slope' ? { cls: 'slope', lo: '0°', mid: `${lim}° lander limit`, hi: `> ${lim}°`, cap: 'slope over the DEM grid; red is steeper than the lander can land on' } : null;
+    const res = S.terrain?.levelsKm?.length ? S.terrain.levelsKm.map((x) => `${Math.round(x * 1000)} m`).join(' / ') : '…';
+    const html = `${legend ? `<div class="tk-legend ${legend.cls}"><div class="tk-bar"></div><div class="tk-ticks"><span>${legend.lo}</span><span>${legend.mid}</span><span>${legend.hi}</span></div><div class="tk-cap">${legend.cap}</div></div>` : ''}
+      <div class="tk-foot"><span>${k.style.contours ? `Contours every ${k.intervalM} m, bold every ${k.majorM} m` : 'Contours off'}</span><span class="tk-scale"><i style="width:${Math.round(k.scale.px)}px"></i>${k.scale.label}</span></div>
+      <div class="tk-src">LOLA DEM ${res} around the site. Plume dust is illustrative, not modelled.</div>`;
+    if (html !== keyText) { keyText = html; $('#tk-body').innerHTML = html; }
+  }
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
     renderPanels();
@@ -347,7 +374,7 @@ export function boot() {
     last = now;
     if (!S.plan) return;
     if (S.playing) {
-      S.f = Math.min(1, S.f + (dt * S.speed) / PLAYBACK_S);
+      S.f = playbackStep(S.f, dt, S.speed, S.timeline, PLAYBACK_S);
       if (S.f >= 1) togglePlay();
     }
     const t = S.timeline.fToT(S.f);
@@ -362,6 +389,7 @@ export function boot() {
     renderer.render(sc.scene, sc.camera);
     if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);
+    renderKey(now);
     S.timeline.setT(t);
     if (now - hudAt > 90) {
       hudAt = now;

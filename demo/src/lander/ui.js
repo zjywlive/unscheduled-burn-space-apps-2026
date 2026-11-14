@@ -3,6 +3,13 @@ import { VEHICLE_DEFAULTS } from './vehicle.js';
 import { ATTITUDE_MODES } from './power.js';
 import { ACTIONS } from './contingency.js';
 
+// One playback step: the timeline fraction after dtS real seconds at `speed` (a multiple of the compressed
+// timeline, which runs the whole mission in playbackS seconds at 1×), or 'real' (one simulated second per second).
+export function playbackStep(f, dtS, speed, timeline, playbackS = 150) {
+  if (speed === 'real') return Math.min(1, timeline.tToF(timeline.fToT(f) + dtS * 1000));
+  return Math.min(1, f + (dtS * speed) / playbackS);
+}
+
 // share of the scrubber each phase gets (the real durations span hours to days)
 export const PHASE_WEIGHTS = { leo: 0.05, tli: 0.03, coast: 0.13, 'approach-moon': 0.06, loi: 0.05, llo: 0.09, doi: 0.03, 'descent-coast': 0.05, braking: 0.17, approach: 0.14, terminal: 0.10, landed: 0.10 };
 const SHORT = { leo: 'LEO', tli: 'TLI', coast: 'Coast', 'approach-moon': 'SOI', loi: 'LOI', llo: 'Lunar orbit', doi: 'DOI', 'descent-coast': 'To PDI', braking: 'Braking', approach: 'Approach', terminal: 'Terminal', landed: 'Landed' };

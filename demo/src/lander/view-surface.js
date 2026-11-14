@@ -30,32 +30,38 @@ export function gradedAxis(halfM, { fine = null, coarseM = 80, growth = 1.1, n =
 
 // Terrain grid around the site. sample(xKm, yKm) → metres | NaN on the polar map plane. fine: { stepM, halfM }
 // for a finer core around the site (terrain-local.fineCore); offsetM is added to every height (the scene levels
-// the terrain to the planned touchdown height). → { geometry, slope (deg per vertex), axis, N, siteHeightM }
-export function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HALF_M, n = 320, fine = null, slopeLimitDeg = 10, overlay = false, offsetM = 0 } = {}) {
+// the terrain to the planned touchdown height). Per vertex it also carries the DEM height relative to the landing
+// site (aElev, m; without the curvature drop, so contours follow the map heights) and the slope (aSlope, deg).
+// → { geometry, slope, elev, axis, N, siteHeightM, elevRange (2nd–98th percentile within ±coreM of the site, so a
+//   deep crater at the edge does not wash out the colours near the target) }
+export function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HALF_M, n = 320, fine = null, offsetM = 0, coreM = null } = {}) {
   const T = three();
   let east = unit(cross([0, 0, 1], siteF));
   if (norm(east) < 1e-9) east = [0, 1, 0];
   const north = cross(siteF, east);
   const axis = gradedAxis(halfM, { fine, n });
   const N = axis.length;
-  const pos = new Float32Array(N * N * 3), col = new Float32Array(N * N * 3), up = new Float32Array(N * N);
-  const R = R_MOON;
+  const pos = new Float32Array(N * N * 3), up = new Float32Array(N * N), elev = new Float32Array(N * N);
+  const R = R_MOON, siteH = (siteRadiusKm - R) * 1000;
   const base = scale(siteF, siteRadiusKm);
+  const core = coreM ?? 1500;
+  const near = [];
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const e = axis[i], nn = axis[N - 1 - j];
     const d = unit(add(add(base, scale(east, e / 1000)), scale(north, nn / 1000)));
     const lat = Math.asin(d[2]) / RAD, lon = Math.atan2(d[1], d[0]) / RAD;
     const [x, y] = toXY(lat, lon);
     let h = sample(x, y);
-    h = Number.isFinite(h) ? h + offsetM : (siteRadiusKm - R) * 1000;
+    h = Number.isFinite(h) ? h + offsetM : siteH;
     const p = enuAt(siteF, siteRadiusKm, scale(d, R + h / 1000));
     const k = j * N + i;
     pos[k * 3] = p[0]; pos[k * 3 + 1] = p[2]; pos[k * 3 + 2] = -p[1];
     up[k] = p[2];
+    elev[k] = h - siteH;
+    if (Math.abs(e) <= core && Math.abs(nn) <= core) near.push(elev[k]);
   }
   // slope per vertex from the grid neighbours (central differences on the local up coordinate, real spacing)
   const slope = new Float32Array(N * N);
-  const g = 0.62;
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const k = j * N + i;
     const il = Math.max(0, i - 1), ir = Math.min(N - 1, i + 1), jt = Math.max(0, j - 1), jb = Math.min(N - 1, j + 1);
@@ -63,8 +69,6 @@ export function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HAL
     const gy = (up[jt * N + i] - up[jb * N + i]) / (axis[N - 1 - jt] - axis[N - 1 - jb]);
     const s = Math.atan(Math.hypot(gx, gy)) / RAD;
     slope[k] = s;
-    const bad = overlay && s > slopeLimitDeg;
-    col[k * 3] = bad ? 0.85 : g; col[k * 3 + 1] = bad ? 0.32 : g; col[k * 3 + 2] = bad ? 0.3 : g * 0.98;
   }
   const cells = (N - 1) * (N - 1);
   const idx = N * N > 65535 ? new Uint32Array(cells * 6) : new Uint16Array(cells * 6);
@@ -75,11 +79,74 @@ export function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HAL
   }
   const geo = new T.BufferGeometry();
   geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new T.BufferAttribute(col, 3));
+  geo.setAttribute('aElev', new T.BufferAttribute(elev, 1));
+  geo.setAttribute('aSlope', new T.BufferAttribute(slope, 1));
   geo.setIndex(new T.BufferAttribute(idx, 1));
   geo.computeVertexNormals();
   const mid = (N - 1) / 2;
-  return { geometry: geo, slope, axis, N, siteHeightM: up[mid * N + mid] };
+  const sorted = Float32Array.from(near).sort();
+  const pct = (q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))] : 0);
+  return { geometry: geo, slope, elev, axis, N, siteHeightM: up[mid * N + mid], elevRange: { min: pct(0.02), max: pct(0.98) } };
+}
+
+// Contour interval for a ground scale (metres per pixel): about one line per 14 px on a 20° slope, rounded to
+// 1, 2, 5 × 10ⁿ m, at least 1 m (as the globe does).
+export function contourInterval(mPerPx) {
+  const want = Math.max(1, mPerPx * 14 * 0.36), p = Math.pow(10, Math.floor(Math.log10(want)));
+  return [1, 2, 5, 10].map((m) => m * p).find((v) => v >= want - 1e-9) ?? 10 * p;
+}
+// Scale bar: the longest 1, 2, 5 × 10ⁿ m length that fits in maxPx. → { m, px, label }
+export function scaleBar(mPerPx, maxPx = 110) {
+  const want = mPerPx * maxPx, p = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, want))));
+  const m = [5, 2, 1].map((k) => k * p).find((v) => v <= want) ?? p;
+  return { m, px: m / mPerPx, label: m >= 1000 ? `${m / 1000} km` : `${m} m` };
+}
+
+// Terrain material: lit like the rest of the scene; colour by mode (0 plain, 1 height relative to the site,
+// 2 slope with everything over the lander's limit in red) and contour lines from the DEM height of each pixel,
+// every uInterval metres, every fifth stronger (fwidth-based, the same approach as the globe).
+export function terrainMaterial(uniforms) {
+  const T = three();
+  const m = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aElev;\nattribute float aSlope;\nvarying float vElev;\nvarying float vSlope;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvElev = aElev; vSlope = aSlope;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying float vElev; varying float vSlope;
+uniform float uMode, uSlopeLimit, uHmin, uHmax, uContours, uInterval; uniform vec3 uLine;
+// colours are given as linear values (as the vertex colours were), brighter than sRGB-converted ones
+vec3 lsnLin(vec3 c) { return c; }
+vec3 lsnBase = vec3(0.0);
+vec3 lsnRamp(float t, vec3 a, vec3 b, vec3 c, vec3 d, vec3 e) {
+  t = clamp(t, 0.0, 1.0) * 4.0;
+  return t < 1.0 ? mix(a, b, t) : t < 2.0 ? mix(b, c, t - 1.0) : t < 3.0 ? mix(c, d, t - 2.0) : mix(d, e, t - 3.0);
+}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  if (uMode > 1.5) {
+    float t = vSlope / max(1.0, uSlopeLimit);
+    vec3 c = t < 0.6 ? mix(vec3(0.37, 0.50, 0.39), vec3(0.79, 0.71, 0.35), t / 0.6) : mix(vec3(0.79, 0.71, 0.35), vec3(0.88, 0.54, 0.24), (t - 0.6) / 0.4);
+    diffuseColor.rgb = lsnLin(t > 1.0 ? vec3(0.90, 0.28, 0.30) : c);
+  } else if (uMode > 0.5) {
+    diffuseColor.rgb = lsnLin(lsnRamp((vElev - uHmin) / max(1.0, uHmax - uHmin), vec3(0.14, 0.20, 0.29), vec3(0.24, 0.43, 0.48), vec3(0.50, 0.60, 0.42), vec3(0.78, 0.69, 0.48), vec3(0.94, 0.91, 0.84)));
+  } else {
+    diffuseColor.rgb = lsnLin(vec3(0.62, 0.62, 0.61));
+  }
+  lsnBase = diffuseColor.rgb;`)
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+  // map colours stay readable in the long polar shadows: part of the colour unlit
+  if (uMode > 0.5) gl_FragColor.rgb = mix(gl_FragColor.rgb, lsnBase * 0.8, 0.35);
+  if (uContours > 0.5) {
+    float q = vElev / uInterval, w = fwidth(q);
+    float d = abs(fract(q + 0.5) - 0.5) / max(w, 1e-5);
+    float major = abs(fract(q / 5.0 + 0.5) - 0.5) * 5.0 / max(w, 1e-5);
+    float line = (1.0 - smoothstep(0.3, 1.1, d)) * 0.45 + (1.0 - smoothstep(0.6, 1.8, major)) * 0.45;
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, uLine, clamp(line, 0.0, 0.85) * step(w, 0.45));
+  }`);
+  };
+  return m;
 }
 
 
@@ -117,26 +184,64 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
   // The plan's touchdown height comes from the 480 m DEM; the fine terrain at the site differs by metres to tens
   // of metres. The whole patch is shifted by that difference so the lander touches its own ground (the shape is
   // unchanged; only the local reference height moves).
-  function setTerrain(sample, { overlay = false, fine = null, resAt = null } = {}) {
+  // terrain look: colour mode (plain / height / slope), contour lines whose interval follows the zoom
+  const style = { mode: 'plain', contours: true };
+  const tU = {
+    uMode: { value: 0 }, uSlopeLimit: { value: plan.vehicle.touchdown.maxSlopeDeg }, uHmin: { value: -50 }, uHmax: { value: 50 },
+    uContours: { value: 1 }, uInterval: { value: 10 }, uLine: { value: new T.Color(1.0, 0.86, 0.45) },
+  };
+  const terrainMat = terrainMaterial(tU);
+  function setStyle({ mode = style.mode, contours = style.contours } = {}) {
+    style.mode = mode; style.contours = !!contours;
+    tU.uMode.value = mode === 'slope' ? 2 : mode === 'height' ? 1 : 0;
+    tU.uContours.value = style.contours ? 1 : 0;
+    // warm lines on the plain grey, dark lines over the colour ramps
+    if (mode === 'plain') tU.uLine.value.setRGB(1.0, 0.86, 0.45); else tU.uLine.value.setRGB(0.04, 0.04, 0.05);
+  }
+  function setTerrain(sample, { fine = null, resAt = null } = {}) {
     if (terrain) { scene.remove(terrain); terrain.geometry.dispose(); }
     groundSample = sample; groundRes = resAt;
     const [sx, sy] = toXY(plan.site.latDeg, plan.site.lonDeg);
     const hSite = sample(sx, sy);
     offsetM = Number.isFinite(hSite) ? plan.siteHeightKm * 1000 - hSite : 0;
-    terrainInfo = terrainGeometry(plan.siteFixed, siteRadiusKm, sample, { slopeLimitDeg: plan.vehicle.touchdown.maxSlopeDeg, overlay, fine, offsetM });
+    terrainInfo = terrainGeometry(plan.siteFixed, siteRadiusKm, sample, { fine, offsetM });
     terrainInfo.offsetM = offsetM;
-    terrain = new T.Mesh(terrainInfo.geometry, new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }));
+    tU.uHmin.value = terrainInfo.elevRange.min; tU.uHmax.value = terrainInfo.elevRange.max;
+    terrain = new T.Mesh(terrainInfo.geometry, terrainMat);
     terrain.castShadow = true;
     terrain.receiveShadow = true;
     scene.add(terrain);
     placeholder.visible = false;
+    drapeRing();
+  }
+  // a point on the drawn terrain at local east/north metres (the same construction as the mesh vertices)
+  function groundPoint(eM, nM, liftM = 0) {
+    const d = unit(add(add(scale(plan.siteFixed, siteRadiusKm), scale(east0, eM / 1000)), scale(north0, nM / 1000)));
+    let h = groundSample ? groundSample(...toXY(Math.asin(d[2]) / RAD, Math.atan2(d[1], d[0]) / RAD)) : NaN;
+    h = Number.isFinite(h) ? h + offsetM : plan.siteHeightKm * 1000;
+    return enu3(enuAt(plan.siteFixed, siteRadiusKm, scale(d, R_MOON + (h + liftM) / 1000)));
   }
 
-  // target ring (divert reach) and site marker
+  // target ring (divert reach, assumed 150 m), draped on the terrain as a ribbon once the DEM is in
   const ringR = 150;
-  const ring = new T.Mesh(new T.RingGeometry(ringR - 3, ringR, 96), new T.MeshBasicMaterial({ color: 0xf2b33d, transparent: true, opacity: 0.7, side: T.DoubleSide, depthTest: false }));
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 1;
+  const ringMat = new T.MeshBasicMaterial({ color: 0xf2b33d, transparent: true, opacity: 0.85, side: T.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const ring = new T.Mesh(new T.RingGeometry(ringR - 2, ringR + 2, 128).rotateX(-Math.PI / 2).translate(0, 1, 0), ringMat);
+  function drapeRing() {
+    const n = 160, pos = new Float32Array((n + 1) * 2 * 3), idx = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      for (const [k, r] of [[0, ringR - 1], [1, ringR + 1]]) {
+        const p = groundPoint(r * Math.sin(a), r * Math.cos(a), 0.4);
+        pos.set([p.x, p.y, p.z], (i * 2 + k) * 3);
+      }
+      if (i < n) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    ring.geometry.dispose();
+    ring.geometry = g;
+  }
   const pin = new T.Mesh(new T.CylinderGeometry(0.4, 0.4, 40, 8), new T.MeshBasicMaterial({ color: 0xf2b33d }));
   pin.position.y = 20;
   scene.add(ring, pin);
@@ -162,8 +267,33 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
   labels.add(plan.site.name, 'site', () => pin.position.clone().setY(42));
   labels.add('Earth', 'body earth', () => earthDot.visible ? earthDot.position : null);
   labels.add('Sun', 'body sun', () => sunDot.visible ? sunDot.position : null);
-  labels.add('High gate', 'event', () => { const e = plan.descent.events.find((x) => x.name === 'high-gate'); return e ? enu3(toEnu(sampleAt(e.tS).r)) : null; });
-  labels.add('Low gate', 'event', () => { const e = plan.descent.events.find((x) => x.name === 'low-gate'); return e ? enu3(toEnu(sampleAt(e.tS).r)) : null; });
+  // phases along the simulated track
+  const evAt = (name) => { const e = plan.descent.events.find((x) => x.name === name); return e ? enu3(toEnu(sampleAt(e.tS).r)) : null; };
+  labels.add('High gate · approach, pitch-over', 'event', () => evAt('high-gate'));
+  labels.add('Low gate · terminal descent', 'event', () => evAt('low-gate'));
+  const contactLbl = labels.add('Contact · engine off', 'craft', () => (contactLbl.el.style.opacity !== '0' && lander.visible ? lander.position.clone().setY(lander.position.y + 6 * lander.scale.y) : null));
+
+  // plume–surface cue (illustrative, not a dust model): a sheet of dust blown out under the engine below ~25 m,
+  // and an expanding ring at contact
+  const DUST_N = 520;
+  const dustPos = new Float32Array(DUST_N * 3), dustSeed = new Float32Array(DUST_N * 3);
+  for (let i = 0; i < DUST_N; i++) dustSeed.set([Math.random() * Math.PI * 2, 6 + Math.random() * 16, Math.random()], i * 3);
+  const dustGeo = new T.BufferGeometry();
+  dustGeo.setAttribute('position', new T.BufferAttribute(dustPos, 3));
+  // soft round sprite (a radial gradient) so the grains read as dust, not squares
+  let dustMap = null;
+  if (typeof document !== 'undefined') {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 32, 32);
+    dustMap = new T.CanvasTexture(cv);
+  }
+  const dust = new T.Points(dustGeo, new T.PointsMaterial({ color: 0xd8d1c4, size: 0.32, map: dustMap, transparent: true, opacity: 0, depthWrite: false }));
+  dust.frustumCulled = false;
+  const contactRing = new T.Mesh(new T.RingGeometry(0.95, 1, 96).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xe8e2d6, transparent: true, opacity: 0, side: T.DoubleSide, depthWrite: false, depthTest: false }));
+  scene.add(dust, contactRing);
+  let dustClock = 0;
   const farLbl = labels.add('', 'note', () => (farLbl.el.textContent ? new T.Vector3(0, 90, 0) : null));
   const craftLbl = labels.add('Lander', 'craft', () => (lander.visible ? lander.position.clone().setY(lander.position.y + 4 * lander.scale.y) : null));
 
@@ -227,6 +357,44 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
     } else {
       controls.followView(new T.Vector3(0, 0, 0), 9000, new T.Vector3(0.5, 0.6, 0.6), { tau: 0.32, dt, key: 'site' });
     }
+    // contour interval and scale from the ground scale at the camera target
+    mPerPx = (2 * camera.position.distanceTo(controls.state.target) * Math.tan((camera.fov * RAD) / 2)) / Math.max(1, (typeof innerHeight === 'number' ? innerHeight : 800));
+    tU.uInterval.value = contourInterval(mPerPx);
+    // dust sheet under the engine near the ground, and the contact ring
+    dustClock += dt;
+    const g = !far && st.descent ? groundAt(st) : null;
+    const agl = g ? g.aglM : (st.phase === 'landed' ? 0 : Infinity);
+    const sinceTd = (st.tMs - plan.times.landingMs) / 1000;
+    // after contact the engine is off: the dust settles over about two seconds (no air, it falls ballistically)
+    const th = st.phase === 'landed' ? Math.max(0, 0.4 * (1 - sinceTd / 2)) : (st.descent?.throttle ?? 0);
+    const k = Math.max(0, Math.min(1, (25 - agl) / 20)) * Math.min(1, th * 2.5);
+    dust.material.opacity = 0.6 * k;
+    dust.visible = k > 0.01;
+    if (dust.visible) {
+      const c = groundPoint(e[0], e[1], 0.3);
+      for (let i = 0; i < DUST_N; i++) {
+        const a = dustSeed[i * 3], v = dustSeed[i * 3 + 1], ph = (dustSeed[i * 3 + 2] + dustClock * 0.9) % 1;
+        // blown out from under the bell along the ground, thinning with distance (grains spend less time far out)
+        const r = 1.2 + v * Math.pow(ph, 1.6) * 1.4;
+        dustPos[i * 3] = c.x + Math.sin(a) * r; dustPos[i * 3 + 1] = c.y + 0.05 + ph * (1 - ph) * 1.2 * k; dustPos[i * 3 + 2] = c.z + Math.cos(a) * r;
+      }
+      dustGeo.attributes.position.needsUpdate = true;
+    }
+    const contact = st.phase === 'landed' && sinceTd >= 0 && sinceTd < 6;
+    contactRing.visible = contact && lander.visible;
+    if (contactRing.visible) {
+      const c = groundPoint(e[0], e[1], 0.25);
+      contactRing.position.copy(c);
+      contactRing.scale.setScalar(3 + sinceTd * 5);
+      contactRing.material.opacity = 0.55 * (1 - sinceTd / 6);
+    }
+    contactLbl.el.style.opacity = contact ? String(Math.min(1, 2 * (1 - sinceTd / 6))) : '0';
+  }
+  let mPerPx = 1;
+  // what the terrain key shows: interval, scale bar, height range, the finest resolution in view
+  function terrainKey() {
+    const iv = tU.uInterval.value;
+    return { style: { ...style }, intervalM: iv, majorM: iv * 5, scale: scaleBar(mPerPx), elevRange: terrainInfo?.elevRange ?? null, slopeLimitDeg: tU.uSlopeLimit.value, ready: !!terrainInfo };
   }
   let branchLbl = null;
   function setBranches(list, activeId) {
@@ -274,5 +442,5 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
     const res = groundRes?.(x, y);
     return { aglM: (norm(f) - R_MOON) * 1000 - (h + offsetM), resM: res ? res * 1000 : null };
   }
-  return { scene, camera, controls, update, setTerrain, setBranches, setSpot, toEnu, groundAt, name: 'surface', terrainInfo: () => terrainInfo };
+  return { scene, camera, controls, update, setTerrain, setStyle, terrainKey, setBranches, setSpot, toEnu, groundAt, name: 'surface', terrainInfo: () => terrainInfo };
 }
