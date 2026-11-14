@@ -47,6 +47,8 @@ export function boot() {
   renderer.setClearColor(0x000000, 1);
   bindControls(canvas, () => S.scenes?.[S.scene].controls, () => { $('#auto').classList.remove('on'); });
 
+  // narrow screens start with the details panel closed so the 3D view is visible (the handle reopens it)
+  if (window.innerWidth < 760) { $('#side').classList.add('closed'); $('#side-toggle').textContent = 'Details ‹'; }
   // site picker
   $('#site').innerHTML = sites.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
   $('#site').value = S.site.id;
