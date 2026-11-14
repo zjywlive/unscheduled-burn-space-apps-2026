@@ -1107,6 +1107,22 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
   function rebuildAll() { for (const [, e] of cache) e.stale = true; dirty = true; }
 
   // ---- camera ----
+  // Highest terrain radius (km) under a point and at 8 points on a ring of ringKm around it.
+  function groundAround(p, ringKm) {
+    const U = p.clone().normalize();
+    const T1 = new THREE.Vector3(0, 1, 0).cross(U); if (T1.lengthSq() < 1e-8) T1.set(1, 0, 0).cross(U);
+    T1.normalize();
+    const T2 = U.clone().cross(T1).normalize();
+    let best = -Infinity;
+    for (let k = -1; k < 8; k++) {
+      const q = U.clone().multiplyScalar(MOON_R_KM);
+      if (k >= 0) { const a = (k / 8) * 2 * Math.PI; q.addScaledVector(T1, Math.cos(a) * ringKm).addScaledVector(T2, Math.sin(a) * ringKm); }
+      const { latDeg, lonDeg } = toLatLon(q.x, q.y, q.z);
+      const r = surfaceR(latDeg, lonDeg);
+      if (r > best) best = r;
+    }
+    return best;
+  }
   function surfaceR(lat, lon) { return MOON_R_KM + terrain.heightAt(lat, lon) * state.exaggeration / 1000; }
   function placeCamera() {
     const T = unit(cam.lat, cam.lon), r = surfaceR(cam.lat, cam.lon);
@@ -1119,6 +1135,12 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     camera.position.copy(tgt).addScaledVector(back, cam.dist);
     camera.up.copy(U.clone().multiplyScalar(Math.sin(t)).add(f.clone().multiplyScalar(Math.cos(t))));
     camera.lookAt(tgt);
+    // keep the camera above the ground: the terrain under it and in a ring around it (so a ridge beside it
+    // cannot swallow the near plane), plus a margin that grows with the distance to the target
+    const ground = groundAround(camera.position, Math.max(0.08, cam.dist * 0.12));
+    const minR = ground + Math.max(0.03, cam.dist * 0.04);
+    const camRad = camera.position.length();
+    if (camRad < minR) { camera.position.multiplyScalar(minR / camRad); camera.lookAt(tgt); }
     camera.updateMatrixWorld();   // select() culls with this frame's matrices, not the last render's
     camera.near = Math.max(0.002, cam.dist * 0.002);
     camera.far = cam.dist + 3 * MOON_R_KM;
