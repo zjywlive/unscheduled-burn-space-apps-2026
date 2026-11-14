@@ -15,6 +15,7 @@
 //   labels: boolean,                     route names next to the lines (default true)
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
+//   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
 //                                        default) reads the site names, dots and feature names on the page
 // }
@@ -105,7 +106,7 @@ export function placeLabel(points, toPx, name, frac, taken, width = Infinity, he
   return null;
 }
 
-export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null } = {}) {
+export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
@@ -154,6 +155,18 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
       taken.push(at.box);
       gEl.append(s('text', { class: `rp-label${r.id === selected ? ' is-selected' : ''}`, x: f1(at.x), y: f1(at.y + 4), 'text-anchor': at.anchor }, name));
     }
+  }
+  if (drive) {
+    const g = s('g', { class: 'rp-drive' });
+    for (const st of drive.stops ?? []) {
+      const [x, y] = toPx(st.x, st.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) g.append(s('g', { class: 'rp-stop', transform: `translate(${f1(x)} ${f1(y)})` }, s('circle', { r: 7 }), s('text', { y: 3.5, 'text-anchor': 'middle' }, 'P')));
+    }
+    if (drive.emptyAt) {
+      const [x, y] = toPx(drive.emptyAt.x, drive.emptyAt.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) g.append(s('g', { class: 'rp-empty', transform: `translate(${f1(x)} ${f1(y)})` }, s('circle', { r: 8 }), s('text', { y: 4, 'text-anchor': 'middle' }, '!')));
+    }
+    gEl.append(g);
   }
   if (waypoints && waypoints.length) {
     const g = s('g', { class: 'rp-waypoints' });

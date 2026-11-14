@@ -53,13 +53,14 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 |---|---|---|---|---|---|
 | Panel attitude | track / fixed / flat | assumed (track) | ✅ | `energy.js` `ENERGY_DEFAULTS` | |
 | Panel power ÷ average load | ratio | assumed (2) | ✅ | `energy.js` | |
-| **Rover power consumption (absolute)** | W | input | 🟡 | `energy.js` | Only modelled as a ratio today; needs W for driving, idle and sleep, plus speed (§1) |
-| **Solar array generation** | W | derived (panel area × efficiency × incidence × sunlit) | 🟡 | `energy.js` `powerSeries` | Relative today; needs panel W rating |
-| Battery capacity | h of load (→ Wh) | assumed (24 h) | ✅ | `energy.js` | |
+| **Rover power consumption (absolute)** | W | assumed (load 120 W + drive 180 W) | ✅ | `route-energy.js` `drivePowerW` | card: Load; drive power in POWER_DEFAULTS |
+| **Solar array generation** | W | derived: rated W × cos(Sun elevation) (vertical panel turned to the Sun) × Sun above the local skyline | ✅ | `route-energy.js` `panelW`, `skyFromGrid` | card: Panel (assumed 450 W); skyline from the 2 km / 1 km grid |
+| Battery capacity | Wh | assumed (4000 Wh) | ✅ | `route-energy.js` | card: Battery; the site energy card still uses hours of load |
 | Sleep load | fraction | assumed (0.1) | ✅ | `energy.js` | |
 | Initial charge | fraction | assumed (1) | ✅ | `energy.js` | |
-| Minimum battery margin | % | input | ⬜ | | the planner should refuse routes below it |
-| Driving energy vs slope | Wh/km | derived (mass × g × Δh + rolling) | ⬜ | | climbing costs energy, so link §1 to §3 |
+| Minimum battery margin | % | assumed (20 % reserve, resume at 45 %) | ✅ | `route-energy.js` `simulateDrive` | below the reserve the rover parks to recharge; empty battery is reported with place and time |
+| Driving energy vs slope | W | derived: m·g·v·sin θ ÷ efficiency (0.5) on top of the flat drive power | ✅ | `route-energy.js` `drivePowerW` | card: Mass (assumed 450 kg); no regeneration downhill |
+| Departure time | UTC | input (timeline time) or found | ✅ | `route-energy.js` `scanDepartures` | "Find good departure times": every 6 h for 60 days from landing |
 | RTG option | W | assumed | ⬜ | | [JPL-SS] notes RTGs as the option for a static station |
 
 ## 4. Communications

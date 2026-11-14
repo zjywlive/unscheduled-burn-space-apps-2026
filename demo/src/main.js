@@ -27,6 +27,7 @@ import { PRESETS as RELAY_PRESETS } from './relay.js';
 import { createRoutePlanCard } from './ui/routeplan.js';
 import { createShapeEntry } from './ui/shapeentry.js';
 import { planRoutes, sunFromJobs, simplify } from './route-plan.js';
+import { simulateDrive, skyFromGrid, scanDepartures } from './route-energy.js';
 import { renderPanorama, updatePanoramaCursor } from './charts/panorama.js';
 import { renderElevation, updateElevationCursor } from './charts/elevation.js';
 import { renderCompare } from './ui/compare.js';
@@ -373,7 +374,18 @@ function start() {
   const routePlanCard = mapView ? createRoutePlanCard({}, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
-    onPlan: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility }; runPlan(points, maxSlopeDeg).catch(() => {}); },
+    onPlan: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility, departMs: null }; routePlanCard.update({ departures: null }); runPlan(points, maxSlopeDeg).catch(() => {}); },
+    onPower: (power) => { rp = { ...rp, power }; routePlanCard.update({ departures: null }); updateEnergy(); },
+    onDepartNow: () => { rp = { ...rp, departMs: timelineNow() }; updateEnergy(); },
+    onFindDepartures: () => {
+      const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+      const g = plan?.fine?.grid ?? coarse?.grid;
+      if (!r?.profile || !rp.plan.mobility || !g) return;
+      const fromMs = Math.max(eph.startMs, state.landingMs ?? timelineNow());
+      const scan = scanDepartures(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, sky: skyFromGrid(g, eph, bodyAzEl, fromXY), fromMs, toMs: Math.min(eph.endMs, fromMs + 60 * 86400e3) });
+      routePlanCard.update({ departures: { routeId: r.id, scan } });
+    },
+    onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
     onCancel: () => rpAbort?.abort(),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
@@ -414,6 +426,20 @@ function start() {
       if (rpAbort === ac) rpAbort = null;
     }
   }
+  // phase 3: the selected route's drive, run forward from the departure (the timeline time when it was planned)
+  function timelineNow() {
+    try { return timeline.getState().nowMs; } catch { return state.cursorMs ?? state.landingMs; }
+  }
+  function updateEnergy() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+    const g = plan?.fine?.grid ?? coarse?.grid;
+    if (!r?.profile || !rp.plan.mobility || !g) { rp = { ...rp, energy: null }; routePlanCard?.update({ energy: null }); return; }
+    const departMs = rp.departMs ?? timelineNow();
+    const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
+    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id } };
+    routePlanCard?.update({ energy: rp.energy });
+    redrawRoutes();
+  }
   function pickPlanned(id) {
     const r = rp.plan?.routes.find((x) => x.id === id);
     if (!r?.points?.length) return;
@@ -422,6 +448,7 @@ function start() {
     plannedRoute = { id, label: r.label, maxSlopeDeg: r.maxSlopeDeg, baselineKm: rp.plan.baselineKm, lengthKm: r.lengthKm };
     api.setRoute(simplify(r.points, 0.25));
     persistRoutePlan();
+    updateEnergy();
   }
   // fix L3: ease the map to the candidates (all of them after planning, the picked one on a click), in the
   // space between the open panels and bars; the panels stay as they are

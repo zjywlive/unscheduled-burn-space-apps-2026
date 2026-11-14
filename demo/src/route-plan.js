@@ -32,7 +32,9 @@
 //   search corridors the rover can drive into from the start but from which it can reach neither the end nor
 //   the start: dips and valleys it would not climb out of; patches under TRAP_MIN_NODES grid nodes are left out), and per route climbMaxDeg, descentMaxDeg,
 //   crossMaxDeg, oneWayKm, oneWay: [[[x, y], [x, y]], …] (stretches descending more steeply than the climb
-//   limit: the rover could not come back up them), hours (drive time at speedKmh, slower on slopes)
+//   limit: the rover could not come back up them), hours (drive time at speedKmh, slower on slopes),
+//   profile: { x, y, km, pitch } (Float32Arrays, one entry per quarter-node sample in driving order: map km,
+//   ground km of the sample, grade as tan, + uphill) for route-energy.js
 // }
 // Statistics come from the unsimplified path, sampled every quarter node spacing.
 import { toXY } from './terrain.js';
@@ -505,6 +507,7 @@ function legStats(cor, line, fixed, subst, isPsr, mob = null) {
   let len = 0, maxS = 0, slopeSum = 0, sunLen = 0, sunSum = 0, psrKm = 0;
   let climb = 0, descent = 0, cross = 0, hours = 0, oneWayKm = 0, run = null;
   const oneWay = [], tc = mob ? Math.tan(mob.climbDeg / DEG) : 0;
+  const prof = mob ? { x: [], y: [], km: [], pitch: [] } : null;   // phase 3: the drive profile, one entry per sample
   for (let k = 0; k + 1 < line.length; k++) {
     const [ax, ay] = line[k], [bx, by] = line[k + 1];
     const L = Math.hypot(bx - ax, by - ay);
@@ -523,6 +526,7 @@ function legStats(cor, line, fixed, subst, isPsr, mob = null) {
         if (-pitch > descent) descent = -pitch;
         if (across > cross) cross = across;
         hours += km / (mob.speedKmh * speedFactor(pitch, mob));
+        prof.x.push(x); prof.y.push(y); prof.km.push(km); prof.pitch.push(pitch);
         const h = (L / steps) / 2, p0 = [x - ux * h, y - uy * h], p1 = [x + ux * h, y + uy * h];
         if (-pitch > tc) {
           oneWayKm += km;
@@ -537,7 +541,7 @@ function legStats(cor, line, fixed, subst, isPsr, mob = null) {
     }
   }
   const deg = (v) => Math.atan(v) * DEG;
-  return { len, maxS, slopeSum, sunLen, sunSum, psrKm, ...(mob ? { climb: deg(climb), descent: deg(descent), cross: deg(cross), hours, oneWayKm, oneWay } : {}) };
+  return { len, maxS, slopeSum, sunLen, sunSum, psrKm, ...(mob ? { climb: deg(climb), descent: deg(descent), cross: deg(cross), hours, oneWayKm, oneWay, prof } : {}) };
 }
 
 // Douglas–Peucker, tolerance in km.
@@ -666,7 +670,7 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
   }
 
   // the candidates, leg by leg
-  const acc = Object.fromEntries(specs.map((p) => [p.key, { line: [], len: 0, maxS: 0, slopeSum: 0, sunLen: 0, sunSum: 0, psrKm: 0, climb: 0, descent: 0, cross: 0, hours: 0, oneWayKm: 0, oneWay: [] }]));
+  const acc = Object.fromEntries(specs.map((p) => [p.key, { line: [], len: 0, maxS: 0, slopeSum: 0, sunLen: 0, sunSum: 0, psrKm: 0, climb: 0, descent: 0, cross: 0, hours: 0, oneWayKm: 0, oneWay: [], prof: { x: [], y: [], km: [], pitch: [] } }]));
   for (const L of legData) {
     const { cor, a, b, sd, gd, need } = L;
     const blurred = {};
@@ -696,6 +700,7 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
       if (mob) {
         t.climb = Math.max(t.climb, st.climb); t.descent = Math.max(t.descent, st.descent); t.cross = Math.max(t.cross, st.cross);
         t.hours += st.hours; t.oneWayKm += st.oneWayKm; t.oneWay.push(...st.oneWay);
+        for (const k of ['x', 'y', 'km', 'pitch']) for (const v of st.prof[k]) t.prof[k].push(v);
       }
       await advance();
     }
@@ -708,7 +713,8 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
     sunShare: t.sunLen > 0 ? t.sunSum / t.sunLen : null,
     sunKnown: t.len > 0 ? t.sunLen / t.len : 0,
     psrKm: isPsr ? t.psrKm : null,
-    ...(mob ? { climbMaxDeg: t.climb, descentMaxDeg: t.descent, crossMaxDeg: t.cross, hours: t.hours, oneWayKm: t.oneWayKm, oneWay: t.oneWay } : {}),
+    ...(mob ? { climbMaxDeg: t.climb, descentMaxDeg: t.descent, crossMaxDeg: t.cross, hours: t.hours, oneWayKm: t.oneWayKm, oneWay: t.oneWay,
+      profile: { x: Float32Array.from(t.prof.x), y: Float32Array.from(t.prof.y), km: Float32Array.from(t.prof.km), pitch: Float32Array.from(t.prof.pitch) } } : {}),
   });
   // the searched routes: short, flat and the sunniest of the sunny weights (ties: the lower weight)
   const raw = {};

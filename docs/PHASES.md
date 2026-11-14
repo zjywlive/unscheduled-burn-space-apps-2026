@@ -84,10 +84,27 @@ speed, power in watts, mass.
 - Known limits: switchbacks use the planner's 16 move directions, so some slopes that could be climbed at an
   in-between heading count as one-way (conservative); power and mass are not used yet (phase 3).
 
-## Phase 3: energy along the route
+## Phase 3: energy along the route (done 14 Nov, 18:30 GMT)
 
 Driving energy versus slope, solar generation in watts, battery state along the route, arrival times
 against sunlight.
+
+**Status (14 Nov).** `demo/src/route-energy.js`, fed by a per-route drive profile from the planner:
+- The drive is run forward in time from a departure: the load plus drive power plus climbing power
+  (m·g·v·sin θ ÷ efficiency), against the panel's output where the Sun clears the local skyline (the 2 km or
+  1 km skyline grid and the ephemeris). Below the 20 % reserve the rover parks to recharge; an empty battery
+  is reported with its place and time.
+- Card: Panel, Battery, Load and Mass inputs (assumptions); arrival time, lowest and final battery, km in
+  shadow and share with Earth in view; a battery-along-the-route chart with the shadowed stretches; "Leave at
+  the timeline time"; "Find good departure times" (every 6 h for 60 days from landing, the best three by
+  lowest battery, each with Use). Map: P where it parks, ! where the battery runs out.
+- Tests (`tests/route-energy.test.mjs`): hand-checked drains, an empty battery, charging capped at 100 %,
+  the climbing power formula, parking through a dark spell, the departure scan, and the real route.
+- Checked in headless Chrome: Shackleton ridge to de Gerlache rim 2 leaving at the timeline time runs out at
+  about km 7 on every candidate (the first stretch off the ridge is in terrain shadow); the scan finds 7 of 241
+  working departures for the Flattest route, best 18 Jan 2027 18:00 UTC (lowest 42 %, arrives 21 Jan).
+- Limits: the panel, battery, load, drive power, mass and efficiency are assumptions, not a real rover's
+  data; the skyline grid is 1–2 km, so shadows from small nearby relief are missed; no thermal model.
 
 ## Phase 4: communications
 
