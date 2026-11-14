@@ -6,6 +6,16 @@ The lander track of the Lunar Landing Site Navigator follows a generic robotic l
 
 **Status: first working version, 14–15 Nov 2026.**
 
+### The page
+
+`demo/lander.html` (open it from `demo/` over http or as a file; deep link `lander.html?site=<id>&t=<ISO time>`):
+
+- **Three linked scenes** chosen by phase (or by hand): *Transfer* (geocentric, true scale, 1 unit = 1000 km), *Lunar orbit* (Moon-centred inertial, 1 unit = 1 km; the Moon turns under the fixed polar orbit plane; LOLA 480 m relief on the polar cap) and *Descent* (local east-north-up metres on the LOLA DEM around the site, 20/40/120 m levels where available, lunar curvature included, Sun and Earth placed from the ephemeris so the low polar Sun throws long shadows).
+- **Timeline** with every phase, event ticks and contingency markers; play at 0.5–4×, drag to scrub, space to play.
+- **HUD**: phase, mission time and UTC, altitude, speed, Δv left, propellant and mass, throttle, attitude mode, array power, load and battery, Sun and Earth visibility.
+- **Panels**: the Δv budget against published Apollo values, the timeline with the loiter explanation, the landing checks (touchdown speeds, DEM slope, nearest spot within 500 m meeting the slope limit, Sun and Earth over the skyline), the editable assumed vehicle, and the contingency cards.
+- **Contingency branches** (`lander/branches.js`): eight events injected at fixed times, each decided by `contingency.decide()` from the numbers. Drawn as alternative trajectories: engine 45 % low → abort to a 15 × 31 km orbit; engine 20 % low → longer burn, still lands; lidar hazard → 152 m divert; ground GO missing → wave-off for one more orbit; Site dark/Earth hidden → retarget to the nearest lit candidate (or hold). Listed with numbers only: S3 solar particle event hold, micrometeoroid strike, LEO conjunction.
+
 ## 2. Mission phases
 
 Reference run: default vehicle, `mons-mouton`, zero skyline mask and zero site height; search from 2027-01-01 UTC. The picker requests **2027-01-11 19:00 UTC**; orbital phasing moves touchdown to **19:39:35 UTC** (+2,375.4 s). These are model outputs, not a flight prediction or a terrain-cleared landing opportunity. Reproduce the budget and events with:
@@ -24,7 +34,7 @@ Durations below use `plan.phases` boundaries. Descent subphase propellant is the
 | Lunar approach (SOI) | Geocentric ellipse blends into lunar arrival hyperbola | 0 additional; TCM-2 counted above | — | 0 additional | 18.17 h to LOI start | `sun-point` |
 | LOI (100 km polar) | Retrograde capture into circular polar orbit | 809.6 | 800–950 m/s, Apollo LOI-1 + LOI-2, Orloff [10], approximate | 495.50 | 345.5 s | `burn` |
 | Loiter in low lunar orbit | Checkout and wait for site/plane alignment | 0; station-keeping excluded | — | 0 | 4.1157 days between burn edges; 4.1166 days centre-to-centre | `sun-point` |
-| DOI (100 × 15 km) | Lower perilune; geometric plane correction at DOI | 19.5 budget; +0.83 geometric correction not charged | 18–30 m/s, Orloff [10], approximate | 10.41 budget only | 7.3 s | `burn`, retrograde |
+| DOI (100 × 15 km) | Lower perilune; geometric plane correction at DOI | 19.5 + 0.83 plane trim (charged since 14 Nov) | 18–30 m/s, Orloff [10], approximate | 10.41 budget only | 7.3 s | `burn`, retrograde |
 | Coast to PDI | Fly half the descent ellipse to perilune | 0 | — | 0 | 3,408.2 s after DOI ends | `sun-point` |
 | Braking | Reduce orbital speed; reach 2 km high gate | 1,768.6 | Powered descent comparison is combined below | 720.87 | 652.5 s | `burn`, guidance thrust vector |
 | Approach with pitch-over | Steepen thrust toward vertical; translate to target and reach 30 m low gate | 195.8 | Assumed gates; Apollo-inspired guidance [12] | 57.60 | 85.0 s | `descent` |
@@ -34,7 +44,7 @@ Durations below use `plan.phases` boundaries. Descent subphase propellant is the
 | **Lander total** | TCM + LOI + DOI + powered descent | **2,871.7** | — | **1,318.95** | Parking insertion → touchdown: **9.6639 days** | — |
 | **Including upper-stage TLI** | Arithmetic sum across two stages; excludes Earth ascent | **6,006.8** | — | **6,700.28** | Same mission interval | — |
 
-Lander capacity is **3,174.5 m/s**. After planned burns and the **assumed 60 m/s reserve**, budget margin is **242.8 m/s**; touchdown mass is **881.05 kg**, including **81.05 kg** remaining propellant. The 0.83 m/s DOI plane correction is currently absent from those mass/budget totals. The budget's powered-descent `burnS = 552.4 s` is a full-thrust equivalent, not its throttled elapsed time of 766.9 s.
+Lander capacity is **3,174.5 m/s**. After planned burns and the **assumed 60 m/s reserve**, budget margin is **242.8 m/s**; touchdown mass is **881.05 kg**, including **81.05 kg** remaining propellant. (Numbers from the run before the 0.83 m/s DOI plane trim was charged to the budget; the margin is now about 1 m/s smaller.) The budget's powered-descent `burnS = 552.4 s` is a full-thrust equivalent, not its throttled elapsed time of 766.9 s.
 
 The polar orbit plane stays fixed in inertial space in this planner while the Moon turns beneath it. The site crosses that plane twice per sidereal month: alignment can add up to **13.66 days (~13.7 days)** beyond the assumed minimum checkout wait of one day. **NRHO staging, as used by Artemis/Gateway: ⬜ not modelled.**
 
@@ -47,7 +57,7 @@ The polar orbit plane stays fixed in inertial space in this planner while the Mo
 | PD frame | Moon-centred, non-rotating; PDI position on +z, initial downrange +x, crossrange +y. Positions/velocities are **m and m/s**, mass kg. Rotate into MCI and divide position/velocity by 1,000. |
 | Transfer | Patched conics: an Earth-centred ellipse in the Moon's orbital plane, then a lunar hyperbola with ephemeris-derived arrival v∞. The drawing interpolates position and velocity between the conics inside SOI; this is not an integrated n-body encounter. |
 | Phasing | Solve arrival time for the polar plane to contain the site. Shift requested touchdown by at most about half an LLO revolution so the spacecraft reaches DOI at the required orbital phase. Here the LLO period is 7,067.5 s (117.79 min). |
-| DOI plane change | Fold a small plane correction into DOI geometry after the time shift. `dvPlaneMs = 2v sin(Δi/2)` is added to the DOI event label, **not yet to `budget.phases`, burn time or propellant**. The separate budget option `lloPlaneChangeDeg` instead charges a specified change at LOI. |
+| DOI plane change | Fold a small plane correction into DOI geometry after the time shift. `dvPlaneMs = 2v sin(Δi/2)` is charged to the DOI phase of the budget (`deltaVBudget({ doiExtraMs })`); the descent is not re-run for the < 1 kg mass change. The separate budget option `lloPlaneChangeDeg` instead charges a specified change at LOI. |
 | Descent guidance | Approach uses `a_c = aT + 12(rT − r)/tgo² − 6(vT + v)/tgo`, following Klumpp (1974), *Automatica* 10, 133–146 [12]. Here `aT = 0`; subtract local gravity to obtain required thrust acceleration, then enforce throttle limits. Braking uses boundary-targeting feedback; terminal descent uses position/velocity feedback. |
 | Integration and mass | `dynamics.js` supplies RK4 orbital propagation (default 30 s); `descent.js` uses RK4 (default 0.2 s), mass flow `−T/(Isp G0)`, and integrated thrust Δv. `rocket.js` uses the ideal Tsiolkovsky equation. Mission coast/orbit tracks remain analytic conics rather than these perturbed RK4 trajectories. |
 
