@@ -6,3 +6,5 @@ __pycache__/
 .venv/
 dist/
 data-raw/
+# 474 m global tiles (~450 MB): built locally by node tools/build-global.mjs --g2
+demo/data/js/globe_g2_*

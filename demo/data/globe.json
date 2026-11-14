@@ -1,0 +1,47 @@
+{
+  "about": "Global lunar terrain packs (tools/build-global.mjs). Heights in 0.5 m DN above the 1737.4 km sphere.",
+  "encoding": "Int16 LE, delta coded (row start minus row start above, others minus left), gzip, base64 in a data pack",
+  "sources": [
+    "NASA PDS, LRO LOLA GDR LDEM_4 / LDEM_16 / LDEM_64 (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/)",
+    "NASA PDS, LRO LOLA GDR LDEM_75N_240M (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/)"
+  ],
+  "generatedAt": "2026-11-14T15:35:38.061Z",
+  "levels": [
+    {
+      "name": "globe_g0",
+      "ppd": 4,
+      "width": 1440,
+      "height": 720,
+      "packBytes": 1683053
+    },
+    {
+      "name": "globe_g1",
+      "ppd": 16,
+      "tileDeg": 15,
+      "tilePx": 240,
+      "apronPx": 1,
+      "rows": 12,
+      "cols": 24,
+      "packBytes": 24013169
+    },
+    {
+      "name": "globe_g2",
+      "ppd": 64,
+      "tileDeg": 3.75,
+      "tilePx": 240,
+      "apronPx": 1,
+      "rows": 48,
+      "cols": 96,
+      "packBytes": 326922736
+    }
+  ],
+  "north": {
+    "name": "globe_n480",
+    "projection": "north polar stereographic",
+    "size": 1906,
+    "kmPerPixel": 0.48,
+    "halfKm": 457.44,
+    "minLatDeg": 75,
+    "packBytes": 5023431
+  }
+}

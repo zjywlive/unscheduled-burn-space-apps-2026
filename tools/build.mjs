@@ -138,7 +138,8 @@ export function writeDataPacks(dataDir) {
     packs.push({ name, bytes: Buffer.byteLength(text) });
   }
   for (const n of readdirSync(out)) {
-    if (n.endsWith('.js') && !names.includes(n.slice(0, -3))) rmSync(join(out, n));
+    // globe_* packs come from tools/build-global.mjs (no .bin), so they are not this function's to remove
+    if (n.endsWith('.js') && !n.startsWith('globe_') && !names.includes(n.slice(0, -3))) rmSync(join(out, n));
   }
   return packs;
 }
