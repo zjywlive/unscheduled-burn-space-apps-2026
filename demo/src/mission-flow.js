@@ -58,7 +58,8 @@ export function landedFor(m) {
 export function landFromHash(hash) {
   const mm = /(?:^|[#&])land=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/.exec(String(hash));
   if (!mm) return null;
-  const latDeg = Number(mm[1]), lonDeg = ((Number(mm[2]) % 360) + 360) % 360;
+  const latDeg = Number(mm[1]), raw = Number(mm[2]);
+  const lonDeg = raw >= 0 && raw < 360 ? raw : ((raw % 360) + 360) % 360;   // wrap only when needed (no float noise)
   return latDeg >= -90 && latDeg <= 90 ? { latDeg, lonDeg } : null;
 }
 
