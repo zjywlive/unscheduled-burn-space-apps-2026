@@ -28,6 +28,7 @@ import { createRoutePlanCard } from './ui/routeplan.js';
 import { createShapeEntry } from './ui/shapeentry.js';
 import { planRoutes, sunFromJobs, simplify } from './route-plan.js';
 import { simulateDrive, skyFromGrid, scanDepartures } from './route-energy.js';
+import { coverage as stationCoverage, routeLinks, linkSummary, STATION_DEFAULTS } from './comms.js';
 import { renderPanorama, updatePanoramaCursor } from './charts/panorama.js';
 import { renderElevation, updateElevationCursor } from './charts/elevation.js';
 import { renderCompare } from './ui/compare.js';
@@ -386,6 +387,7 @@ function start() {
       routePlanCard.update({ departures: { routeId: r.id, scan } });
     },
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
+    onStation: (st) => { rp = { ...rp, station: st, stationOff: !st, coverage: null }; updateComms(); },
     onCancel: () => rpAbort?.abort(),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
@@ -438,6 +440,25 @@ function start() {
     const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
     rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id } };
     routePlanCard?.update({ energy: rp.energy });
+    updateComms();
+    redrawRoutes();
+  }
+  // phase 4: the surface station's coverage and the links along the selected route, on the finest terrain loaded
+  function terrainHeight(x, y) {
+    const ls = pyramid?.levels ?? [];
+    for (let i = ls.length - 1; i >= 0; i--) { const v = ls[i].sample(x, y); if (v === v) return v; }
+    return null;
+  }
+  function updateComms() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+    if (!r?.profile) { routePlanCard?.update({ comms: null }); return; }
+    const st = rp.stationOff ? null : (rp.station ?? { ...STATION_DEFAULTS });
+    const cov = st ? (rp.coverage ??= stationCoverage(terrainHeight, st)) : null;
+    const links = st ? routeLinks(terrainHeight, r.profile, st) : null;
+    const per = rp.energy?.routeId === r.id ? rp.energy.drive.perSample : null;
+    const summary = linkSummary(r.profile, links, per?.earth ?? null, per?.tMs ?? null);
+    rp = { ...rp, coverage: cov, comms: { routeId: r.id, summary, links, earth: per?.earth ?? null, coverage: cov, stamp: Date.now() } };
+    routePlanCard?.update({ comms: rp.comms });
     redrawRoutes();
   }
   function pickPlanned(id) {

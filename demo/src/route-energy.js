@@ -14,7 +14,7 @@
 // Drive = { ok, reason (null | 'empty' | 'stuck' | 'ephemeris'), departMs, arriveMs, driveH, waitH,
 //           socStart, socMin, socMinKm, socEnd (0–1 of capacity), darkKm, earthKm, km, stops (parking spells),
 //           emptyAt ({ x, y, km, tMs } | null), series: { km, soc, lit, tMs } (Float32/Float64 arrays, ≤ 240
-//           points, for the chart) }
+//           points, for the chart), perSample: { earth, lit, tMs } (one per profile sample, phase 4) }
 import { panelFactor } from './energy.js';
 import { speedFactor } from './route-plan.js';
 
@@ -63,6 +63,8 @@ export function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
   let t = departMs, soc = cap, socMin = cap, socMinKm = 0, km = 0, driveH = 0, waitMs = 0, darkKm = 0, earthKm = 0;
   const stops = [];
   const sKm = [], sSoc = [], sLit = [], sT = [];
+  // phase 4: every sample's Earth visibility and time (0 / NaN where the drive did not get to)
+  const per = { earth: new Uint8Array(n), lit: new Uint8Array(n), tMs: new Float64Array(n).fill(NaN) };
   const record = (lit) => { sKm.push(km); sSoc.push(soc / cap); sLit.push(lit ? 1 : 0); sT.push(t); };
   const out = (ok, reason, extra = {}) => {
     const keep = Math.max(1, Math.ceil(sKm.length / 240));
@@ -71,6 +73,7 @@ export function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
       ok, reason, departMs, arriveMs: ok ? t : null, driveH, waitH: waitMs / 3600e3, km,
       socStart: 1, socMin: socMin / cap, socMinKm, socEnd: soc / cap, darkKm, earthKm, stops, emptyAt: null,
       series: { km: pick(sKm, Float32Array), soc: pick(sSoc, Float32Array), lit: pick(sLit, Uint8Array), tMs: pick(sT, Float64Array) },
+      perSample: per,
       ...extra,
     };
   };
@@ -87,6 +90,7 @@ export function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
     t += dtH * 3600e3; km += dk; driveH += dtH;
     if (!lit) darkKm += dk;
     if (s.earthDeg > 0) earthKm += dk;
+    per.earth[i] = s.earthDeg > 0 ? 1 : 0; per.lit[i] = lit ? 1 : 0; per.tMs[i] = t - (dtH * 3600e3) / 2;
     if (soc <= 0) { soc = 0; record(lit); return out(false, 'empty', { emptyAt: { x, y, km, tMs: t } }); }
     if (soc < socMin) { socMin = soc; socMinKm = km; }
     record(lit);

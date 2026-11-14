@@ -530,6 +530,7 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
       waypoints: rp?.plan?.waypoints ?? rp?.points ?? null,
       traps: rp?.plan?.traps ?? null,
       drive: rp?.energy?.drive ?? null,
+      coverage: rp?.stationOff ? null : rp?.coverage ?? null,
       toPx: (x, y) => toPxView(sqView(view), S, x, y),
       width: S, height: S,
     });

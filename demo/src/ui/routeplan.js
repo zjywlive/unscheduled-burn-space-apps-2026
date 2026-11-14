@@ -13,6 +13,7 @@
 //   onPick(routeId)                     a candidate chosen: 'short' | 'flat' | 'sunny'
 //   onHover(routeId | null)             a candidate under the pointer or keyboard focus
 //   onPower(power)                      phase 3: the power inputs changed ({ panelW, batteryWh, loadW, massKg })
+//   onStation(station | null)           phase 4: the surface station's inputs changed (null: switched off)
 //   onDepartNow()                       phase 3: "Leave at the timeline time" pressed
 //   onFindDepartures()                  phase 3: "Find good departure times" pressed
 //   onUseDeparture(ms)                  phase 3: one of the found departures chosen
@@ -28,11 +29,13 @@
 //   hovered: routeId | null             the candidate highlighted on the map (so map and card agree)
 //   energy: { drive, departMs, routeId } | null   phase 3: route-energy.js simulateDrive of the selected route
 //   departures: { routeId, scan } | null           phase 3: route-energy.js scanDepartures of the selected route
+//   comms: { routeId, summary, links, earth, coverage } | null   phase 4: comms.js figures of the selected route
 import { h, s, clear } from './dom.js';
 import { fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { parseLatLon, formatLat, formatLon } from '../coords.js';
 import { DEFAULT_MAX_SLOPE, MAX_POINTS, MIN_POINTS, MOBILITY_DEFAULTS } from '../route-plan.js';
 import { POWER_DEFAULTS } from '../route-energy.js';
+import { STATION_DEFAULTS, BANDS } from '../comms.js';
 
 const LIMIT = { min: 5, max: 30, step: 1 };
 const kmFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -115,6 +118,46 @@ export function energyLines(drive, power = POWER_DEFAULTS) {
   return lines;
 }
 
+// Phase 4: the comms figures as display lines.
+export const COVERAGE_BINS = Object.freeze([
+  { min: -70, color: '#ff3d7f', label: '≥ −70' }, { min: -80, color: '#ff8a3d', label: '−80' }, { min: -90, color: '#ffd23d', label: '−90' },
+  { min: -100, color: '#8be04e', label: '−100' }, { min: -110, color: '#3dd6c6', label: '−110 dBm' },
+]);
+export function commsLines(comms) {
+  if (!comms?.summary) return [];
+  const { summary: m, coverage: c } = comms, st = c?.settings ?? comms.links?.settings;
+  const pct = (a, b) => `${b > 0 ? Math.round((a / b) * 100) : 0}%`;
+  const lines = [];
+  if (st) lines.push({ key: 'station', text: `Surface station link (${BANDS[st.band].label}, ${st.txDbm} dBm, ${st.mastM} m mast, usable from ${st.thresholdDbm} dBm): ${kmFmt.format(m.stationKm)} km of ${kmFmt.format(m.totalKm)} (${pct(m.stationKm, m.totalKm)}).` });
+  if (m.earthKm !== null) lines.push({ key: 'earth', text: `Earth in view (direct link) for ${pct(m.earthKm, m.totalKm)} of the route at this departure.` });
+  lines.push(m.gapKm > 0.05
+    ? { key: 'gap', warn: true, text: `No link at all for ${kmFmt.format(m.totalKm - m.anyKm)} km; the longest gap is ${kmFmt.format(m.gapKm)} km${m.gapH !== null && m.gapH > 0 ? ` (${m.gapH.toFixed(1)} h)` : ''}.` }
+    : { key: 'gap', text: 'Always in touch: the station or Earth covers every part of the route.' });
+  if (c) lines.push({ key: 'coverage', text: `The station has line of sight to ${Math.round(c.losShare * 100)}% of its ${c.settings.radiusKm} km circle and a usable link to ${Math.round(c.linkShare * 100)}% (coloured on the map).` });
+  return lines;
+}
+
+// Phase 4: Earth and station links along the route as two thin strips (x = km).
+export function linkStrip(profile, links, earth, totalKm) {
+  if (!profile) return null;
+  const W = 300, H = 14, n = profile.km.length, L = totalKm || 1;
+  const parts = [];
+  let km = 0;
+  const run = (row, has, y, cls) => {
+    let start = null, k = 0;
+    for (let i = 0; i <= n; i++) {
+      const on = i < n && has(i);
+      if (on && start === null) start = k;
+      if (!on && start !== null) { parts.push(s('rect', { x: ((start / L) * W).toFixed(1), y, width: Math.max(0.6, ((k - start) / L) * W).toFixed(1), height: 5, class: cls })); start = null; }
+      if (i < n) k += profile.km[i];
+    }
+  };
+  if (earth) run('earth', (i) => earth[i] === 1, 1, 'rp-link-earth');
+  if (links) run('station', (i) => links.ok[i] === 1, 8, 'rp-link-station');
+  km = 0;
+  return s('svg', { class: 'rp-links', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Links along the route: top Earth in view, bottom surface station' }, ...parts);
+}
+
 // Phase 3: a departure scan as one line.
 export function departuresLine(scan) {
   if (!scan) return null;
@@ -175,7 +218,8 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   let limit = DEFAULT_MAX_SLOPE;
   let mobility = { ...MOBILITY_DEFAULTS };   // phase 2: the rest of the rover limits
   let power = { ...POWER_DEFAULTS };         // phase 3: panel, battery, load, mass
-  let energy = null, departures = null;
+  let energy = null, departures = null, comms = null;
+  let station = { ...STATION_DEFAULTS }, stationOn = true;
   let lastPoints = null, emitted = null;
   let running = false, progress = 0, plan = null, selected = null, hovered = null;
   let validPoints = null;        // the rows as points when all are valid
@@ -216,6 +260,26 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   };
   const powerRow = h('div', { class: 'rp-rover rp-power' },
     powerInput('panelW', 'Panel', 'W', 0, 20000, 10), powerInput('batteryWh', 'Battery', 'Wh', 100, 100000, 100), powerInput('loadW', 'Load', 'W', 0, 5000, 5), powerInput('massKg', 'Mass', 'kg', 10, 20000, 10));
+  // phase 4: the surface station
+  const stationField = (key, label, unit, min, max, step) => {
+    const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-st-${key}`, min, max, step, value: station[key], inputmode: 'decimal' });
+    inp.addEventListener('change', () => {
+      const v = Number(inp.value);
+      station = { ...station, [key]: Number.isFinite(v) && v >= min && v <= max ? v : STATION_DEFAULTS[key] };
+      inp.value = String(station[key]);
+      callbacks.onStation?.(stationOn ? { ...station } : null);
+    });
+    return h('label', { class: 'rp-rover-field', for: `${id}-st-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, unit ? h('span', { class: 'rp-rover-unit' }, unit) : null));
+  };
+  const bandSel = h('select', { class: 'rp-rover-input', id: `${id}-st-band` }, ...Object.entries(BANDS).map(([k, b]) => h('option', { value: k, selected: k === station.band }, k === 's' ? 'S-band' : 'UHF')));
+  bandSel.addEventListener('change', () => { station = { ...station, band: bandSel.value }; callbacks.onStation?.(stationOn ? { ...station } : null); });
+  const stationToggle = h('input', { type: 'checkbox', id: `${id}-st-on`, checked: true });
+  stationToggle.addEventListener('change', () => { stationOn = stationToggle.checked; stationRow.classList.toggle('is-off', !stationOn); callbacks.onStation?.(stationOn ? { ...station } : null); });
+  const stationRow = h('div', { class: 'rp-station' },
+    h('label', { class: 'rp-station-head', for: `${id}-st-on` }, stationToggle, h('span', null, 'Surface station '), h('span', { class: 'rp-assumed' }, 'JPL site')),
+    h('div', { class: 'rp-rover rp-power' },
+      stationField('latDeg', 'Lat', '°', -90, -80, 0.01), stationField('lonDeg', 'Lon (E)', '°', 0, 360, 0.1), stationField('mastM', 'Mast', 'm', 0, 200, 1),
+      h('label', { class: 'rp-rover-field', for: `${id}-st-band` }, h('span', { class: 'rp-rover-name' }, 'Band'), h('span', { class: 'rp-rover-box' }, bandSel))));
   const roverRow = h('div', { class: 'rp-rover' },
     roverInput('descentDeg', 'Descent', '°', 1, 45, 1), roverInput('crossDeg', 'Across', '°', 1, 45, 1), roverInput('speedKmh', 'Speed', 'km/h', 0.05, 20, 0.05));
 
@@ -233,7 +297,8 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       h('div', { class: 'filter-head' }, h('label', { for: `${id}-limit` }, 'Climb limit ', h('span', { class: 'rp-assumed' }, 'assumed')), limitOut),
       limitInput,
       roverRow,
-      powerRow),
+      powerRow,
+      stationRow),
     formError,
     h('div', { class: 'rp-actions' }, planBtn, cancelBtn));
 
@@ -462,7 +527,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   const roverBox = h('div', { class: 'rp-rover-result', 'aria-live': 'polite' });
   function renderRover() {
     const r = plan?.ok && !running ? plan.routes.find((x) => x.id === selected) : null;
-    const key = r ? `${plan.ms}:${plan.nodes}:${selected}:${energy?.departMs ?? ''}:${energy?.routeId ?? ''}:${departures?.scan?.tried ?? ''}:${departures?.routeId ?? ''}` : null;
+    const key = r ? `${plan.ms}:${plan.nodes}:${selected}:${energy?.departMs ?? ''}:${energy?.routeId ?? ''}:${departures?.scan?.tried ?? ''}:${departures?.routeId ?? ''}:${comms?.stamp ?? ''}` : null;
     if (key === roverKey) return;
     roverKey = key;
     clear(roverBox);
@@ -473,7 +538,16 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     const chart = drive ? batteryChart(drive, power.reserve, r.lengthKm) : null;
     roverBox.append(h('p', { class: 'rp-rover-title' }, `Rover on the ${names[r.id] ?? r.label} route`),
       eLines.length ? h('ul', { class: 'rp-energy' }, ...eLines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))) : null,
-      chart ? h('div', { class: 'rp-bat-box' }, chart, h('div', { class: 'rp-bat-axis' }, h('span', null, '0 km'), h('span', null, 'battery along the route'), h('span', null, `${kmFmt.format(r.lengthKm)} km`))) : null,
+      chart ? h('div', { class: 'rp-bat-box' }, chart,
+        ...(() => { const c = comms && comms.routeId === r.id ? comms : null; const strip = c ? linkStrip(r.profile, c.links, c.earth, r.lengthKm) : null; return strip ? [strip, h('div', { class: 'rp-link-key' }, h('span', { class: 'k-earth' }, 'Earth in view'), h('span', { class: 'k-station' }, 'Station link'))] : []; })(),
+        h('div', { class: 'rp-bat-axis' }, h('span', null, '0 km'), h('span', null, 'battery along the route'), h('span', null, `${kmFmt.format(r.lengthKm)} km`))) : null,
+      ...(() => {
+        const c = comms && comms.routeId === r.id ? comms : null;
+        const cl = commsLines(c);
+        if (!cl.length) return [];
+        return [h('ul', { class: 'rp-energy rp-comms' }, ...cl.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))),
+          c.coverage ? h('div', { class: 'rp-cov-key', 'aria-label': 'Station coverage colours, received power' }, ...COVERAGE_BINS.map((b) => h('span', null, h('i', { style: `background:${b.color}` }), b.label))) : null];
+      })(),
       drive ? h('div', { class: 'rp-depart-row' },
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times')) : null,
@@ -539,7 +613,8 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       h('li', null, `Energy: the drive is run forward from the departure. It draws the load plus ${POWER_DEFAULTS.driveW} W to drive, plus m·g·v·sin θ ÷ ${POWER_DEFAULTS.climbEff} to climb (no regeneration downhill); the panel faces the Sun (vertical, turned to its azimuth) and makes power only where the Sun clears the local skyline (the 2 km or 1 km skyline grid). Below ${Math.round(POWER_DEFAULTS.reserve * 100)}% it parks until it is back to ${Math.round((POWER_DEFAULTS.reserve + POWER_DEFAULTS.resumeMargin) * 100)}%.`),
       h('li', null, 'Moves are checked by direction: the grade along the move against the climb and descent limits, the slope across it against the across limit. Switchbacks are limited to 16 directions, so some climbable slopes count as one-way.'),
       h('li', null, 'Max and Mean: the steepest and the mean slope along the route. Sun: share of the length lit during the planned stay, from the 2 km map of the stay at any zoom. PSR: km inside the official permanently shadowed regions.'),
-      h('li', null, 'Each name shows the best of the searched routes by its own figure; when one route is best on two, both rows show it.'));
+      h('li', null, 'Each name shows the best of the searched routes by its own figure; when one route is best on two, both rows show it.'),
+      h('li', null, `Comms: free-space loss plus the dominant knife edge in the terrain between the station's mast and the rover's ${STATION_DEFAULTS.roverM} m antenna (ITU-R P.526), with the Moon's curvature, on the loaded terrain grid. Site, mast, radius, bands and 0 dBi antennas follow Jun et al. (JPL, IEEE Aerospace 2025); the ${STATION_DEFAULTS.txDbm} dBm transmitter and ${STATION_DEFAULTS.thresholdDbm} dBm threshold are assumptions. Earth in view uses the skyline grid at the simulated times.`));
   }
 
   function update(p = {}) {
@@ -562,6 +637,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     if ('hovered' in p) hovered = p.hovered ?? null;
     if ('energy' in p) { energy = p.energy ?? null; roverKey = null; }
     if ('departures' in p) { departures = p.departures ?? null; roverKey = null; }
+    if ('comms' in p) { comms = p.comms ?? null; roverKey = null; }
     const baseBefore = notes.dataset.base;
     renderResults();
     if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }

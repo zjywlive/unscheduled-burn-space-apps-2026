@@ -106,11 +106,29 @@ against sunlight.
 - Limits: the panel, battery, load, drive power, mass and efficiency are assumptions, not a real rover's
   data; the skyline grid is 1–2 km, so shadows from small nearby relief are missed; no thermal model.
 
-## Phase 4: communications
+## Phase 4: communications (done 14 Nov, 19:00 GMT)
 
 Surface-station viewshed (15 m mast, 2 m rover antenna, 8 km radius, from the JPL surface-station
 paper), Earth, relay and station link status along the route, and signal strength in dBm (free-space
 loss plus knife-edge diffraction along the terrain).
+
+**Status (14 Nov).** `demo/src/comms.js`:
+- A link between two antennas: free-space loss plus the dominant knife edge in the terrain profile between
+  them (ITU-R P.526), with the Moon's curvature, on the finest terrain loaded. Station coverage within its
+  radius; the station link at every sample of a route; a summary with Earth in view from the Phase 3 drive
+  (station km, Earth share, km with no link, longest gap in km and hours).
+- Card: Surface station on/off, latitude, longitude, mast and band (defaults from the JPL paper); comms lines;
+  Earth and station link strips under the battery chart; coverage colours. Map: coverage coloured by received
+  power (cells under the threshold left out) and the station mark.
+- Tests (`tests/comms.test.mjs`): free-space loss values, the knife-edge formula, the smooth-Moon radio horizon
+  (≈ 9.9 km for 15 m and 2 m antennas), ridge blocking and its loss (lower at UHF), coverage, the route summary,
+  and the real site.
+- Checked in headless Chrome on the Flattest route to de Gerlache rim 2 leaving 18 Jan 18:00 UTC: station link
+  on 22.8 of 52.5 km, Earth in view 90 %, longest gap 1.3 km (2.4 h). Line of sight to 33 % of the 8 km circle,
+  against 29 % in the paper on a 5 m DEM.
+- Not done: relay orbiters along the route (the site relay card still covers relays at a site); multipath
+  and the two-ray model the paper used in line of sight; the coverage is computed once per station on the
+  levels loaded at that moment.
 
 ## Phase 5: contingency and navigation
 

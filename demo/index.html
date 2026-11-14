@@ -1460,6 +1460,24 @@ button.relay-win:hover .relay-win-time { text-decoration: underline; text-underl
 .rp-empty circle { fill: #ff5252; stroke: var(--ground); stroke-width: 1.5; }
 .rp-empty text { fill: #fff; font-size: 12px; font-weight: 800; }
 
+/* ---------- phase 4: comms ---------- */
+.rp-station { margin-top: 10px; }
+.rp-station-head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-small); margin-bottom: 6px; }
+.rp-station.is-off .rp-power { opacity: 0.45; pointer-events: none; }
+.rp-station select.rp-rover-input { appearance: none; -webkit-appearance: none; cursor: pointer; }
+.rp-links { display: block; width: 100%; height: 14px; margin-top: 4px; background: color-mix(in srgb, var(--ground) 60%, transparent); border-radius: 4px; }
+.rp-link-earth { fill: #8ab4f8; }
+.rp-link-station { fill: #3dd6c6; }
+.rp-link-key { display: flex; gap: 12px; color: var(--faint); font-size: 11px; margin-top: 2px; }
+.rp-link-key span::before { content: ""; display: inline-block; width: 10px; height: 4px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.rp-link-key .k-earth::before { background: #8ab4f8; }
+.rp-link-key .k-station::before { background: #3dd6c6; }
+.rp-cov-key { display: flex; flex-wrap: wrap; gap: 8px; color: var(--faint); font-size: 11px; margin: -2px 0 8px; }
+.rp-cov-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; opacity: 0.8; }
+.rp-cov { opacity: 0.42; }
+.rp-station-mark path { fill: #3dd6c6; stroke: var(--ground); stroke-width: 1.5; }
+.rp-station-mark circle { fill: #fff; }
+
 /* styles/phase4-shapeentry.css */
 /* Fix R9: the Coordinates form (ui/shapeentry.js). Same compact rows as the Route plan points: tag,
    latitude, longitude, row tools. No background of its own, so it sits on the glass panel. */
@@ -7508,6 +7526,943 @@ function createShapesLayer(gEl, callbacks = {}) {
 
 return { createShapesLayer };
 })();
+__m['route-energy.js'] = (() => {
+// Phase 3 (docs/PHASES.md): energy along a planned route. The drive is run forward in time from a
+// departure: at each profile sample the rover's speed (route-plan.js speedFactor), the power it draws and
+// the power its panel makes in sunlight give the battery's charge. Below the reserve it parks to charge and
+// drives on once the battery is back above the reserve plus a margin. No DOM; runs in Node.
+//
+// simulateDrive(profile, { mob, power, departMs, sky }) → Drive
+//   profile   route-plan.js route.profile: { x, y, km, pitch } per sample, in driving order
+//   mob       plan.mobility (speedKmh, climbDeg, descentDeg)
+//   power     cleanPower(…): watts, watt-hours, kg (all assumptions, see POWER_DEFAULTS)
+//   departMs  departure time (UTC ms)
+//   sky(xKm, yKm, tMs) → { sunDeg, earthDeg, azDeg, elDeg } | null: the Sun's and Earth's height above the
+//             local skyline (deg; > 0 means in view) and the Sun's azimuth and elevation; null outside the
+//             ephemeris
+// Drive = { ok, reason (null | 'empty' | 'stuck' | 'ephemeris'), departMs, arriveMs, driveH, waitH,
+//           socStart, socMin, socMinKm, socEnd (0–1 of capacity), darkKm, earthKm, km, stops (parking spells),
+//           emptyAt ({ x, y, km, tMs } | null), series: { km, soc, lit, tMs } (Float32/Float64 arrays, ≤ 240
+//           points, for the chart), perSample: { earth, lit, tMs } (one per profile sample, phase 4) }
+const { panelFactor } = __m['energy.js'];
+const { speedFactor } = __m['route-plan.js'];
+
+const G_MOON = 1.62;   // m/s²
+// A VIPER-class solar rover. Every figure is an assumption the user can change, not data.
+const POWER_DEFAULTS = Object.freeze({
+  panelW: 450,        // rated panel output, Sun on the panel normal
+  batteryWh: 4000,    // usable battery capacity
+  loadW: 120,         // avionics, heaters, comms: drawn all the time
+  driveW: 180,        // extra for driving on the flat
+  massKg: 450,        // for the climbing power m·g·v·sin θ
+  climbEff: 0.5,      // drivetrain efficiency when climbing
+  reserve: 0.2,       // park below this share of the battery
+  resumeMargin: 0.25, // drive on once the battery is back above reserve + this share
+  attitude: 'track',  // vertical panel turned to the Sun (energy.js)
+});
+
+function cleanPower(p = {}) {
+  const d = POWER_DEFAULTS;
+  const num = (v, lo, hi, def) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : def);
+  return {
+    panelW: num(p.panelW, 0, 1e5, d.panelW), batteryWh: num(p.batteryWh, 1, 1e6, d.batteryWh),
+    loadW: num(p.loadW, 0, 1e5, d.loadW), driveW: num(p.driveW, 0, 1e5, d.driveW), massKg: num(p.massKg, 1, 1e5, d.massKg),
+    climbEff: num(p.climbEff, 0.05, 1, d.climbEff), reserve: num(p.reserve, 0, 0.9, d.reserve),
+    resumeMargin: num(p.resumeMargin, 0.01, 0.9, d.resumeMargin), attitude: ['track', 'flat'].includes(p.attitude) ? p.attitude : d.attitude,
+  };
+}
+
+// Power drawn while driving on a grade (tan) at a speed (km/h), W.
+function drivePowerW(power, pitchTan, kmh) {
+  const climb = pitchTan > 0 ? (power.massKg * G_MOON * (kmh / 3.6) * Math.sin(Math.atan(pitchTan))) / power.climbEff : 0;
+  return power.loadW + power.driveW + climb;
+}
+
+// Panel output in W at a point and time (0 behind the terrain or below the horizon).
+function panelW(power, s) {
+  if (!s || !(s.sunDeg > 0) || !Number.isFinite(s.elDeg)) return 0;
+  return power.panelW * panelFactor(power.attitude, s.azDeg, s.elDeg);
+}
+
+const PARK_STEP_MS = 15 * 60e3, MAX_WAIT_MS = 30 * 86400e3;
+
+function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
+  const power = cleanPower(p0);
+  const cap = power.batteryWh, n = profile?.km?.length ?? 0;
+  let t = departMs, soc = cap, socMin = cap, socMinKm = 0, km = 0, driveH = 0, waitMs = 0, darkKm = 0, earthKm = 0;
+  const stops = [];
+  const sKm = [], sSoc = [], sLit = [], sT = [];
+  // phase 4: every sample's Earth visibility and time (0 / NaN where the drive did not get to)
+  const per = { earth: new Uint8Array(n), lit: new Uint8Array(n), tMs: new Float64Array(n).fill(NaN) };
+  const record = (lit) => { sKm.push(km); sSoc.push(soc / cap); sLit.push(lit ? 1 : 0); sT.push(t); };
+  const out = (ok, reason, extra = {}) => {
+    const keep = Math.max(1, Math.ceil(sKm.length / 240));
+    const pick = (arr, Type) => Type.from(arr.filter((_, i) => i % keep === 0 || i === arr.length - 1));
+    return {
+      ok, reason, departMs, arriveMs: ok ? t : null, driveH, waitH: waitMs / 3600e3, km,
+      socStart: 1, socMin: socMin / cap, socMinKm, socEnd: soc / cap, darkKm, earthKm, stops, emptyAt: null,
+      series: { km: pick(sKm, Float32Array), soc: pick(sSoc, Float32Array), lit: pick(sLit, Uint8Array), tMs: pick(sT, Float64Array) },
+      perSample: per,
+      ...extra,
+    };
+  };
+  const first = n ? sky(profile.x[0], profile.y[0], t) : null;
+  if (!first) return out(false, 'ephemeris');
+  record(first.sunDeg > 0);
+  for (let i = 0; i < n; i++) {
+    const x = profile.x[i], y = profile.y[i], dk = profile.km[i], pitch = profile.pitch[i];
+    const kmh = mob.speedKmh * speedFactor(pitch, mob), dtH = dk / kmh;
+    const s = sky(x, y, t + (dtH * 3600e3) / 2);
+    if (!s) return out(false, 'ephemeris');
+    const lit = s.sunDeg > 0;
+    soc = Math.min(cap, soc + (panelW(power, s) - drivePowerW(power, pitch, kmh)) * dtH);
+    t += dtH * 3600e3; km += dk; driveH += dtH;
+    if (!lit) darkKm += dk;
+    if (s.earthDeg > 0) earthKm += dk;
+    per.earth[i] = s.earthDeg > 0 ? 1 : 0; per.lit[i] = lit ? 1 : 0; per.tMs[i] = t - (dtH * 3600e3) / 2;
+    if (soc <= 0) { soc = 0; record(lit); return out(false, 'empty', { emptyAt: { x, y, km, tMs: t } }); }
+    if (soc < socMin) { socMin = soc; socMinKm = km; }
+    record(lit);
+    if (soc < power.reserve * cap && i < n - 1) {
+      // park here: the load only, charging when lit, until reserve + margin
+      const stop = { x, y, km, fromMs: t, toMs: t };
+      while (soc < (power.reserve + power.resumeMargin) * cap) {
+        const q = sky(x, y, t + PARK_STEP_MS / 2);
+        if (!q) return out(false, 'ephemeris');
+        soc = Math.min(cap, soc + (panelW(power, q) - power.loadW) * (PARK_STEP_MS / 3600e3));
+        t += PARK_STEP_MS; waitMs += PARK_STEP_MS;
+        if (soc <= 0) { soc = 0; record(false); stop.toMs = t; stops.push(stop); return out(false, 'empty', { emptyAt: { x, y, km, tMs: t } }); }
+        if (soc < socMin) { socMin = soc; socMinKm = km; }
+        if (t - stop.fromMs > MAX_WAIT_MS) { stop.toMs = t; stops.push(stop); return out(false, 'stuck'); }
+      }
+      stop.toMs = t;
+      stops.push(stop);
+      record(true);
+    }
+  }
+  return out(true, null);
+}
+
+// Departures that work: simulateDrive every stepMs over [fromMs, toMs]. → { tried, ok, fromMs, toMs, stepMs,
+// best: up to `count` working departures with the highest lowest-battery, at least a day apart }
+function scanDepartures(profile, { mob, power, sky, fromMs, toMs, stepMs = 6 * 3600e3, count = 3 }) {
+  const good = [];
+  let tried = 0;
+  for (let t = fromMs; t <= toMs; t += stepMs) {
+    const d = simulateDrive(profile, { mob, power, departMs: t, sky });
+    if (d.reason === 'ephemeris') break;
+    tried++;
+    if (d.ok) good.push({ departMs: t, arriveMs: d.arriveMs, socMin: d.socMin, waitH: d.waitH });
+  }
+  const best = [];
+  for (const g of [...good].sort((a, b) => b.socMin - a.socMin || a.departMs - b.departMs)) {
+    if (best.length >= count) break;
+    if (best.every((b) => Math.abs(b.departMs - g.departMs) >= 86400e3)) best.push(g);
+  }
+  best.sort((a, b) => a.departMs - b.departMs);
+  return { tried, ok: good.length, fromMs, toMs, stepMs, best };
+}
+
+// sky() for simulateDrive from the page's heat grid (heat.js createHeatGrid: skylines per cell), the
+// ephemeris and fromXY: the Sun's and Earth's clearance above the cell's skyline, the Sun's az/el.
+function skyFromGrid(grid, eph, bodyAzEl, fromXY) {
+  const c = [0, 0];
+  return (x, y, tMs) => {
+    const d = eph.at(tMs);
+    if (!d) return null;
+    const k = grid.cellAt(x, y);
+    const { latDeg, lonDeg } = fromXY(x, y);
+    const r = bodyAzEl(eph, { latDeg, lonDeg }, tMs);
+    if (k === null || k === undefined || !r) return { sunDeg: NaN, earthDeg: NaN, azDeg: r?.sun.azDeg ?? null, elDeg: r?.sun.elDeg ?? NaN };
+    grid.clearances(k, d, c);
+    return { sunDeg: c[0], earthDeg: c[1], azDeg: r.sun.azDeg, elDeg: r.sun.elDeg };
+  };
+}
+
+return { G_MOON, POWER_DEFAULTS, cleanPower, drivePowerW, panelW, simulateDrive, scanDepartures, skyFromGrid };
+})();
+__m['comms.js'] = (() => {
+// Phase 4 (docs/PHASES.md): surface radio links over real terrain. A link between two antennas above the
+// ground: free-space loss plus the loss of the dominant knife edge in the terrain profile between them
+// (ITU-R P.526 single knife-edge), with the Moon's curvature. Used for a surface station's coverage and for
+// the link along a planned route. No DOM; runs in Node.
+//
+// Defaults follow Jun et al. (JPL), "A Rapid, Low-Cost Path to Lunar Communication and Navigation with a
+// Lunar Surface Station", IEEE Aerospace 2025: station on the Connecting Ridge at (−89.51°, 225°), a 15 m
+// mast, the rover's antenna at 2 m, an 8 km coverage radius, UHF 442.5 MHz or S-band 2245 MHz, 0 dBi
+// antennas. Transmit power and the receiver threshold are this project's assumptions.
+//
+// Heights come from h(xKm, yKm) → metres above the 1737.4 km sphere | null (map km, polar stereographic).
+const { toXY } = __m['terrain.js'];
+
+const MOON_R_M = 1737400;
+const C = 299792458;
+const BANDS = Object.freeze({ uhf: { label: 'UHF 442.5 MHz', mhz: 442.5 }, s: { label: 'S-band 2245 MHz', mhz: 2245 } });
+const STATION_DEFAULTS = Object.freeze({
+  latDeg: -89.51, lonDeg: 225,   // the JPL paper's site on the Connecting Ridge
+  mastM: 15, roverM: 2, radiusKm: 8, band: 's',
+  txDbm: 30,                     // 1 W (assumed)
+  gainsDbi: 0,                   // Tx + Rx antenna gains (JPL paper: 0 and 0)
+  thresholdDbm: -110,            // receiver threshold for a usable link (assumed)
+});
+
+function cleanStation(st = {}) {
+  const d = STATION_DEFAULTS;
+  const num = (v, lo, hi, def) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : def);
+  return {
+    latDeg: num(st.latDeg, -90, -80, d.latDeg), lonDeg: ((num(st.lonDeg, -360, 720, d.lonDeg) % 360) + 360) % 360,
+    mastM: num(st.mastM, 0, 200, d.mastM), roverM: num(st.roverM, 0, 20, d.roverM), radiusKm: num(st.radiusKm, 1, 40, d.radiusKm),
+    band: BANDS[st.band] ? st.band : d.band, txDbm: num(st.txDbm, -30, 60, d.txDbm), gainsDbi: num(st.gainsDbi, -20, 60, d.gainsDbi),
+    thresholdDbm: num(st.thresholdDbm, -160, -40, d.thresholdDbm),
+  };
+}
+
+// Free-space path loss, dB (d in km, f in MHz).
+const fsplDb = (dKm, mhz) => 20 * Math.log10(Math.max(1e-6, dKm)) + 20 * Math.log10(mhz) + 32.45;
+
+// ITU-R P.526 single knife-edge loss J(v), dB (0 for v ≤ −0.78).
+const knifeEdgeDb = (v) => (v <= -0.78 ? 0 : 6.9 + 20 * Math.log10(Math.sqrt((v - 0.1) * (v - 0.1) + 1) + v - 0.1));
+
+// The link from antenna a to antenna b ({ x, y } map km, heightM above the ground): the terrain profile
+// between them, the dominant knife edge, and the received power. → { distKm, los, clearanceM (the least
+// clearance of the straight line over terrain and curvature; < 0 means blocked), v, diffDb, fsplDb, rxDbm }
+function link(h, a, b, { mhz, txDbm, gainsDbi, stepKm = 0.06, maxSteps = 160 }) {
+  const ha = h(a.x, a.y), hb = h(b.x, b.y);
+  const D = Math.hypot(b.x - a.x, b.y - a.y);   // map km ≈ ground km near the pole (scale factor < 1.008 within 330 km)
+  if (ha === null || hb === null || !Number.isFinite(ha) || !Number.isFinite(hb) || !(D > 0)) return null;
+  const za = ha + a.heightM, zb = hb + b.heightM, Dm = D * 1000, lambda = C / (mhz * 1e6);
+  const n = Math.min(maxSteps, Math.max(2, Math.ceil(D / stepKm)));
+  let clear = Infinity, vmax = -Infinity;
+  for (let i = 1; i < n; i++) {
+    const t = i / n, d1 = t * Dm, d2 = Dm - d1;
+    const g = h(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+    if (g === null || !Number.isFinite(g)) continue;
+    const bulge = (d1 * d2) / (2 * MOON_R_M);           // the sphere rising above the chord
+    const obs = g + bulge - (za + (zb - za) * t);         // terrain above the line of sight, m
+    if (-obs < clear) clear = -obs;
+    const v = obs * Math.sqrt((2 * Dm) / (lambda * d1 * d2));
+    if (v > vmax) vmax = v;
+  }
+  const diff = knifeEdgeDb(vmax), fs = fsplDb(D, mhz);
+  return { distKm: D, los: clear > 0, clearanceM: clear, v: vmax, diffDb: diff, fsplDb: fs, rxDbm: txDbm + gainsDbi - fs - diff };
+}
+
+// Coverage of a surface station: received power at the rover's antenna height on a square grid of cellKm
+// within radiusKm. → { x0, y0, cellKm, n (cells a side), rx: Float32Array (dBm, NaN off the terrain or
+// outside the radius), los: Uint8Array, station: { x, y }, losShare, linkShare (≥ threshold) }
+function coverage(h, station, { cellKm = 0.15 } = {}) {
+  const st = cleanStation(station), mhz = BANDS[st.band].mhz;
+  const [sx, sy] = toXY(st.latDeg, st.lonDeg);
+  const n = Math.ceil((2 * st.radiusKm) / cellKm), x0 = sx - (n * cellKm) / 2, y0 = sy + (n * cellKm) / 2;
+  const rx = new Float32Array(n * n).fill(NaN), los = new Uint8Array(n * n);
+  let inside = 0, seen = 0, linked = 0;
+  const a = { x: sx, y: sy, heightM: st.mastM };
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = x0 + (i + 0.5) * cellKm, y = y0 - (j + 0.5) * cellKm;
+    if (Math.hypot(x - sx, y - sy) > st.radiusKm) continue;
+    const L = link(h, a, { x, y, heightM: st.roverM }, { mhz, txDbm: st.txDbm, gainsDbi: st.gainsDbi, maxSteps: 120 });
+    if (!L) continue;
+    inside++;
+    rx[j * n + i] = L.rxDbm;
+    if (L.los) { los[j * n + i] = 1; seen++; }
+    if (L.rxDbm >= st.thresholdDbm) linked++;
+  }
+  return { x0, y0, cellKm, n, rx, los, station: { x: sx, y: sy }, losShare: inside ? seen / inside : 0, linkShare: inside ? linked / inside : 0, settings: st };
+}
+
+// The station link at every sample of a route profile (route-plan.js route.profile), with no limit on the
+// distance (beyond the radius the link is still computed; it just weakens). → { rx: Float32Array, los,
+// ok (≥ threshold): Uint8Array }
+function routeLinks(h, profile, station) {
+  const st = cleanStation(station), mhz = BANDS[st.band].mhz;
+  const [sx, sy] = toXY(st.latDeg, st.lonDeg);
+  const n = profile.x.length, rx = new Float32Array(n).fill(NaN), los = new Uint8Array(n), ok = new Uint8Array(n);
+  const a = { x: sx, y: sy, heightM: st.mastM };
+  for (let i = 0; i < n; i++) {
+    const L = link(h, a, { x: profile.x[i], y: profile.y[i], heightM: st.roverM }, { mhz, txDbm: st.txDbm, gainsDbi: st.gainsDbi, stepKm: 0.08, maxSteps: 200 });
+    if (!L) continue;
+    rx[i] = L.rxDbm; los[i] = L.los ? 1 : 0; ok[i] = L.rxDbm >= st.thresholdDbm ? 1 : 0;
+  }
+  return { rx, los, ok, settings: st };
+}
+
+// Link summary along a route: km with the station link, with Earth in view, with either, and the longest
+// stretch with neither (km, and hours when the drive gives times). earth: Uint8Array per sample or null.
+function linkSummary(profile, station, earth = null, tMs = null) {
+  const n = profile.km.length;
+  let total = 0, stKm = 0, eaKm = 0, anyKm = 0, gap = 0, gapMax = 0, gapStartT = null, gapMaxH = 0;
+  for (let i = 0; i < n; i++) {
+    const dk = profile.km[i], s = station?.ok[i] === 1, e = earth ? earth[i] === 1 : false;
+    total += dk;
+    if (s) stKm += dk;
+    if (e) eaKm += dk;
+    if (s || e) { anyKm += dk; gap = 0; gapStartT = null; continue; }
+    gap += dk;
+    if (tMs && gapStartT === null) gapStartT = tMs[i];
+    if (gap > gapMax) { gapMax = gap; if (tMs) gapMaxH = (tMs[i] - gapStartT) / 3600e3; }
+  }
+  return { totalKm: total, stationKm: stKm, earthKm: earth ? eaKm : null, anyKm, gapKm: gapMax, gapH: tMs ? gapMaxH : null };
+}
+
+return { MOON_R_M, BANDS, STATION_DEFAULTS, cleanStation, fsplDb, knifeEdgeDb, link, coverage, routeLinks, linkSummary };
+})();
+__m['ui/routeplan.js'] = (() => {
+// Route plan card (phase 4 §6 R): the waypoints as latitude and longitude rows (add, remove, reorder),
+// a slope limit, a Plan button with progress and Cancel, the three candidates as selectable rows with
+// their figures, and the caveats. The card plans nothing itself: it asks the caller with onPlan and shows
+// what update() brings back.
+//
+// createRoutePlanCard(deps, callbacks) → { el, update(params) }
+// deps: { maxPoints?: number (default 8), maxLatDeg?: number (default −80, the terrain grid's edge) }
+// callbacks: {
+//   onPoints(points)                    the edited waypoints, [[xKm, yKm], …], whenever every row is valid
+//   onPlan({ points, maxSlopeDeg, mobility })  Plan pressed (or "Plan at N°" after a blocked plan); mobility is
+//                                       { descentDeg, crossDeg, speedKmh } (phase 2), the climb limit being maxSlopeDeg
+//   onCancel()                          Cancel pressed while planning
+//   onPick(routeId)                     a candidate chosen: 'short' | 'flat' | 'sunny'
+//   onHover(routeId | null)             a candidate under the pointer or keyboard focus
+//   onPower(power)                      phase 3: the power inputs changed ({ panelW, batteryWh, loadW, massKg })
+//   onStation(station | null)           phase 4: the surface station's inputs changed (null: switched off)
+//   onDepartNow()                       phase 3: "Leave at the timeline time" pressed
+//   onFindDepartures()                  phase 3: "Find good departure times" pressed
+//   onUseDeparture(ms)                  phase 3: one of the found departures chosen
+//   onLimit(maxSlopeDeg)                the slope limit slider was let go at a new value (for the URL hash);
+//                                       set it back from outside with update({ maxSlopeDeg })
+// }
+// params (every key optional; a missing key keeps what the card shows):
+//   points: [[xKm, yKm], …] | null      e.g. what the Route tool drew; replaces the rows when it is a new array
+//   maxSlopeDeg: number                 the slope limit to show
+//   running: boolean, progress: 0–1     a plan in progress
+//   plan: Plan | null                   the last planRoutes() result
+//   selected: routeId | null            the candidate shown as the current route
+//   hovered: routeId | null             the candidate highlighted on the map (so map and card agree)
+//   energy: { drive, departMs, routeId } | null   phase 3: route-energy.js simulateDrive of the selected route
+//   departures: { routeId, scan } | null           phase 3: route-energy.js scanDepartures of the selected route
+//   comms: { routeId, summary, links, earth, coverage } | null   phase 4: comms.js figures of the selected route
+const { h, s, clear } = __m['ui/dom.js'];
+const { fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
+const { parseLatLon, formatLat, formatLon } = __m['coords.js'];
+const { DEFAULT_MAX_SLOPE, MAX_POINTS, MIN_POINTS, MOBILITY_DEFAULTS } = __m['route-plan.js'];
+const { POWER_DEFAULTS } = __m['route-energy.js'];
+const { STATION_DEFAULTS, BANDS } = __m['comms.js'];
+
+const LIMIT = { min: 5, max: 30, step: 1 };
+const kmFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const intFmt = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 });
+const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
+const DASH = '—';
+let uid = 0;
+
+// ---------- pure helpers (tested in Node) ----------
+
+// Text for a coordinate input: latitude 3 decimals, east longitude 0–360 with 3 decimals; − as minus sign.
+const coordText = (v) => formatLat(v);
+
+// Rows → { points, errors }: points [[x, y]] for rows that parse, errors [{ index, field, message }].
+function readRows(rows, maxLatDeg = TERRAIN_MAX_LAT) {
+  const points = [], errors = [];
+  rows.forEach((r, index) => {
+    // fix R8/R9: the shared coords.js parser, so every field accepts −89.45, 89.45S, 222.6E, 137.4W …
+    const p = parseLatLon(r.lat, r.lon, { maxLatDeg });
+    if (!p.ok) { errors.push({ index, field: p.field, message: p.message }); return; }
+    points.push(p.xy);
+  });
+  return { points, errors };
+}
+
+// [[x, y]] → rows of text.
+function rowsFromPoints(points) {
+  return (points ?? []).map(([x, y]) => { const { latDeg, lonDeg } = fromXY(x, y); return { lat: formatLat(latDeg), lon: formatLon(lonDeg) }; });
+}
+
+const rowTag = (i, n) => (i === 0 ? 'Start' : i === n - 1 ? 'End' : `Via ${i}`);
+
+// The figures of one candidate as display strings.
+function routeFigures(r) {
+  const len = ok(r.lengthKm) ? (r.lengthKm >= 100 ? intFmt.format(r.lengthKm) : kmFmt.format(r.lengthKm)) : DASH;
+  const deg = (v) => (ok(v) ? `${(Math.round(v * 10) / 10).toFixed(1)}°` : DASH);
+  return {
+    length: len,
+    max: deg(r.maxSlopeDeg),
+    mean: deg(r.meanSlopeDeg),
+    sun: ok(r.sunShare) ? `${Math.round(r.sunShare * 100)}%` : DASH,
+    psr: ok(r.psrKm) ? (r.psrKm > 0 && r.psrKm < 0.05 ? '<0.1' : kmFmt.format(r.psrKm)) : DASH,
+  };
+}
+
+// Phase 2: the rover figures of one candidate under a plan with mobility, as display lines.
+function roverLines(plan, r) {
+  if (!plan?.mobility || !r || r.unavailable || !ok(r.hours)) return [];
+  const m = plan.mobility, d1 = (v) => `${(Math.round(v * 10) / 10).toFixed(1)}°`;
+  const hrs = r.hours >= 48 ? `${(r.hours / 24).toFixed(1)} days` : `${r.hours.toFixed(r.hours < 10 ? 1 : 0)} h`;
+  const lines = [
+    { key: 'time', text: `Drive time ${hrs} at ${m.speedKmh} km/h, slower on slopes.` },
+    { key: 'grades', text: `Steepest along it: up ${d1(r.climbMaxDeg)}, down ${d1(r.descentMaxDeg)}, across ${d1(r.crossMaxDeg)}.` },
+    r.oneWayKm > 0.05
+      ? { key: 'oneway', warn: true, text: `One-way: ${kmFmt.format(r.oneWayKm)} km in ${r.oneWay.length} stretch${r.oneWay.length === 1 ? '' : 'es'} going down more steeply than the ${m.climbDeg}° climb limit. The rover could not come back up them (orange on the map).` }
+      : { key: 'oneway', text: 'No one-way stretches: every part could be driven back up within the limits.' },
+    plan.returnable
+      ? { key: 'return', text: 'Driving back from the end to the start is possible within the limits.' }
+      : { key: 'return', warn: true, text: 'No way back: from the end, the rover could not return to the start within the limits.' },
+    plan.traps?.km2 > 0.05
+      ? { key: 'traps', warn: true, text: `Traps: ${kmFmt.format(plan.traps.km2)} km² in the search area the rover could drive into but not out of (red on the map).` }
+      : { key: 'traps', text: 'No traps in the search area.' },
+  ];
+  return lines;
+}
+
+// Phase 3: the energy figures of a simulated drive as display lines.
+const when = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
+const dur = (h) => (h >= 48 ? `${(h / 24).toFixed(1)} days` : `${h.toFixed(h < 10 ? 1 : 0)} h`);
+function energyLines(drive, power = POWER_DEFAULTS) {
+  if (!drive) return [];
+  if (drive.reason === 'ephemeris') return [{ key: 'energy', warn: true, text: 'Energy not simulated: the departure is outside the ephemeris (1 Nov 2026 to 1 Jan 2029).' }];
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const lines = [];
+  if (drive.ok) lines.push({ key: 'arrive', text: `Leaving ${when(drive.departMs)}, arrives ${when(drive.arriveMs)}: ${dur(drive.driveH)} driving${drive.waitH > 0.05 ? ` + ${dur(drive.waitH)} parked to recharge (${drive.stops.length} stop${drive.stops.length === 1 ? '' : 's'})` : ''}.` });
+  else if (drive.reason === 'empty') lines.push({ key: 'arrive', warn: true, text: `Leaving ${when(drive.departMs)}, the battery runs out at km ${kmFmt.format(drive.emptyAt.km)} (${when(drive.emptyAt.tMs)}), ${drive.stops.length ? 'parked in the dark' : 'in the dark'}. Leave at another time, carry more battery or take a sunnier route.` });
+  else if (drive.reason === 'stuck') lines.push({ key: 'arrive', warn: true, text: `Leaving ${when(drive.departMs)}, it is parked for over 30 days waiting for sunlight at km ${kmFmt.format(drive.km)}: this departure does not work.` });
+  lines.push({ key: 'battery', warn: drive.socMin < power.reserve + 1e-9, text: `Battery: starts ${pct(drive.socStart)}, lowest ${pct(drive.socMin)} at km ${kmFmt.format(drive.socMinKm)}${drive.ok ? `, ends ${pct(drive.socEnd)}` : ''} (${intFmt.format(power.batteryWh)} Wh, ${pct(power.reserve)} reserve).` });
+  if (drive.km > 0) lines.push({ key: 'light', text: `In shadow for ${kmFmt.format(drive.darkKm)} km of ${kmFmt.format(drive.km)}; Earth in view for ${Math.round((drive.earthKm / drive.km) * 100)}% of it.` });
+  return lines;
+}
+
+// Phase 4: the comms figures as display lines.
+const COVERAGE_BINS = Object.freeze([
+  { min: -70, color: '#ff3d7f', label: '≥ −70' }, { min: -80, color: '#ff8a3d', label: '−80' }, { min: -90, color: '#ffd23d', label: '−90' },
+  { min: -100, color: '#8be04e', label: '−100' }, { min: -110, color: '#3dd6c6', label: '−110 dBm' },
+]);
+function commsLines(comms) {
+  if (!comms?.summary) return [];
+  const { summary: m, coverage: c } = comms, st = c?.settings ?? comms.links?.settings;
+  const pct = (a, b) => `${b > 0 ? Math.round((a / b) * 100) : 0}%`;
+  const lines = [];
+  if (st) lines.push({ key: 'station', text: `Surface station link (${BANDS[st.band].label}, ${st.txDbm} dBm, ${st.mastM} m mast, usable from ${st.thresholdDbm} dBm): ${kmFmt.format(m.stationKm)} km of ${kmFmt.format(m.totalKm)} (${pct(m.stationKm, m.totalKm)}).` });
+  if (m.earthKm !== null) lines.push({ key: 'earth', text: `Earth in view (direct link) for ${pct(m.earthKm, m.totalKm)} of the route at this departure.` });
+  lines.push(m.gapKm > 0.05
+    ? { key: 'gap', warn: true, text: `No link at all for ${kmFmt.format(m.totalKm - m.anyKm)} km; the longest gap is ${kmFmt.format(m.gapKm)} km${m.gapH !== null && m.gapH > 0 ? ` (${m.gapH.toFixed(1)} h)` : ''}.` }
+    : { key: 'gap', text: 'Always in touch: the station or Earth covers every part of the route.' });
+  if (c) lines.push({ key: 'coverage', text: `The station has line of sight to ${Math.round(c.losShare * 100)}% of its ${c.settings.radiusKm} km circle and a usable link to ${Math.round(c.linkShare * 100)}% (coloured on the map).` });
+  return lines;
+}
+
+// Phase 4: Earth and station links along the route as two thin strips (x = km).
+function linkStrip(profile, links, earth, totalKm) {
+  if (!profile) return null;
+  const W = 300, H = 14, n = profile.km.length, L = totalKm || 1;
+  const parts = [];
+  let km = 0;
+  const run = (row, has, y, cls) => {
+    let start = null, k = 0;
+    for (let i = 0; i <= n; i++) {
+      const on = i < n && has(i);
+      if (on && start === null) start = k;
+      if (!on && start !== null) { parts.push(s('rect', { x: ((start / L) * W).toFixed(1), y, width: Math.max(0.6, ((k - start) / L) * W).toFixed(1), height: 5, class: cls })); start = null; }
+      if (i < n) k += profile.km[i];
+    }
+  };
+  if (earth) run('earth', (i) => earth[i] === 1, 1, 'rp-link-earth');
+  if (links) run('station', (i) => links.ok[i] === 1, 8, 'rp-link-station');
+  km = 0;
+  return s('svg', { class: 'rp-links', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Links along the route: top Earth in view, bottom surface station' }, ...parts);
+}
+
+// Phase 3: a departure scan as one line.
+function departuresLine(scan) {
+  if (!scan) return null;
+  const days = Math.round((scan.toMs - scan.fromMs) / 86400e3);
+  if (!scan.tried) return 'No departures to try inside the ephemeris.';
+  if (!scan.ok) return `None of ${scan.tried} departures (every ${scan.stepMs / 3600e3} h for ${days} days from landing) gets there with these assumptions.`;
+  return `${scan.ok} of ${scan.tried} departures (every ${scan.stepMs / 3600e3} h for ${days} days from landing) get there. Best by lowest battery:`;
+}
+
+// Phase 3: battery along the route as a small SVG (shadowed stretches as grey bands, the reserve dashed).
+function batteryChart(drive, reserve, totalKm) {
+  const W = 300, H = 56, P = 2;
+  const ser = drive?.series;
+  if (!ser || ser.km.length < 2) return null;
+  const L = Math.max(totalKm || 0, ser.km[ser.km.length - 1]) || 1;
+  const X = (k) => P + (k / L) * (W - 2 * P), Y = (v) => P + (1 - v) * (H - 2 * P);
+  const bands = [];
+  for (let i = 1; i < ser.km.length; i++) if (!ser.lit[i]) bands.push(s('rect', { x: X(ser.km[i - 1]).toFixed(1), y: 0, width: Math.max(0.6, X(ser.km[i]) - X(ser.km[i - 1])).toFixed(1), height: H, class: 'rp-bat-dark' }));
+  let d = '';
+  for (let i = 0; i < ser.km.length; i++) d += `${i ? 'L' : 'M'}${X(ser.km[i]).toFixed(1)} ${Y(ser.soc[i]).toFixed(1)}`;
+  return s('svg', { class: 'rp-bat', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Battery charge along the route; grey bands are stretches in shadow' },
+    ...bands,
+    s('line', { x1: P, x2: W - P, y1: Y(reserve).toFixed(1), y2: Y(reserve).toFixed(1), class: 'rp-bat-reserve' }),
+    s('path', { d, class: 'rp-bat-line' }));
+}
+
+// One sentence for screen readers.
+function routeSentence(r, names) {
+  if (r.unavailable) return `${r.label}: ${r.unavailable}`;
+  const f = routeFigures(r);
+  const same = r.sameAs ? ` Same route as ${names[r.sameAs] ?? r.sameAs}.` : '';
+  return `${r.label}: ${f.length} km, max slope ${f.max}, mean slope ${f.mean}, sunlit ${f.sun} of the length, ${f.psr} km in permanent shadow.${same}`;
+}
+
+// Whether a plan answers these points and this limit.
+function planMatches(plan, points, limitDeg, mobility = null) {
+  if (!plan || !points || plan.limitDeg !== limitDeg) return false;
+  if (mobility && plan.mobility && ['descentDeg', 'crossDeg', 'speedKmh'].some((k) => plan.mobility[k] !== mobility[k])) return false;
+  const w = plan.waypoints ?? [];
+  if (w.length !== points.length) return false;
+  // within 50 m: the rows show 3-decimal degrees (≤ ~30 m), so a plan restored from a link still matches them
+  return w.every((p, i) => Math.abs(p[0] - points[i][0]) < 0.05 && Math.abs(p[1] - points[i][1]) < 0.05);
+}
+
+// ---------- the card ----------
+
+function swatch(id) {
+  return s('svg', { class: 'rp-swatch', width: 16, height: 10, viewBox: '0 0 16 10', 'aria-hidden': 'true' },
+    s('path', { class: `rp-line rp-line-${id}`, d: 'M1 5H15' }));
+}
+
+function createRoutePlanCard(deps = {}, callbacks = {}) {
+  const maxPoints = deps.maxPoints ?? MAX_POINTS;
+  const maxLat = deps.maxLatDeg ?? TERRAIN_MAX_LAT;
+  const id = `lsn-rp-${++uid}`;
+  let rows = [{ lat: '', lon: '' }, { lat: '', lon: '' }];
+  let errs = new Map();          // `${index}:${field}` → message
+  let limit = DEFAULT_MAX_SLOPE;
+  let mobility = { ...MOBILITY_DEFAULTS };   // phase 2: the rest of the rover limits
+  let power = { ...POWER_DEFAULTS };         // phase 3: panel, battery, load, mass
+  let energy = null, departures = null, comms = null;
+  let station = { ...STATION_DEFAULTS }, stationOn = true;
+  let lastPoints = null, emitted = null;
+  let running = false, progress = 0, plan = null, selected = null, hovered = null;
+  let validPoints = null;        // the rows as points when all are valid
+
+  // fix R8: the point rows are the first thing in the card, open by default; one line says both ways in
+  const head = h('div', { class: 'card-head card-head-stack' },
+    h('h2', { id: `${id}-head` }, 'Route plan'),
+    h('p', { class: 'card-sub' }, 'Type coordinates below, or draw with the Route tool on the map.'));
+
+  const list = h('ol', { class: 'rp-points', 'aria-label': 'Route points, in order' });
+  const addBtn = h('button', { type: 'button', class: 'btn rp-add', onclick: () => addRow() }, 'Add point');
+
+  const limitInput = h('input', { type: 'range', class: 'range', id: `${id}-limit`, min: LIMIT.min, max: LIMIT.max, step: LIMIT.step, value: limit });
+  const limitOut = h('output', { class: 'filter-value num', for: `${id}-limit` });
+  limitInput.addEventListener('input', () => { limit = Number(limitInput.value); renderLimit(); renderResults(); });
+  limitInput.addEventListener('change', () => callbacks.onLimit?.(limit));   // fix R (for L5): report the limit for the hash
+
+  // phase 2: descent and cross-slope limits and speed, next to the climb limit they go with
+  const roverInput = (key, label, unit, min, max, step) => {
+    const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-${key}`, min, max, step, value: mobility[key], inputmode: 'decimal' });
+    inp.addEventListener('change', () => {
+      const v = Number(inp.value);
+      mobility = { ...mobility, [key]: Number.isFinite(v) && v >= min && v <= max ? v : MOBILITY_DEFAULTS[key] };
+      inp.value = String(mobility[key]);
+      renderResults();
+    });
+    return h('label', { class: 'rp-rover-field', for: `${id}-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, h('span', { class: 'rp-rover-unit' }, unit)));
+  };
+  const powerInput = (key, label, unit, min, max, step) => {
+    const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-${key}`, min, max, step, value: power[key], inputmode: 'decimal' });
+    inp.addEventListener('change', () => {
+      const v = Number(inp.value);
+      power = { ...power, [key]: Number.isFinite(v) && v >= min && v <= max ? v : POWER_DEFAULTS[key] };
+      inp.value = String(power[key]);
+      callbacks.onPower?.({ ...power });
+    });
+    return h('label', { class: 'rp-rover-field', for: `${id}-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, h('span', { class: 'rp-rover-unit' }, unit)));
+  };
+  const powerRow = h('div', { class: 'rp-rover rp-power' },
+    powerInput('panelW', 'Panel', 'W', 0, 20000, 10), powerInput('batteryWh', 'Battery', 'Wh', 100, 100000, 100), powerInput('loadW', 'Load', 'W', 0, 5000, 5), powerInput('massKg', 'Mass', 'kg', 10, 20000, 10));
+  // phase 4: the surface station
+  const stationField = (key, label, unit, min, max, step) => {
+    const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-st-${key}`, min, max, step, value: station[key], inputmode: 'decimal' });
+    inp.addEventListener('change', () => {
+      const v = Number(inp.value);
+      station = { ...station, [key]: Number.isFinite(v) && v >= min && v <= max ? v : STATION_DEFAULTS[key] };
+      inp.value = String(station[key]);
+      callbacks.onStation?.(stationOn ? { ...station } : null);
+    });
+    return h('label', { class: 'rp-rover-field', for: `${id}-st-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, unit ? h('span', { class: 'rp-rover-unit' }, unit) : null));
+  };
+  const bandSel = h('select', { class: 'rp-rover-input', id: `${id}-st-band` }, ...Object.entries(BANDS).map(([k, b]) => h('option', { value: k, selected: k === station.band }, k === 's' ? 'S-band' : 'UHF')));
+  bandSel.addEventListener('change', () => { station = { ...station, band: bandSel.value }; callbacks.onStation?.(stationOn ? { ...station } : null); });
+  const stationToggle = h('input', { type: 'checkbox', id: `${id}-st-on`, checked: true });
+  stationToggle.addEventListener('change', () => { stationOn = stationToggle.checked; stationRow.classList.toggle('is-off', !stationOn); callbacks.onStation?.(stationOn ? { ...station } : null); });
+  const stationRow = h('div', { class: 'rp-station' },
+    h('label', { class: 'rp-station-head', for: `${id}-st-on` }, stationToggle, h('span', null, 'Surface station '), h('span', { class: 'rp-assumed' }, 'JPL site')),
+    h('div', { class: 'rp-rover rp-power' },
+      stationField('latDeg', 'Lat', '°', -90, -80, 0.01), stationField('lonDeg', 'Lon (E)', '°', 0, 360, 0.1), stationField('mastM', 'Mast', 'm', 0, 200, 1),
+      h('label', { class: 'rp-rover-field', for: `${id}-st-band` }, h('span', { class: 'rp-rover-name' }, 'Band'), h('span', { class: 'rp-rover-box' }, bandSel))));
+  const roverRow = h('div', { class: 'rp-rover' },
+    roverInput('descentDeg', 'Descent', '°', 1, 45, 1), roverInput('crossDeg', 'Across', '°', 1, 45, 1), roverInput('speedKmh', 'Speed', 'km/h', 0.05, 20, 0.05));
+
+  const planBtn = h('button', { type: 'submit', class: 'btn btn-primary rp-plan' }, 'Plan routes');   // stays enabled: planning again restarts
+  const cancelBtn = h('button', { type: 'button', class: 'btn rp-cancel', hidden: true, onclick: () => callbacks.onCancel?.() }, 'Cancel');
+  const formError = h('p', { class: 'field-error rp-form-error', id: `${id}-form-error`, hidden: true });
+
+  // fix R8 (replaces G's closed "Points and slope limit" disclosure): points, Add point, slope limit and
+  // Plan in plain sight, then the outcome and the candidates; only the notes stay behind a disclosure.
+  const form = h('form', { class: 'rp-form', novalidate: true, 'aria-labelledby': `${id}-head`, onsubmit: (e) => { e.preventDefault(); submit(); } },
+    h('div', { class: 'rp-cols', 'aria-hidden': 'true' }, h('span', null, 'Point'), h('span', null, 'Latitude'), h('span', null, 'Longitude (east)')),
+    list,
+    h('div', { class: 'rp-add-row' }, addBtn),
+    h('div', { class: 'filter rp-limit' },
+      h('div', { class: 'filter-head' }, h('label', { for: `${id}-limit` }, 'Climb limit ', h('span', { class: 'rp-assumed' }, 'assumed')), limitOut),
+      limitInput,
+      roverRow,
+      powerRow,
+      stationRow),
+    formError,
+    h('div', { class: 'rp-actions' }, planBtn, cancelBtn));
+
+  const status = h('div', { class: 'rp-status', role: 'status', 'aria-live': 'polite' });
+  const results = h('div', { class: 'rp-results' });
+  const notes = h('ul', { class: 'rp-notes fold-more-body' });
+
+  const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results,
+    h('details', { class: 'fold-more rp-notes-box' }, h('summary', null, 'Notes'), notes));
+
+  // ---------- points ----------
+  function validate(showErrors) {
+    const r = readRows(rows, maxLat);
+    const next = new Map();
+    for (const e of r.errors) next.set(`${e.index}:${e.field}`, e.message);
+    // empty rows only count as errors when the user asks to plan
+    if (!showErrors) for (const [k] of next) { const i = Number(k.split(':')[0]); if (!rows[i].lat.trim() && !rows[i].lon.trim()) next.delete(k); }
+    errs = next;
+    validPoints = r.errors.length ? null : r.points;
+    return r;
+  }
+
+  function emitPoints() {
+    if (!validPoints) return;
+    emitted = validPoints;
+    callbacks.onPoints?.(validPoints);
+  }
+
+  function commitRow(i, field, value) {
+    if (rows[i][field] === value) return;
+    rows[i] = { ...rows[i], [field]: value };
+    // re-check this row only; a half-filled row waits for its other field
+    const r = readRows([rows[i]], maxLat);
+    errs.delete(`${i}:lat`); errs.delete(`${i}:lon`);
+    const blank = !rows[i].lat.trim() && !rows[i].lon.trim();
+    const half = !rows[i].lat.trim() || !rows[i].lon.trim();
+    if (r.errors.length && !blank && !(half && r.errors[0].field !== field)) errs.set(`${i}:${r.errors[0].field}`, r.errors[0].message);
+    const all = readRows(rows, maxLat);
+    validPoints = all.errors.length ? null : all.points;
+    showErrors();   // in place: the list is not rebuilt, so Tab carries on where the user was going
+    renderResults();
+    emitPoints();
+  }
+
+  function addRow() {
+    if (rows.length >= maxPoints) return;
+    const at = rows.length >= 2 ? rows.length - 1 : rows.length;
+    rows.splice(at, 0, { lat: '', lon: '' });
+    shiftErrors(at, +1);
+    validate(false);
+    renderPoints(`${at}:lat`);
+    renderResults();
+  }
+
+  function removeRow(i) {
+    if (rows.length <= MIN_POINTS) return;
+    rows.splice(i, 1);
+    errs.delete(`${i}:lat`); errs.delete(`${i}:lon`);
+    shiftErrors(i + 1, -1);
+    validate(false);
+    renderPoints(`${Math.min(i, rows.length - 1)}:lat`);
+    renderResults();
+    emitPoints();
+  }
+
+  function shiftErrors(from, by) {
+    const next = new Map();
+    for (const [k, v] of errs) { const [i, f] = k.split(':'); const n = Number(i); next.set(`${n >= from ? n + by : n}:${f}`, v); }
+    errs = next;
+  }
+
+  let rowEls = [];   // per row: { lat, lon, box } (the inputs and the error container)
+
+  function coordInput(i, field, tag) {
+    const input = h('input', {
+      type: 'text', class: 'input rp-input num', inputmode: 'decimal', autocomplete: 'off', spellcheck: 'false',
+      value: rows[i][field], placeholder: field === 'lat' ? '−89.45' : '222.69',
+      'aria-label': `${tag} ${field === 'lat' ? 'latitude' : 'longitude, degrees east'}`, 'data-focus': `${i}:${field}`,
+    });
+    input.addEventListener('change', () => commitRow(i, field, input.value.trim()));
+    return input;
+  }
+
+  // error messages and aria-invalid of every row, without rebuilding the inputs
+  function showErrors() {
+    rowEls.forEach((r, i) => {
+      clear(r.box);
+      for (const field of ['lat', 'lon']) {
+        const msg = errs.get(`${i}:${field}`), input = r[field], errId = `${id}-e${i}-${field}`;
+        if (msg) {
+          input.setAttribute('aria-invalid', 'true'); input.setAttribute('aria-describedby', errId);
+          r.box.append(h('p', { class: 'field-error', id: errId }, msg));
+        } else { input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby'); }
+      }
+    });
+    if (!errs.size) formError.hidden = true;
+  }
+
+  function renderPoints(focusKey = null) {
+    clear(list);
+    rowEls = [];
+    rows.forEach((row, i) => {
+      const tag = rowTag(i, rows.length);
+      const lat = coordInput(i, 'lat', tag), lon = coordInput(i, 'lon', tag), box = h('div', { class: 'rp-errors' });
+      rowEls.push({ lat, lon, box });
+      // one line per point: tag, latitude, longitude, remove (fix R8; reordering is by editing the rows)
+      const label = `Remove ${tag.toLowerCase()}`;
+      list.append(h('li', { class: 'rp-point' },
+        h('span', { class: 'rp-tag' }, tag),
+        lat, lon,
+        h('button', { type: 'button', class: 'rp-tool', 'aria-label': label, title: label, disabled: rows.length <= MIN_POINTS, 'data-focus': `${i}:remove`, onclick: () => removeRow(i) }, '×'),
+        box));
+    });
+    showErrors();
+    addBtn.disabled = rows.length >= maxPoints;
+    addBtn.textContent = rows.length >= maxPoints ? `At most ${maxPoints} points` : 'Add point';
+    if (focusKey) {
+      const t = list.querySelector(`[data-focus="${focusKey}"]`);
+      (t && !t.disabled ? t : list.querySelector(`[data-focus="${focusKey.split(':')[0]}:lat"]`) ?? addBtn).focus({ preventScroll: true });
+    }
+  }
+
+  function submit() {
+    // take what is typed even if no change event has fired yet (Enter in a field)
+    rowEls.forEach((r, i) => { rows[i] = { lat: r.lat.value.trim(), lon: r.lon.value.trim() }; });
+    const r = validate(true);
+    showErrors();
+    if (r.errors.length) {
+      formError.hidden = false;
+      formError.textContent = r.errors.length === 1 ? 'Fix the highlighted point.' : `Fix the ${r.errors.length} highlighted entries.`;
+      const first = r.errors[0];
+      list.querySelector(`[data-focus="${first.index}:${first.field}"]`)?.focus();
+      return;
+    }
+    formError.hidden = true;
+    emitPoints();
+    callbacks.onPlan?.({ points: r.points, maxSlopeDeg: limit, mobility: { ...mobility } });
+  }
+
+  function renderLimit() {
+    if (Number(limitInput.value) !== limit) limitInput.value = String(limit);
+    limitOut.textContent = `${limit}°`;
+    limitInput.setAttribute('aria-valuetext', `${limit} degrees`);
+  }
+
+  // ---------- results ----------
+  const names = { short: 'Shortest', flat: 'Flattest', sunny: 'Sunniest' };
+
+  function pick(rid) { if (rid !== selected) callbacks.onPick?.(rid); }
+  function hover(rid) { if (rid !== hovered) { hovered = rid; callbacks.onHover?.(rid); } }
+
+  // status line: progress while planning (updated in place, announced in 10 % steps), then the outcome
+  let statusKey = '';
+  const progText = h('span', { class: 'num' });
+  const progFill = h('span');
+  const progLine = h('p', { class: 'region-progress' }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, progFill), progText);
+
+  function renderStatus(stale) {
+    cancelBtn.hidden = !running;
+    if (running) {
+      const pr = Math.max(0, Math.min(1, progress ?? 0));
+      if (statusKey !== 'running') { statusKey = 'running'; clear(status); status.append(progLine); }
+      progFill.style.transform = `scaleX(${pr.toFixed(3)})`;
+      const text = `Planning… ${Math.floor(pr * 10) * 10}%`;
+      if (progText.textContent !== text) progText.textContent = text;
+      return;
+    }
+    const key = `${plan ? plan.ms + ':' + plan.nodes + ':' + (plan.error ?? '') + ':' + (plan.blocked?.passesAtDeg ?? '') : 'none'}|${stale}|${limit}`;
+    if (key === statusKey && plan !== null) return;
+    statusKey = key;
+    clear(status);
+    if (!plan) return;
+    if (plan.blocked && ok(plan.blocked.passesAtDeg)) {
+      const at = plan.blocked.passesAtDeg;
+      const can = at <= LIMIT.max;
+      status.append(h('div', { class: 'rp-blocked' },
+        h('p', null, `No route keeps under ${plan.blocked.limitDeg}°${plan.waypoints?.length > 2 ? ` on leg ${plan.blocked.leg + 1}` : ''}.`),
+        h('p', { class: 'rp-blocked-sub' }, `The gentlest way through the search area needs ${at}° on the ${baseText()} grid.`),
+        can ? h('button', { type: 'button', class: 'btn rp-relax', onclick: () => { limit = at; renderLimit(); submit(); } }, `Plan at ${at}°`)
+          : h('p', { class: 'rp-blocked-sub' }, `That is above the ${LIMIT.max}° the limit goes to.`)));
+      return;
+    }
+    if (plan.error) { status.append(h('p', { class: 'rp-error' }, plan.error)); return; }
+    if (plan.ok) {
+      if (stale) status.append(h('p', { class: 'rp-stale' }, 'Points or limit changed. Plan again to update.'));
+      else status.append(h('p', { class: 'rp-done num' }, `Searched ${intFmt.format(plan.nodes)} terrain nodes in ${(plan.ms / 1000).toFixed(1)} s.`));
+    }
+  }
+
+  const baseText = () => (plan?.baselineKm ? `${Math.round(plan.baselineKm * 1000)} m` : '240 m');
+
+  // the candidate rows are rebuilt only for a new plan; selection and hover change them in place, so
+  // focus stays put and a hover from the map does not re-render under the pointer
+  let rowsKey = null, buttons = [];
+
+  function syncRows() {
+    const usable = buttons.filter((b) => !b.disabled);
+    const focusId = usable.some((b) => b.dataset.route === selected) ? selected : usable[0]?.dataset.route;
+    for (const b of buttons) {
+      const rid = b.dataset.route;
+      b.classList.toggle('is-selected', rid === selected);
+      b.classList.toggle('is-hovered', rid === hovered);
+      b.setAttribute('aria-checked', String(rid === selected));
+      b.tabIndex = rid === focusId ? 0 : -1;
+    }
+  }
+
+  function renderResults() {
+    const stale = !!plan?.ok && !planMatches(plan, validPoints ?? lastPoints, limit, mobility);
+    renderStatus(stale);
+    const show = !!plan?.ok && !running;
+    const key = show ? plan : null;
+    if (key !== rowsKey) {
+      rowsKey = key;
+      clear(results);
+      buttons = [];
+      if (show) buildRows();
+    }
+    results.querySelector('.rp-rows')?.classList.toggle('is-stale', stale);
+    syncRows();
+    renderRover();
+  }
+
+  // phase 2: the selected route's rover figures under the rows
+  let roverKey = null;
+  const roverBox = h('div', { class: 'rp-rover-result', 'aria-live': 'polite' });
+  function renderRover() {
+    const r = plan?.ok && !running ? plan.routes.find((x) => x.id === selected) : null;
+    const key = r ? `${plan.ms}:${plan.nodes}:${selected}:${energy?.departMs ?? ''}:${energy?.routeId ?? ''}:${departures?.scan?.tried ?? ''}:${departures?.routeId ?? ''}:${comms?.stamp ?? ''}` : null;
+    if (key === roverKey) return;
+    roverKey = key;
+    clear(roverBox);
+    const lines = roverLines(plan, r);
+    if (!lines.length) { roverBox.remove(); return; }
+    const drive = energy && energy.routeId === r.id ? energy.drive : null;
+    const eLines = energyLines(drive, power);
+    const chart = drive ? batteryChart(drive, power.reserve, r.lengthKm) : null;
+    roverBox.append(h('p', { class: 'rp-rover-title' }, `Rover on the ${names[r.id] ?? r.label} route`),
+      eLines.length ? h('ul', { class: 'rp-energy' }, ...eLines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))) : null,
+      chart ? h('div', { class: 'rp-bat-box' }, chart,
+        ...(() => { const c = comms && comms.routeId === r.id ? comms : null; const strip = c ? linkStrip(r.profile, c.links, c.earth, r.lengthKm) : null; return strip ? [strip, h('div', { class: 'rp-link-key' }, h('span', { class: 'k-earth' }, 'Earth in view'), h('span', { class: 'k-station' }, 'Station link'))] : []; })(),
+        h('div', { class: 'rp-bat-axis' }, h('span', null, '0 km'), h('span', null, 'battery along the route'), h('span', null, `${kmFmt.format(r.lengthKm)} km`))) : null,
+      ...(() => {
+        const c = comms && comms.routeId === r.id ? comms : null;
+        const cl = commsLines(c);
+        if (!cl.length) return [];
+        return [h('ul', { class: 'rp-energy rp-comms' }, ...cl.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))),
+          c.coverage ? h('div', { class: 'rp-cov-key', 'aria-label': 'Station coverage colours, received power' }, ...COVERAGE_BINS.map((b) => h('span', null, h('i', { style: `background:${b.color}` }), b.label))) : null];
+      })(),
+      drive ? h('div', { class: 'rp-depart-row' },
+        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
+        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times')) : null,
+      ...(() => {
+        const scan = departures && departures.routeId === r.id ? departures.scan : null;
+        if (!scan) return [];
+        return [h('p', { class: 'rp-dep-line' }, departuresLine(scan)),
+          scan.best.length ? h('ul', { class: 'rp-dep-list' }, ...scan.best.map((b) => h('li', null,
+            h('span', null, `${when(b.departMs)} · lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`),
+            h('button', { type: 'button', class: 'btn rp-dep-use', onclick: () => callbacks.onUseDeparture?.(b.departMs) }, 'Use')))) : null];
+      })(),
+      h('ul', null, ...lines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))));
+    if (!roverBox.isConnected || roverBox.parentNode !== results) results.append(roverBox);
+  }
+
+  function buildRows() {
+    const routes = plan.routes;
+    // fix R3: every column says its unit on a second header line; Max and Mean are slopes
+    const col = (name, unit, title) => h('span', { title }, h('span', { class: 'rp-head-name' }, name), h('span', { class: 'rp-head-unit' }, unit));
+    const header = h('div', { class: 'rp-row rp-row-head', 'aria-hidden': 'true' },
+      h('span', null, 'Route'), col('Length', 'km', 'Length along the route, km'), col('Max', 'slope°', 'Steepest slope along the route'),
+      col('Mean', 'slope°', 'Mean slope along the route'), col('Sun', 'lit %', 'Share of the length sunlit during the planned stay'),
+      col('PSR', 'km', 'km inside permanently shadowed regions'));
+    const group = h('div', { class: 'rp-rows', role: 'radiogroup', 'aria-label': 'Candidate routes' });
+    for (const r of routes) {
+      const f = routeFigures(r);
+      const b = h('button', {
+        type: 'button', role: 'radio', class: 'rp-row rp-choice', 'aria-checked': 'false', tabindex: '-1',
+        disabled: !!r.unavailable, 'data-route': r.id, 'aria-label': routeSentence(r, names),
+        onclick: () => pick(r.id),
+        onpointerenter: () => hover(r.id), onpointerleave: () => hover(null),
+        onfocus: () => hover(r.id), onblur: () => hover(null),
+      },
+      h('span', { class: 'rp-name' }, swatch(r.id), h('span', null, r.label)),
+      r.unavailable
+        ? h('span', { class: 'rp-unavailable' }, r.unavailable)
+        : [h('span', { class: 'num' }, f.length), h('span', { class: 'num' }, f.max), h('span', { class: 'num' }, f.mean), h('span', { class: 'num' }, f.sun), h('span', { class: 'num' }, f.psr)],
+      r.sameAs ? h('span', { class: 'rp-same' }, `Same route as ${names[r.sameAs]}`) : null);
+      buttons.push(b);
+      group.append(b);
+    }
+    group.addEventListener('keydown', (e) => {
+      const live = buttons.filter((b) => !b.disabled);
+      const at = live.indexOf(document.activeElement);
+      if (at < 0) return;
+      const to = { ArrowDown: at + 1, ArrowRight: at + 1, ArrowUp: at - 1, ArrowLeft: at - 1, Home: 0, End: live.length - 1 }[e.key];
+      if (to === undefined) return;
+      e.preventDefault();
+      const b = live[(to + live.length) % live.length];
+      b.focus();
+      pick(b.dataset.route);
+    });
+    const sunGap = routes.find((r) => !r.unavailable && r.sunShare !== null && r.sunKnown < 0.95);
+    results.append(header, group);
+    if (sunGap) results.append(h('p', { class: 'rp-note-inline' }, 'Sunlit figures cover only part of the length; the rest is not computed yet.'));
+  }
+
+  function renderNotes() {
+    clear(notes);
+    notes.append(
+      h('li', null, `Slopes come from the ${baseText()} terrain grid. Rover-scale slopes are steeper; this cannot tell whether a vehicle can drive the route.`),
+      h('li', null, 'Illustrative only. Drive time uses the speed set above, slower on slopes. Descent, across, speed, panel, battery, load and mass are assumptions, like the climb limit.'),
+      h('li', null, `Energy: the drive is run forward from the departure. It draws the load plus ${POWER_DEFAULTS.driveW} W to drive, plus m·g·v·sin θ ÷ ${POWER_DEFAULTS.climbEff} to climb (no regeneration downhill); the panel faces the Sun (vertical, turned to its azimuth) and makes power only where the Sun clears the local skyline (the 2 km or 1 km skyline grid). Below ${Math.round(POWER_DEFAULTS.reserve * 100)}% it parks until it is back to ${Math.round((POWER_DEFAULTS.reserve + POWER_DEFAULTS.resumeMargin) * 100)}%.`),
+      h('li', null, 'Moves are checked by direction: the grade along the move against the climb and descent limits, the slope across it against the across limit. Switchbacks are limited to 16 directions, so some climbable slopes count as one-way.'),
+      h('li', null, 'Max and Mean: the steepest and the mean slope along the route. Sun: share of the length lit during the planned stay, from the 2 km map of the stay at any zoom. PSR: km inside the official permanently shadowed regions.'),
+      h('li', null, 'Each name shows the best of the searched routes by its own figure; when one route is best on two, both rows show it.'),
+      h('li', null, `Comms: free-space loss plus the dominant knife edge in the terrain between the station's mast and the rover's ${STATION_DEFAULTS.roverM} m antenna (ITU-R P.526), with the Moon's curvature, on the loaded terrain grid. Site, mast, radius, bands and 0 dBi antennas follow Jun et al. (JPL, IEEE Aerospace 2025); the ${STATION_DEFAULTS.txDbm} dBm transmitter and ${STATION_DEFAULTS.thresholdDbm} dBm threshold are assumptions. Earth in view uses the skyline grid at the simulated times.`));
+  }
+
+  function update(p = {}) {
+    if ('points' in p && p.points !== lastPoints) {
+      lastPoints = p.points ?? null;
+      if (p.points && p.points !== emitted) {
+        rows = rowsFromPoints(p.points);
+        while (rows.length < MIN_POINTS) rows.push({ lat: '', lon: '' });
+        if (rows.length > maxPoints) rows = rows.slice(0, maxPoints);
+        errs = new Map();
+        validate(false);
+        renderPoints(null);
+      }
+    }
+    if (ok(p.maxSlopeDeg) && p.maxSlopeDeg !== limit) { limit = Math.max(LIMIT.min, Math.min(LIMIT.max, Math.round(p.maxSlopeDeg))); renderLimit(); }
+    if ('running' in p) running = !!p.running;
+    if ('progress' in p) progress = p.progress;
+    if ('plan' in p) plan = p.plan ?? null;
+    if ('selected' in p) selected = p.selected ?? null;
+    if ('hovered' in p) hovered = p.hovered ?? null;
+    if ('energy' in p) { energy = p.energy ?? null; roverKey = null; }
+    if ('departures' in p) { departures = p.departures ?? null; roverKey = null; }
+    if ('comms' in p) { comms = p.comms ?? null; roverKey = null; }
+    const baseBefore = notes.dataset.base;
+    renderResults();
+    if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }
+  }
+
+  validate(false);
+  renderPoints(null);
+  renderLimit();
+  renderResults();
+  notes.dataset.base = baseText();
+  renderNotes();
+  return { el, update };
+}
+
+return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, COVERAGE_BINS, commsLines, linkStrip, departuresLine, batteryChart, routeSentence, planMatches, createRoutePlanCard };
+})();
 __m['map/routes-layer.js'] = (() => {
 // Planned route candidates on the map (phase 4 §6 R): the three candidates of route-plan.js and their
 // waypoints, drawn into one SVG <g>. The selected candidate is a solid line over a dark casing; the others
@@ -7526,6 +8481,7 @@ __m['map/routes-layer.js'] = (() => {
 //   labels: boolean,                     route names next to the lines (default true)
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
+//   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
 //                                        default) reads the site names, dots and feature names on the page
@@ -7534,6 +8490,7 @@ __m['map/routes-layer.js'] = (() => {
 // no site name or marker, no other label, and no waypoint; a candidate that finds none is left unlabelled
 // (the selected one keeps its first place). Lines are wider and cased (phase4-route.css).
 const { s, clear } = __m['ui/dom.js'];
+const { COVERAGE_BINS } = __m['ui/routeplan.js'];
 
 const f1 = (v) => (Math.round(v * 10) / 10).toString();
 const ROUTE_IDS = ['short', 'flat', 'sunny'];
@@ -7617,10 +8574,27 @@ function placeLabel(points, toPx, name, frac, taken, width = Infinity, height = 
   return null;
 }
 
-function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null } = {}) {
+function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
+  // phase 4: station coverage, one path per colour bin (cells under the threshold are not drawn)
+  if (coverage) {
+    const { x0, y0, cellKm, n, rx } = coverage, thr = coverage.settings.thresholdDbm;
+    const ds = COVERAGE_BINS.map(() => '');
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const v = rx[j * n + i];
+      if (!(v >= thr)) continue;
+      const b = COVERAGE_BINS.findIndex((q) => v >= q.min);
+      if (b < 0) continue;
+      const [ax, ay] = toPx(x0 + i * cellKm, y0 - j * cellKm), [bx, by] = toPx(x0 + (i + 1) * cellKm, y0 - (j + 1) * cellKm);
+      if (![ax, ay, bx, by].every(Number.isFinite)) continue;
+      ds[b] += `M${f1(ax)} ${f1(ay)}h${f1(bx - ax + 0.3)}v${f1(by - ay + 0.3)}h${f1(-(bx - ax + 0.3))}z`;
+    }
+    ds.forEach((d, b) => { if (d) gEl.append(s('path', { class: 'rp-cov', d, fill: COVERAGE_BINS[b].color })); });
+    const [sx, sy] = toPx(coverage.station.x, coverage.station.y);
+    if (Number.isFinite(sx) && Number.isFinite(sy)) gEl.append(s('g', { class: 'rp-station-mark', transform: `translate(${f1(sx)} ${f1(sy)})` }, s('path', { d: 'M0 -9L6 7H-6Z' }), s('circle', { r: 2.2, cy: -9 })));
+  }
   // phase 2: trap cells (one path of squares), under everything else
   if (traps?.cells?.length) {
     const h = traps.cellKm / 2;
@@ -8320,6 +9294,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
       waypoints: rp?.plan?.waypoints ?? rp?.points ?? null,
       traps: rp?.plan?.traps ?? null,
       drive: rp?.energy?.drive ?? null,
+      coverage: rp?.stationOff ? null : rp?.coverage ?? null,
       toPx: (x, y) => toPxView(sqView(view), S, x, y),
       width: S, height: S,
     });
@@ -10668,738 +11643,6 @@ function createRelayCard(deps = {}, callbacks = {}) {
 }
 
 return { createRelayCard };
-})();
-__m['route-energy.js'] = (() => {
-// Phase 3 (docs/PHASES.md): energy along a planned route. The drive is run forward in time from a
-// departure: at each profile sample the rover's speed (route-plan.js speedFactor), the power it draws and
-// the power its panel makes in sunlight give the battery's charge. Below the reserve it parks to charge and
-// drives on once the battery is back above the reserve plus a margin. No DOM; runs in Node.
-//
-// simulateDrive(profile, { mob, power, departMs, sky }) → Drive
-//   profile   route-plan.js route.profile: { x, y, km, pitch } per sample, in driving order
-//   mob       plan.mobility (speedKmh, climbDeg, descentDeg)
-//   power     cleanPower(…): watts, watt-hours, kg (all assumptions, see POWER_DEFAULTS)
-//   departMs  departure time (UTC ms)
-//   sky(xKm, yKm, tMs) → { sunDeg, earthDeg, azDeg, elDeg } | null: the Sun's and Earth's height above the
-//             local skyline (deg; > 0 means in view) and the Sun's azimuth and elevation; null outside the
-//             ephemeris
-// Drive = { ok, reason (null | 'empty' | 'stuck' | 'ephemeris'), departMs, arriveMs, driveH, waitH,
-//           socStart, socMin, socMinKm, socEnd (0–1 of capacity), darkKm, earthKm, km, stops (parking spells),
-//           emptyAt ({ x, y, km, tMs } | null), series: { km, soc, lit, tMs } (Float32/Float64 arrays, ≤ 240
-//           points, for the chart) }
-const { panelFactor } = __m['energy.js'];
-const { speedFactor } = __m['route-plan.js'];
-
-const G_MOON = 1.62;   // m/s²
-// A VIPER-class solar rover. Every figure is an assumption the user can change, not data.
-const POWER_DEFAULTS = Object.freeze({
-  panelW: 450,        // rated panel output, Sun on the panel normal
-  batteryWh: 4000,    // usable battery capacity
-  loadW: 120,         // avionics, heaters, comms: drawn all the time
-  driveW: 180,        // extra for driving on the flat
-  massKg: 450,        // for the climbing power m·g·v·sin θ
-  climbEff: 0.5,      // drivetrain efficiency when climbing
-  reserve: 0.2,       // park below this share of the battery
-  resumeMargin: 0.25, // drive on once the battery is back above reserve + this share
-  attitude: 'track',  // vertical panel turned to the Sun (energy.js)
-});
-
-function cleanPower(p = {}) {
-  const d = POWER_DEFAULTS;
-  const num = (v, lo, hi, def) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : def);
-  return {
-    panelW: num(p.panelW, 0, 1e5, d.panelW), batteryWh: num(p.batteryWh, 1, 1e6, d.batteryWh),
-    loadW: num(p.loadW, 0, 1e5, d.loadW), driveW: num(p.driveW, 0, 1e5, d.driveW), massKg: num(p.massKg, 1, 1e5, d.massKg),
-    climbEff: num(p.climbEff, 0.05, 1, d.climbEff), reserve: num(p.reserve, 0, 0.9, d.reserve),
-    resumeMargin: num(p.resumeMargin, 0.01, 0.9, d.resumeMargin), attitude: ['track', 'flat'].includes(p.attitude) ? p.attitude : d.attitude,
-  };
-}
-
-// Power drawn while driving on a grade (tan) at a speed (km/h), W.
-function drivePowerW(power, pitchTan, kmh) {
-  const climb = pitchTan > 0 ? (power.massKg * G_MOON * (kmh / 3.6) * Math.sin(Math.atan(pitchTan))) / power.climbEff : 0;
-  return power.loadW + power.driveW + climb;
-}
-
-// Panel output in W at a point and time (0 behind the terrain or below the horizon).
-function panelW(power, s) {
-  if (!s || !(s.sunDeg > 0) || !Number.isFinite(s.elDeg)) return 0;
-  return power.panelW * panelFactor(power.attitude, s.azDeg, s.elDeg);
-}
-
-const PARK_STEP_MS = 15 * 60e3, MAX_WAIT_MS = 30 * 86400e3;
-
-function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
-  const power = cleanPower(p0);
-  const cap = power.batteryWh, n = profile?.km?.length ?? 0;
-  let t = departMs, soc = cap, socMin = cap, socMinKm = 0, km = 0, driveH = 0, waitMs = 0, darkKm = 0, earthKm = 0;
-  const stops = [];
-  const sKm = [], sSoc = [], sLit = [], sT = [];
-  const record = (lit) => { sKm.push(km); sSoc.push(soc / cap); sLit.push(lit ? 1 : 0); sT.push(t); };
-  const out = (ok, reason, extra = {}) => {
-    const keep = Math.max(1, Math.ceil(sKm.length / 240));
-    const pick = (arr, Type) => Type.from(arr.filter((_, i) => i % keep === 0 || i === arr.length - 1));
-    return {
-      ok, reason, departMs, arriveMs: ok ? t : null, driveH, waitH: waitMs / 3600e3, km,
-      socStart: 1, socMin: socMin / cap, socMinKm, socEnd: soc / cap, darkKm, earthKm, stops, emptyAt: null,
-      series: { km: pick(sKm, Float32Array), soc: pick(sSoc, Float32Array), lit: pick(sLit, Uint8Array), tMs: pick(sT, Float64Array) },
-      ...extra,
-    };
-  };
-  const first = n ? sky(profile.x[0], profile.y[0], t) : null;
-  if (!first) return out(false, 'ephemeris');
-  record(first.sunDeg > 0);
-  for (let i = 0; i < n; i++) {
-    const x = profile.x[i], y = profile.y[i], dk = profile.km[i], pitch = profile.pitch[i];
-    const kmh = mob.speedKmh * speedFactor(pitch, mob), dtH = dk / kmh;
-    const s = sky(x, y, t + (dtH * 3600e3) / 2);
-    if (!s) return out(false, 'ephemeris');
-    const lit = s.sunDeg > 0;
-    soc = Math.min(cap, soc + (panelW(power, s) - drivePowerW(power, pitch, kmh)) * dtH);
-    t += dtH * 3600e3; km += dk; driveH += dtH;
-    if (!lit) darkKm += dk;
-    if (s.earthDeg > 0) earthKm += dk;
-    if (soc <= 0) { soc = 0; record(lit); return out(false, 'empty', { emptyAt: { x, y, km, tMs: t } }); }
-    if (soc < socMin) { socMin = soc; socMinKm = km; }
-    record(lit);
-    if (soc < power.reserve * cap && i < n - 1) {
-      // park here: the load only, charging when lit, until reserve + margin
-      const stop = { x, y, km, fromMs: t, toMs: t };
-      while (soc < (power.reserve + power.resumeMargin) * cap) {
-        const q = sky(x, y, t + PARK_STEP_MS / 2);
-        if (!q) return out(false, 'ephemeris');
-        soc = Math.min(cap, soc + (panelW(power, q) - power.loadW) * (PARK_STEP_MS / 3600e3));
-        t += PARK_STEP_MS; waitMs += PARK_STEP_MS;
-        if (soc <= 0) { soc = 0; record(false); stop.toMs = t; stops.push(stop); return out(false, 'empty', { emptyAt: { x, y, km, tMs: t } }); }
-        if (soc < socMin) { socMin = soc; socMinKm = km; }
-        if (t - stop.fromMs > MAX_WAIT_MS) { stop.toMs = t; stops.push(stop); return out(false, 'stuck'); }
-      }
-      stop.toMs = t;
-      stops.push(stop);
-      record(true);
-    }
-  }
-  return out(true, null);
-}
-
-// Departures that work: simulateDrive every stepMs over [fromMs, toMs]. → { tried, ok, fromMs, toMs, stepMs,
-// best: up to `count` working departures with the highest lowest-battery, at least a day apart }
-function scanDepartures(profile, { mob, power, sky, fromMs, toMs, stepMs = 6 * 3600e3, count = 3 }) {
-  const good = [];
-  let tried = 0;
-  for (let t = fromMs; t <= toMs; t += stepMs) {
-    const d = simulateDrive(profile, { mob, power, departMs: t, sky });
-    if (d.reason === 'ephemeris') break;
-    tried++;
-    if (d.ok) good.push({ departMs: t, arriveMs: d.arriveMs, socMin: d.socMin, waitH: d.waitH });
-  }
-  const best = [];
-  for (const g of [...good].sort((a, b) => b.socMin - a.socMin || a.departMs - b.departMs)) {
-    if (best.length >= count) break;
-    if (best.every((b) => Math.abs(b.departMs - g.departMs) >= 86400e3)) best.push(g);
-  }
-  best.sort((a, b) => a.departMs - b.departMs);
-  return { tried, ok: good.length, fromMs, toMs, stepMs, best };
-}
-
-// sky() for simulateDrive from the page's heat grid (heat.js createHeatGrid: skylines per cell), the
-// ephemeris and fromXY: the Sun's and Earth's clearance above the cell's skyline, the Sun's az/el.
-function skyFromGrid(grid, eph, bodyAzEl, fromXY) {
-  const c = [0, 0];
-  return (x, y, tMs) => {
-    const d = eph.at(tMs);
-    if (!d) return null;
-    const k = grid.cellAt(x, y);
-    const { latDeg, lonDeg } = fromXY(x, y);
-    const r = bodyAzEl(eph, { latDeg, lonDeg }, tMs);
-    if (k === null || k === undefined || !r) return { sunDeg: NaN, earthDeg: NaN, azDeg: r?.sun.azDeg ?? null, elDeg: r?.sun.elDeg ?? NaN };
-    grid.clearances(k, d, c);
-    return { sunDeg: c[0], earthDeg: c[1], azDeg: r.sun.azDeg, elDeg: r.sun.elDeg };
-  };
-}
-
-return { G_MOON, POWER_DEFAULTS, cleanPower, drivePowerW, panelW, simulateDrive, scanDepartures, skyFromGrid };
-})();
-__m['ui/routeplan.js'] = (() => {
-// Route plan card (phase 4 §6 R): the waypoints as latitude and longitude rows (add, remove, reorder),
-// a slope limit, a Plan button with progress and Cancel, the three candidates as selectable rows with
-// their figures, and the caveats. The card plans nothing itself: it asks the caller with onPlan and shows
-// what update() brings back.
-//
-// createRoutePlanCard(deps, callbacks) → { el, update(params) }
-// deps: { maxPoints?: number (default 8), maxLatDeg?: number (default −80, the terrain grid's edge) }
-// callbacks: {
-//   onPoints(points)                    the edited waypoints, [[xKm, yKm], …], whenever every row is valid
-//   onPlan({ points, maxSlopeDeg, mobility })  Plan pressed (or "Plan at N°" after a blocked plan); mobility is
-//                                       { descentDeg, crossDeg, speedKmh } (phase 2), the climb limit being maxSlopeDeg
-//   onCancel()                          Cancel pressed while planning
-//   onPick(routeId)                     a candidate chosen: 'short' | 'flat' | 'sunny'
-//   onHover(routeId | null)             a candidate under the pointer or keyboard focus
-//   onPower(power)                      phase 3: the power inputs changed ({ panelW, batteryWh, loadW, massKg })
-//   onDepartNow()                       phase 3: "Leave at the timeline time" pressed
-//   onFindDepartures()                  phase 3: "Find good departure times" pressed
-//   onUseDeparture(ms)                  phase 3: one of the found departures chosen
-//   onLimit(maxSlopeDeg)                the slope limit slider was let go at a new value (for the URL hash);
-//                                       set it back from outside with update({ maxSlopeDeg })
-// }
-// params (every key optional; a missing key keeps what the card shows):
-//   points: [[xKm, yKm], …] | null      e.g. what the Route tool drew; replaces the rows when it is a new array
-//   maxSlopeDeg: number                 the slope limit to show
-//   running: boolean, progress: 0–1     a plan in progress
-//   plan: Plan | null                   the last planRoutes() result
-//   selected: routeId | null            the candidate shown as the current route
-//   hovered: routeId | null             the candidate highlighted on the map (so map and card agree)
-//   energy: { drive, departMs, routeId } | null   phase 3: route-energy.js simulateDrive of the selected route
-//   departures: { routeId, scan } | null           phase 3: route-energy.js scanDepartures of the selected route
-const { h, s, clear } = __m['ui/dom.js'];
-const { fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
-const { parseLatLon, formatLat, formatLon } = __m['coords.js'];
-const { DEFAULT_MAX_SLOPE, MAX_POINTS, MIN_POINTS, MOBILITY_DEFAULTS } = __m['route-plan.js'];
-const { POWER_DEFAULTS } = __m['route-energy.js'];
-
-const LIMIT = { min: 5, max: 30, step: 1 };
-const kmFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const intFmt = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 });
-const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
-const DASH = '—';
-let uid = 0;
-
-// ---------- pure helpers (tested in Node) ----------
-
-// Text for a coordinate input: latitude 3 decimals, east longitude 0–360 with 3 decimals; − as minus sign.
-const coordText = (v) => formatLat(v);
-
-// Rows → { points, errors }: points [[x, y]] for rows that parse, errors [{ index, field, message }].
-function readRows(rows, maxLatDeg = TERRAIN_MAX_LAT) {
-  const points = [], errors = [];
-  rows.forEach((r, index) => {
-    // fix R8/R9: the shared coords.js parser, so every field accepts −89.45, 89.45S, 222.6E, 137.4W …
-    const p = parseLatLon(r.lat, r.lon, { maxLatDeg });
-    if (!p.ok) { errors.push({ index, field: p.field, message: p.message }); return; }
-    points.push(p.xy);
-  });
-  return { points, errors };
-}
-
-// [[x, y]] → rows of text.
-function rowsFromPoints(points) {
-  return (points ?? []).map(([x, y]) => { const { latDeg, lonDeg } = fromXY(x, y); return { lat: formatLat(latDeg), lon: formatLon(lonDeg) }; });
-}
-
-const rowTag = (i, n) => (i === 0 ? 'Start' : i === n - 1 ? 'End' : `Via ${i}`);
-
-// The figures of one candidate as display strings.
-function routeFigures(r) {
-  const len = ok(r.lengthKm) ? (r.lengthKm >= 100 ? intFmt.format(r.lengthKm) : kmFmt.format(r.lengthKm)) : DASH;
-  const deg = (v) => (ok(v) ? `${(Math.round(v * 10) / 10).toFixed(1)}°` : DASH);
-  return {
-    length: len,
-    max: deg(r.maxSlopeDeg),
-    mean: deg(r.meanSlopeDeg),
-    sun: ok(r.sunShare) ? `${Math.round(r.sunShare * 100)}%` : DASH,
-    psr: ok(r.psrKm) ? (r.psrKm > 0 && r.psrKm < 0.05 ? '<0.1' : kmFmt.format(r.psrKm)) : DASH,
-  };
-}
-
-// Phase 2: the rover figures of one candidate under a plan with mobility, as display lines.
-function roverLines(plan, r) {
-  if (!plan?.mobility || !r || r.unavailable || !ok(r.hours)) return [];
-  const m = plan.mobility, d1 = (v) => `${(Math.round(v * 10) / 10).toFixed(1)}°`;
-  const hrs = r.hours >= 48 ? `${(r.hours / 24).toFixed(1)} days` : `${r.hours.toFixed(r.hours < 10 ? 1 : 0)} h`;
-  const lines = [
-    { key: 'time', text: `Drive time ${hrs} at ${m.speedKmh} km/h, slower on slopes.` },
-    { key: 'grades', text: `Steepest along it: up ${d1(r.climbMaxDeg)}, down ${d1(r.descentMaxDeg)}, across ${d1(r.crossMaxDeg)}.` },
-    r.oneWayKm > 0.05
-      ? { key: 'oneway', warn: true, text: `One-way: ${kmFmt.format(r.oneWayKm)} km in ${r.oneWay.length} stretch${r.oneWay.length === 1 ? '' : 'es'} going down more steeply than the ${m.climbDeg}° climb limit. The rover could not come back up them (orange on the map).` }
-      : { key: 'oneway', text: 'No one-way stretches: every part could be driven back up within the limits.' },
-    plan.returnable
-      ? { key: 'return', text: 'Driving back from the end to the start is possible within the limits.' }
-      : { key: 'return', warn: true, text: 'No way back: from the end, the rover could not return to the start within the limits.' },
-    plan.traps?.km2 > 0.05
-      ? { key: 'traps', warn: true, text: `Traps: ${kmFmt.format(plan.traps.km2)} km² in the search area the rover could drive into but not out of (red on the map).` }
-      : { key: 'traps', text: 'No traps in the search area.' },
-  ];
-  return lines;
-}
-
-// Phase 3: the energy figures of a simulated drive as display lines.
-const when = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
-const dur = (h) => (h >= 48 ? `${(h / 24).toFixed(1)} days` : `${h.toFixed(h < 10 ? 1 : 0)} h`);
-function energyLines(drive, power = POWER_DEFAULTS) {
-  if (!drive) return [];
-  if (drive.reason === 'ephemeris') return [{ key: 'energy', warn: true, text: 'Energy not simulated: the departure is outside the ephemeris (1 Nov 2026 to 1 Jan 2029).' }];
-  const pct = (v) => `${Math.round(v * 100)}%`;
-  const lines = [];
-  if (drive.ok) lines.push({ key: 'arrive', text: `Leaving ${when(drive.departMs)}, arrives ${when(drive.arriveMs)}: ${dur(drive.driveH)} driving${drive.waitH > 0.05 ? ` + ${dur(drive.waitH)} parked to recharge (${drive.stops.length} stop${drive.stops.length === 1 ? '' : 's'})` : ''}.` });
-  else if (drive.reason === 'empty') lines.push({ key: 'arrive', warn: true, text: `Leaving ${when(drive.departMs)}, the battery runs out at km ${kmFmt.format(drive.emptyAt.km)} (${when(drive.emptyAt.tMs)}), ${drive.stops.length ? 'parked in the dark' : 'in the dark'}. Leave at another time, carry more battery or take a sunnier route.` });
-  else if (drive.reason === 'stuck') lines.push({ key: 'arrive', warn: true, text: `Leaving ${when(drive.departMs)}, it is parked for over 30 days waiting for sunlight at km ${kmFmt.format(drive.km)}: this departure does not work.` });
-  lines.push({ key: 'battery', warn: drive.socMin < power.reserve + 1e-9, text: `Battery: starts ${pct(drive.socStart)}, lowest ${pct(drive.socMin)} at km ${kmFmt.format(drive.socMinKm)}${drive.ok ? `, ends ${pct(drive.socEnd)}` : ''} (${intFmt.format(power.batteryWh)} Wh, ${pct(power.reserve)} reserve).` });
-  if (drive.km > 0) lines.push({ key: 'light', text: `In shadow for ${kmFmt.format(drive.darkKm)} km of ${kmFmt.format(drive.km)}; Earth in view for ${Math.round((drive.earthKm / drive.km) * 100)}% of it.` });
-  return lines;
-}
-
-// Phase 3: a departure scan as one line.
-function departuresLine(scan) {
-  if (!scan) return null;
-  const days = Math.round((scan.toMs - scan.fromMs) / 86400e3);
-  if (!scan.tried) return 'No departures to try inside the ephemeris.';
-  if (!scan.ok) return `None of ${scan.tried} departures (every ${scan.stepMs / 3600e3} h for ${days} days from landing) gets there with these assumptions.`;
-  return `${scan.ok} of ${scan.tried} departures (every ${scan.stepMs / 3600e3} h for ${days} days from landing) get there. Best by lowest battery:`;
-}
-
-// Phase 3: battery along the route as a small SVG (shadowed stretches as grey bands, the reserve dashed).
-function batteryChart(drive, reserve, totalKm) {
-  const W = 300, H = 56, P = 2;
-  const ser = drive?.series;
-  if (!ser || ser.km.length < 2) return null;
-  const L = Math.max(totalKm || 0, ser.km[ser.km.length - 1]) || 1;
-  const X = (k) => P + (k / L) * (W - 2 * P), Y = (v) => P + (1 - v) * (H - 2 * P);
-  const bands = [];
-  for (let i = 1; i < ser.km.length; i++) if (!ser.lit[i]) bands.push(s('rect', { x: X(ser.km[i - 1]).toFixed(1), y: 0, width: Math.max(0.6, X(ser.km[i]) - X(ser.km[i - 1])).toFixed(1), height: H, class: 'rp-bat-dark' }));
-  let d = '';
-  for (let i = 0; i < ser.km.length; i++) d += `${i ? 'L' : 'M'}${X(ser.km[i]).toFixed(1)} ${Y(ser.soc[i]).toFixed(1)}`;
-  return s('svg', { class: 'rp-bat', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Battery charge along the route; grey bands are stretches in shadow' },
-    ...bands,
-    s('line', { x1: P, x2: W - P, y1: Y(reserve).toFixed(1), y2: Y(reserve).toFixed(1), class: 'rp-bat-reserve' }),
-    s('path', { d, class: 'rp-bat-line' }));
-}
-
-// One sentence for screen readers.
-function routeSentence(r, names) {
-  if (r.unavailable) return `${r.label}: ${r.unavailable}`;
-  const f = routeFigures(r);
-  const same = r.sameAs ? ` Same route as ${names[r.sameAs] ?? r.sameAs}.` : '';
-  return `${r.label}: ${f.length} km, max slope ${f.max}, mean slope ${f.mean}, sunlit ${f.sun} of the length, ${f.psr} km in permanent shadow.${same}`;
-}
-
-// Whether a plan answers these points and this limit.
-function planMatches(plan, points, limitDeg, mobility = null) {
-  if (!plan || !points || plan.limitDeg !== limitDeg) return false;
-  if (mobility && plan.mobility && ['descentDeg', 'crossDeg', 'speedKmh'].some((k) => plan.mobility[k] !== mobility[k])) return false;
-  const w = plan.waypoints ?? [];
-  if (w.length !== points.length) return false;
-  // within 50 m: the rows show 3-decimal degrees (≤ ~30 m), so a plan restored from a link still matches them
-  return w.every((p, i) => Math.abs(p[0] - points[i][0]) < 0.05 && Math.abs(p[1] - points[i][1]) < 0.05);
-}
-
-// ---------- the card ----------
-
-function swatch(id) {
-  return s('svg', { class: 'rp-swatch', width: 16, height: 10, viewBox: '0 0 16 10', 'aria-hidden': 'true' },
-    s('path', { class: `rp-line rp-line-${id}`, d: 'M1 5H15' }));
-}
-
-function createRoutePlanCard(deps = {}, callbacks = {}) {
-  const maxPoints = deps.maxPoints ?? MAX_POINTS;
-  const maxLat = deps.maxLatDeg ?? TERRAIN_MAX_LAT;
-  const id = `lsn-rp-${++uid}`;
-  let rows = [{ lat: '', lon: '' }, { lat: '', lon: '' }];
-  let errs = new Map();          // `${index}:${field}` → message
-  let limit = DEFAULT_MAX_SLOPE;
-  let mobility = { ...MOBILITY_DEFAULTS };   // phase 2: the rest of the rover limits
-  let power = { ...POWER_DEFAULTS };         // phase 3: panel, battery, load, mass
-  let energy = null, departures = null;
-  let lastPoints = null, emitted = null;
-  let running = false, progress = 0, plan = null, selected = null, hovered = null;
-  let validPoints = null;        // the rows as points when all are valid
-
-  // fix R8: the point rows are the first thing in the card, open by default; one line says both ways in
-  const head = h('div', { class: 'card-head card-head-stack' },
-    h('h2', { id: `${id}-head` }, 'Route plan'),
-    h('p', { class: 'card-sub' }, 'Type coordinates below, or draw with the Route tool on the map.'));
-
-  const list = h('ol', { class: 'rp-points', 'aria-label': 'Route points, in order' });
-  const addBtn = h('button', { type: 'button', class: 'btn rp-add', onclick: () => addRow() }, 'Add point');
-
-  const limitInput = h('input', { type: 'range', class: 'range', id: `${id}-limit`, min: LIMIT.min, max: LIMIT.max, step: LIMIT.step, value: limit });
-  const limitOut = h('output', { class: 'filter-value num', for: `${id}-limit` });
-  limitInput.addEventListener('input', () => { limit = Number(limitInput.value); renderLimit(); renderResults(); });
-  limitInput.addEventListener('change', () => callbacks.onLimit?.(limit));   // fix R (for L5): report the limit for the hash
-
-  // phase 2: descent and cross-slope limits and speed, next to the climb limit they go with
-  const roverInput = (key, label, unit, min, max, step) => {
-    const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-${key}`, min, max, step, value: mobility[key], inputmode: 'decimal' });
-    inp.addEventListener('change', () => {
-      const v = Number(inp.value);
-      mobility = { ...mobility, [key]: Number.isFinite(v) && v >= min && v <= max ? v : MOBILITY_DEFAULTS[key] };
-      inp.value = String(mobility[key]);
-      renderResults();
-    });
-    return h('label', { class: 'rp-rover-field', for: `${id}-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, h('span', { class: 'rp-rover-unit' }, unit)));
-  };
-  const powerInput = (key, label, unit, min, max, step) => {
-    const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-${key}`, min, max, step, value: power[key], inputmode: 'decimal' });
-    inp.addEventListener('change', () => {
-      const v = Number(inp.value);
-      power = { ...power, [key]: Number.isFinite(v) && v >= min && v <= max ? v : POWER_DEFAULTS[key] };
-      inp.value = String(power[key]);
-      callbacks.onPower?.({ ...power });
-    });
-    return h('label', { class: 'rp-rover-field', for: `${id}-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, h('span', { class: 'rp-rover-unit' }, unit)));
-  };
-  const powerRow = h('div', { class: 'rp-rover rp-power' },
-    powerInput('panelW', 'Panel', 'W', 0, 20000, 10), powerInput('batteryWh', 'Battery', 'Wh', 100, 100000, 100), powerInput('loadW', 'Load', 'W', 0, 5000, 5), powerInput('massKg', 'Mass', 'kg', 10, 20000, 10));
-  const roverRow = h('div', { class: 'rp-rover' },
-    roverInput('descentDeg', 'Descent', '°', 1, 45, 1), roverInput('crossDeg', 'Across', '°', 1, 45, 1), roverInput('speedKmh', 'Speed', 'km/h', 0.05, 20, 0.05));
-
-  const planBtn = h('button', { type: 'submit', class: 'btn btn-primary rp-plan' }, 'Plan routes');   // stays enabled: planning again restarts
-  const cancelBtn = h('button', { type: 'button', class: 'btn rp-cancel', hidden: true, onclick: () => callbacks.onCancel?.() }, 'Cancel');
-  const formError = h('p', { class: 'field-error rp-form-error', id: `${id}-form-error`, hidden: true });
-
-  // fix R8 (replaces G's closed "Points and slope limit" disclosure): points, Add point, slope limit and
-  // Plan in plain sight, then the outcome and the candidates; only the notes stay behind a disclosure.
-  const form = h('form', { class: 'rp-form', novalidate: true, 'aria-labelledby': `${id}-head`, onsubmit: (e) => { e.preventDefault(); submit(); } },
-    h('div', { class: 'rp-cols', 'aria-hidden': 'true' }, h('span', null, 'Point'), h('span', null, 'Latitude'), h('span', null, 'Longitude (east)')),
-    list,
-    h('div', { class: 'rp-add-row' }, addBtn),
-    h('div', { class: 'filter rp-limit' },
-      h('div', { class: 'filter-head' }, h('label', { for: `${id}-limit` }, 'Climb limit ', h('span', { class: 'rp-assumed' }, 'assumed')), limitOut),
-      limitInput,
-      roverRow,
-      powerRow),
-    formError,
-    h('div', { class: 'rp-actions' }, planBtn, cancelBtn));
-
-  const status = h('div', { class: 'rp-status', role: 'status', 'aria-live': 'polite' });
-  const results = h('div', { class: 'rp-results' });
-  const notes = h('ul', { class: 'rp-notes fold-more-body' });
-
-  const el = h('section', { class: 'card rp-card', 'aria-labelledby': `${id}-head`, 'data-tour': 'route-plan' }, head, form, status, results,
-    h('details', { class: 'fold-more rp-notes-box' }, h('summary', null, 'Notes'), notes));
-
-  // ---------- points ----------
-  function validate(showErrors) {
-    const r = readRows(rows, maxLat);
-    const next = new Map();
-    for (const e of r.errors) next.set(`${e.index}:${e.field}`, e.message);
-    // empty rows only count as errors when the user asks to plan
-    if (!showErrors) for (const [k] of next) { const i = Number(k.split(':')[0]); if (!rows[i].lat.trim() && !rows[i].lon.trim()) next.delete(k); }
-    errs = next;
-    validPoints = r.errors.length ? null : r.points;
-    return r;
-  }
-
-  function emitPoints() {
-    if (!validPoints) return;
-    emitted = validPoints;
-    callbacks.onPoints?.(validPoints);
-  }
-
-  function commitRow(i, field, value) {
-    if (rows[i][field] === value) return;
-    rows[i] = { ...rows[i], [field]: value };
-    // re-check this row only; a half-filled row waits for its other field
-    const r = readRows([rows[i]], maxLat);
-    errs.delete(`${i}:lat`); errs.delete(`${i}:lon`);
-    const blank = !rows[i].lat.trim() && !rows[i].lon.trim();
-    const half = !rows[i].lat.trim() || !rows[i].lon.trim();
-    if (r.errors.length && !blank && !(half && r.errors[0].field !== field)) errs.set(`${i}:${r.errors[0].field}`, r.errors[0].message);
-    const all = readRows(rows, maxLat);
-    validPoints = all.errors.length ? null : all.points;
-    showErrors();   // in place: the list is not rebuilt, so Tab carries on where the user was going
-    renderResults();
-    emitPoints();
-  }
-
-  function addRow() {
-    if (rows.length >= maxPoints) return;
-    const at = rows.length >= 2 ? rows.length - 1 : rows.length;
-    rows.splice(at, 0, { lat: '', lon: '' });
-    shiftErrors(at, +1);
-    validate(false);
-    renderPoints(`${at}:lat`);
-    renderResults();
-  }
-
-  function removeRow(i) {
-    if (rows.length <= MIN_POINTS) return;
-    rows.splice(i, 1);
-    errs.delete(`${i}:lat`); errs.delete(`${i}:lon`);
-    shiftErrors(i + 1, -1);
-    validate(false);
-    renderPoints(`${Math.min(i, rows.length - 1)}:lat`);
-    renderResults();
-    emitPoints();
-  }
-
-  function shiftErrors(from, by) {
-    const next = new Map();
-    for (const [k, v] of errs) { const [i, f] = k.split(':'); const n = Number(i); next.set(`${n >= from ? n + by : n}:${f}`, v); }
-    errs = next;
-  }
-
-  let rowEls = [];   // per row: { lat, lon, box } (the inputs and the error container)
-
-  function coordInput(i, field, tag) {
-    const input = h('input', {
-      type: 'text', class: 'input rp-input num', inputmode: 'decimal', autocomplete: 'off', spellcheck: 'false',
-      value: rows[i][field], placeholder: field === 'lat' ? '−89.45' : '222.69',
-      'aria-label': `${tag} ${field === 'lat' ? 'latitude' : 'longitude, degrees east'}`, 'data-focus': `${i}:${field}`,
-    });
-    input.addEventListener('change', () => commitRow(i, field, input.value.trim()));
-    return input;
-  }
-
-  // error messages and aria-invalid of every row, without rebuilding the inputs
-  function showErrors() {
-    rowEls.forEach((r, i) => {
-      clear(r.box);
-      for (const field of ['lat', 'lon']) {
-        const msg = errs.get(`${i}:${field}`), input = r[field], errId = `${id}-e${i}-${field}`;
-        if (msg) {
-          input.setAttribute('aria-invalid', 'true'); input.setAttribute('aria-describedby', errId);
-          r.box.append(h('p', { class: 'field-error', id: errId }, msg));
-        } else { input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby'); }
-      }
-    });
-    if (!errs.size) formError.hidden = true;
-  }
-
-  function renderPoints(focusKey = null) {
-    clear(list);
-    rowEls = [];
-    rows.forEach((row, i) => {
-      const tag = rowTag(i, rows.length);
-      const lat = coordInput(i, 'lat', tag), lon = coordInput(i, 'lon', tag), box = h('div', { class: 'rp-errors' });
-      rowEls.push({ lat, lon, box });
-      // one line per point: tag, latitude, longitude, remove (fix R8; reordering is by editing the rows)
-      const label = `Remove ${tag.toLowerCase()}`;
-      list.append(h('li', { class: 'rp-point' },
-        h('span', { class: 'rp-tag' }, tag),
-        lat, lon,
-        h('button', { type: 'button', class: 'rp-tool', 'aria-label': label, title: label, disabled: rows.length <= MIN_POINTS, 'data-focus': `${i}:remove`, onclick: () => removeRow(i) }, '×'),
-        box));
-    });
-    showErrors();
-    addBtn.disabled = rows.length >= maxPoints;
-    addBtn.textContent = rows.length >= maxPoints ? `At most ${maxPoints} points` : 'Add point';
-    if (focusKey) {
-      const t = list.querySelector(`[data-focus="${focusKey}"]`);
-      (t && !t.disabled ? t : list.querySelector(`[data-focus="${focusKey.split(':')[0]}:lat"]`) ?? addBtn).focus({ preventScroll: true });
-    }
-  }
-
-  function submit() {
-    // take what is typed even if no change event has fired yet (Enter in a field)
-    rowEls.forEach((r, i) => { rows[i] = { lat: r.lat.value.trim(), lon: r.lon.value.trim() }; });
-    const r = validate(true);
-    showErrors();
-    if (r.errors.length) {
-      formError.hidden = false;
-      formError.textContent = r.errors.length === 1 ? 'Fix the highlighted point.' : `Fix the ${r.errors.length} highlighted entries.`;
-      const first = r.errors[0];
-      list.querySelector(`[data-focus="${first.index}:${first.field}"]`)?.focus();
-      return;
-    }
-    formError.hidden = true;
-    emitPoints();
-    callbacks.onPlan?.({ points: r.points, maxSlopeDeg: limit, mobility: { ...mobility } });
-  }
-
-  function renderLimit() {
-    if (Number(limitInput.value) !== limit) limitInput.value = String(limit);
-    limitOut.textContent = `${limit}°`;
-    limitInput.setAttribute('aria-valuetext', `${limit} degrees`);
-  }
-
-  // ---------- results ----------
-  const names = { short: 'Shortest', flat: 'Flattest', sunny: 'Sunniest' };
-
-  function pick(rid) { if (rid !== selected) callbacks.onPick?.(rid); }
-  function hover(rid) { if (rid !== hovered) { hovered = rid; callbacks.onHover?.(rid); } }
-
-  // status line: progress while planning (updated in place, announced in 10 % steps), then the outcome
-  let statusKey = '';
-  const progText = h('span', { class: 'num' });
-  const progFill = h('span');
-  const progLine = h('p', { class: 'region-progress' }, h('span', { class: 'region-progress-bar', 'aria-hidden': 'true' }, progFill), progText);
-
-  function renderStatus(stale) {
-    cancelBtn.hidden = !running;
-    if (running) {
-      const pr = Math.max(0, Math.min(1, progress ?? 0));
-      if (statusKey !== 'running') { statusKey = 'running'; clear(status); status.append(progLine); }
-      progFill.style.transform = `scaleX(${pr.toFixed(3)})`;
-      const text = `Planning… ${Math.floor(pr * 10) * 10}%`;
-      if (progText.textContent !== text) progText.textContent = text;
-      return;
-    }
-    const key = `${plan ? plan.ms + ':' + plan.nodes + ':' + (plan.error ?? '') + ':' + (plan.blocked?.passesAtDeg ?? '') : 'none'}|${stale}|${limit}`;
-    if (key === statusKey && plan !== null) return;
-    statusKey = key;
-    clear(status);
-    if (!plan) return;
-    if (plan.blocked && ok(plan.blocked.passesAtDeg)) {
-      const at = plan.blocked.passesAtDeg;
-      const can = at <= LIMIT.max;
-      status.append(h('div', { class: 'rp-blocked' },
-        h('p', null, `No route keeps under ${plan.blocked.limitDeg}°${plan.waypoints?.length > 2 ? ` on leg ${plan.blocked.leg + 1}` : ''}.`),
-        h('p', { class: 'rp-blocked-sub' }, `The gentlest way through the search area needs ${at}° on the ${baseText()} grid.`),
-        can ? h('button', { type: 'button', class: 'btn rp-relax', onclick: () => { limit = at; renderLimit(); submit(); } }, `Plan at ${at}°`)
-          : h('p', { class: 'rp-blocked-sub' }, `That is above the ${LIMIT.max}° the limit goes to.`)));
-      return;
-    }
-    if (plan.error) { status.append(h('p', { class: 'rp-error' }, plan.error)); return; }
-    if (plan.ok) {
-      if (stale) status.append(h('p', { class: 'rp-stale' }, 'Points or limit changed. Plan again to update.'));
-      else status.append(h('p', { class: 'rp-done num' }, `Searched ${intFmt.format(plan.nodes)} terrain nodes in ${(plan.ms / 1000).toFixed(1)} s.`));
-    }
-  }
-
-  const baseText = () => (plan?.baselineKm ? `${Math.round(plan.baselineKm * 1000)} m` : '240 m');
-
-  // the candidate rows are rebuilt only for a new plan; selection and hover change them in place, so
-  // focus stays put and a hover from the map does not re-render under the pointer
-  let rowsKey = null, buttons = [];
-
-  function syncRows() {
-    const usable = buttons.filter((b) => !b.disabled);
-    const focusId = usable.some((b) => b.dataset.route === selected) ? selected : usable[0]?.dataset.route;
-    for (const b of buttons) {
-      const rid = b.dataset.route;
-      b.classList.toggle('is-selected', rid === selected);
-      b.classList.toggle('is-hovered', rid === hovered);
-      b.setAttribute('aria-checked', String(rid === selected));
-      b.tabIndex = rid === focusId ? 0 : -1;
-    }
-  }
-
-  function renderResults() {
-    const stale = !!plan?.ok && !planMatches(plan, validPoints ?? lastPoints, limit, mobility);
-    renderStatus(stale);
-    const show = !!plan?.ok && !running;
-    const key = show ? plan : null;
-    if (key !== rowsKey) {
-      rowsKey = key;
-      clear(results);
-      buttons = [];
-      if (show) buildRows();
-    }
-    results.querySelector('.rp-rows')?.classList.toggle('is-stale', stale);
-    syncRows();
-    renderRover();
-  }
-
-  // phase 2: the selected route's rover figures under the rows
-  let roverKey = null;
-  const roverBox = h('div', { class: 'rp-rover-result', 'aria-live': 'polite' });
-  function renderRover() {
-    const r = plan?.ok && !running ? plan.routes.find((x) => x.id === selected) : null;
-    const key = r ? `${plan.ms}:${plan.nodes}:${selected}:${energy?.departMs ?? ''}:${energy?.routeId ?? ''}:${departures?.scan?.tried ?? ''}:${departures?.routeId ?? ''}` : null;
-    if (key === roverKey) return;
-    roverKey = key;
-    clear(roverBox);
-    const lines = roverLines(plan, r);
-    if (!lines.length) { roverBox.remove(); return; }
-    const drive = energy && energy.routeId === r.id ? energy.drive : null;
-    const eLines = energyLines(drive, power);
-    const chart = drive ? batteryChart(drive, power.reserve, r.lengthKm) : null;
-    roverBox.append(h('p', { class: 'rp-rover-title' }, `Rover on the ${names[r.id] ?? r.label} route`),
-      eLines.length ? h('ul', { class: 'rp-energy' }, ...eLines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))) : null,
-      chart ? h('div', { class: 'rp-bat-box' }, chart, h('div', { class: 'rp-bat-axis' }, h('span', null, '0 km'), h('span', null, 'battery along the route'), h('span', null, `${kmFmt.format(r.lengthKm)} km`))) : null,
-      drive ? h('div', { class: 'rp-depart-row' },
-        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
-        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times')) : null,
-      ...(() => {
-        const scan = departures && departures.routeId === r.id ? departures.scan : null;
-        if (!scan) return [];
-        return [h('p', { class: 'rp-dep-line' }, departuresLine(scan)),
-          scan.best.length ? h('ul', { class: 'rp-dep-list' }, ...scan.best.map((b) => h('li', null,
-            h('span', null, `${when(b.departMs)} · lowest ${Math.round(b.socMin * 100)}%${b.waitH > 0.05 ? ` · ${dur(b.waitH)} parked` : ''}`),
-            h('button', { type: 'button', class: 'btn rp-dep-use', onclick: () => callbacks.onUseDeparture?.(b.departMs) }, 'Use')))) : null];
-      })(),
-      h('ul', null, ...lines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))));
-    if (!roverBox.isConnected || roverBox.parentNode !== results) results.append(roverBox);
-  }
-
-  function buildRows() {
-    const routes = plan.routes;
-    // fix R3: every column says its unit on a second header line; Max and Mean are slopes
-    const col = (name, unit, title) => h('span', { title }, h('span', { class: 'rp-head-name' }, name), h('span', { class: 'rp-head-unit' }, unit));
-    const header = h('div', { class: 'rp-row rp-row-head', 'aria-hidden': 'true' },
-      h('span', null, 'Route'), col('Length', 'km', 'Length along the route, km'), col('Max', 'slope°', 'Steepest slope along the route'),
-      col('Mean', 'slope°', 'Mean slope along the route'), col('Sun', 'lit %', 'Share of the length sunlit during the planned stay'),
-      col('PSR', 'km', 'km inside permanently shadowed regions'));
-    const group = h('div', { class: 'rp-rows', role: 'radiogroup', 'aria-label': 'Candidate routes' });
-    for (const r of routes) {
-      const f = routeFigures(r);
-      const b = h('button', {
-        type: 'button', role: 'radio', class: 'rp-row rp-choice', 'aria-checked': 'false', tabindex: '-1',
-        disabled: !!r.unavailable, 'data-route': r.id, 'aria-label': routeSentence(r, names),
-        onclick: () => pick(r.id),
-        onpointerenter: () => hover(r.id), onpointerleave: () => hover(null),
-        onfocus: () => hover(r.id), onblur: () => hover(null),
-      },
-      h('span', { class: 'rp-name' }, swatch(r.id), h('span', null, r.label)),
-      r.unavailable
-        ? h('span', { class: 'rp-unavailable' }, r.unavailable)
-        : [h('span', { class: 'num' }, f.length), h('span', { class: 'num' }, f.max), h('span', { class: 'num' }, f.mean), h('span', { class: 'num' }, f.sun), h('span', { class: 'num' }, f.psr)],
-      r.sameAs ? h('span', { class: 'rp-same' }, `Same route as ${names[r.sameAs]}`) : null);
-      buttons.push(b);
-      group.append(b);
-    }
-    group.addEventListener('keydown', (e) => {
-      const live = buttons.filter((b) => !b.disabled);
-      const at = live.indexOf(document.activeElement);
-      if (at < 0) return;
-      const to = { ArrowDown: at + 1, ArrowRight: at + 1, ArrowUp: at - 1, ArrowLeft: at - 1, Home: 0, End: live.length - 1 }[e.key];
-      if (to === undefined) return;
-      e.preventDefault();
-      const b = live[(to + live.length) % live.length];
-      b.focus();
-      pick(b.dataset.route);
-    });
-    const sunGap = routes.find((r) => !r.unavailable && r.sunShare !== null && r.sunKnown < 0.95);
-    results.append(header, group);
-    if (sunGap) results.append(h('p', { class: 'rp-note-inline' }, 'Sunlit figures cover only part of the length; the rest is not computed yet.'));
-  }
-
-  function renderNotes() {
-    clear(notes);
-    notes.append(
-      h('li', null, `Slopes come from the ${baseText()} terrain grid. Rover-scale slopes are steeper; this cannot tell whether a vehicle can drive the route.`),
-      h('li', null, 'Illustrative only. Drive time uses the speed set above, slower on slopes. Descent, across, speed, panel, battery, load and mass are assumptions, like the climb limit.'),
-      h('li', null, `Energy: the drive is run forward from the departure. It draws the load plus ${POWER_DEFAULTS.driveW} W to drive, plus m·g·v·sin θ ÷ ${POWER_DEFAULTS.climbEff} to climb (no regeneration downhill); the panel faces the Sun (vertical, turned to its azimuth) and makes power only where the Sun clears the local skyline (the 2 km or 1 km skyline grid). Below ${Math.round(POWER_DEFAULTS.reserve * 100)}% it parks until it is back to ${Math.round((POWER_DEFAULTS.reserve + POWER_DEFAULTS.resumeMargin) * 100)}%.`),
-      h('li', null, 'Moves are checked by direction: the grade along the move against the climb and descent limits, the slope across it against the across limit. Switchbacks are limited to 16 directions, so some climbable slopes count as one-way.'),
-      h('li', null, 'Max and Mean: the steepest and the mean slope along the route. Sun: share of the length lit during the planned stay, from the 2 km map of the stay at any zoom. PSR: km inside the official permanently shadowed regions.'),
-      h('li', null, 'Each name shows the best of the searched routes by its own figure; when one route is best on two, both rows show it.'));
-  }
-
-  function update(p = {}) {
-    if ('points' in p && p.points !== lastPoints) {
-      lastPoints = p.points ?? null;
-      if (p.points && p.points !== emitted) {
-        rows = rowsFromPoints(p.points);
-        while (rows.length < MIN_POINTS) rows.push({ lat: '', lon: '' });
-        if (rows.length > maxPoints) rows = rows.slice(0, maxPoints);
-        errs = new Map();
-        validate(false);
-        renderPoints(null);
-      }
-    }
-    if (ok(p.maxSlopeDeg) && p.maxSlopeDeg !== limit) { limit = Math.max(LIMIT.min, Math.min(LIMIT.max, Math.round(p.maxSlopeDeg))); renderLimit(); }
-    if ('running' in p) running = !!p.running;
-    if ('progress' in p) progress = p.progress;
-    if ('plan' in p) plan = p.plan ?? null;
-    if ('selected' in p) selected = p.selected ?? null;
-    if ('hovered' in p) hovered = p.hovered ?? null;
-    if ('energy' in p) { energy = p.energy ?? null; roverKey = null; }
-    if ('departures' in p) { departures = p.departures ?? null; roverKey = null; }
-    const baseBefore = notes.dataset.base;
-    renderResults();
-    if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }
-  }
-
-  validate(false);
-  renderPoints(null);
-  renderLimit();
-  renderResults();
-  notes.dataset.base = baseText();
-  renderNotes();
-  return { el, update };
-}
-
-return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, departuresLine, batteryChart, routeSentence, planMatches, createRoutePlanCard };
 })();
 __m['ui/shapeentry.js'] = (() => {
 // Coordinates entry for the drawing tools (fix R9): a compact form that follows the active tool and makes
@@ -18452,6 +18695,7 @@ const { createRoutePlanCard } = __m['ui/routeplan.js'];
 const { createShapeEntry } = __m['ui/shapeentry.js'];
 const { planRoutes, sunFromJobs, simplify } = __m['route-plan.js'];
 const { simulateDrive, skyFromGrid, scanDepartures } = __m['route-energy.js'];
+const { coverage: stationCoverage, routeLinks, linkSummary, STATION_DEFAULTS } = __m['comms.js'];
 const { renderPanorama, updatePanoramaCursor } = __m['charts/panorama.js'];
 const { renderElevation, updateElevationCursor } = __m['charts/elevation.js'];
 const { renderCompare } = __m['ui/compare.js'];
@@ -18810,6 +19054,7 @@ function start() {
       routePlanCard.update({ departures: { routeId: r.id, scan } });
     },
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
+    onStation: (st) => { rp = { ...rp, station: st, stationOff: !st, coverage: null }; updateComms(); },
     onCancel: () => rpAbort?.abort(),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
@@ -18862,6 +19107,25 @@ function start() {
     const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
     rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id } };
     routePlanCard?.update({ energy: rp.energy });
+    updateComms();
+    redrawRoutes();
+  }
+  // phase 4: the surface station's coverage and the links along the selected route, on the finest terrain loaded
+  function terrainHeight(x, y) {
+    const ls = pyramid?.levels ?? [];
+    for (let i = ls.length - 1; i >= 0; i--) { const v = ls[i].sample(x, y); if (v === v) return v; }
+    return null;
+  }
+  function updateComms() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+    if (!r?.profile) { routePlanCard?.update({ comms: null }); return; }
+    const st = rp.stationOff ? null : (rp.station ?? { ...STATION_DEFAULTS });
+    const cov = st ? (rp.coverage ??= stationCoverage(terrainHeight, st)) : null;
+    const links = st ? routeLinks(terrainHeight, r.profile, st) : null;
+    const per = rp.energy?.routeId === r.id ? rp.energy.drive.perSample : null;
+    const summary = linkSummary(r.profile, links, per?.earth ?? null, per?.tMs ?? null);
+    rp = { ...rp, coverage: cov, comms: { routeId: r.id, summary, links, earth: per?.earth ?? null, coverage: cov, stamp: Date.now() } };
+    routePlanCard?.update({ comms: rp.comms });
     redrawRoutes();
   }
   function pickPlanned(id) {

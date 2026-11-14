@@ -71,12 +71,12 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Relay orbiter elements | km, deg | assumed (example orbits, not real missions) | ✅ | `relay.js` `PRESETS` | |
 | Relay above horizon + relay sees Earth | windows | derived | ✅ | `relay.js` | |
 | Min elevation for a link | deg | input (default 0) | ✅ | `relay.js` `minElDeg` | |
-| **Communication strength** | dBm | derived (path loss model) | ⬜ | | [JPL-SS] used FEKO: two-ray model in LOS, knife-edge diffraction outside LOS, at UHF 442.5 MHz and S-band 2245 MHz. We can do a simpler free-space + knife-edge estimate along the DEM |
-| Surface station position | lat/lon | input | ⬜ | | [JPL-SS] picked (−89.51°, 225°) on the Connecting Ridge |
-| Station antenna height | m | assumed (15 m, [JPL-SS]) | ⬜ | | deployable boom |
-| Rover antenna height | m | assumed (2 m, [JPL-SS]) | ⬜ | | |
-| Station LOS coverage (viewshed) | % of radius | derived from DEM | ⬜ | | [JPL-SS]: 8 km radius, grid search from 1 km down to 100 m |
-| Tx power / antenna gains | dBm / dBi | assumed (0 / 0 / 0 in [JPL-SS] path-loss maps) | ⬜ | | |
+| **Communication strength** | dBm | derived: Tx + gains − free-space loss − dominant knife edge (ITU-R P.526), with curvature | ✅ | `comms.js` `link` | [JPL-SS] used FEKO: two-ray model in LOS, knife-edge diffraction outside LOS, at UHF 442.5 MHz and S-band 2245 MHz. We can do a simpler free-space + knife-edge estimate along the DEM |
+| Surface station position | lat/lon | input (default the JPL site −89.51°, 225°) | ✅ | `comms.js` `STATION_DEFAULTS` | [JPL-SS] picked (−89.51°, 225°) on the Connecting Ridge |
+| Station antenna height | m | assumed (15 m, [JPL-SS]) | ✅ | `comms.js` | card: Mast | deployable boom |
+| Rover antenna height | m | assumed (2 m, [JPL-SS]) | ✅ | `comms.js` | |
+| Station LOS coverage (viewshed) | % of radius | derived from the finest terrain loaded | ✅ | `comms.js` `coverage` | 33 % of the 8 km circle at the JPL site on our grids ([JPL-SS]: 29 % on a 5 m DEM) | [JPL-SS]: 8 km radius, grid search from 1 km down to 100 m |
+| Tx power / antenna gains / threshold | dBm / dBi / dBm | assumed (30 dBm, 0 dBi as [JPL-SS], −110 dBm) | ✅ | `comms.js` `STATION_DEFAULTS` | |
 | Data rate | Mbps | assumed | ⬜ | | [JPL-SS]: up to 300 Mbps near the station |
 
 ## 5. Navigation and position

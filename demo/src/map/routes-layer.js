@@ -15,6 +15,7 @@
 //   labels: boolean,                     route names next to the lines (default true)
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
+//   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
 //                                        default) reads the site names, dots and feature names on the page
@@ -23,6 +24,7 @@
 // no site name or marker, no other label, and no waypoint; a candidate that finds none is left unlabelled
 // (the selected one keeps its first place). Lines are wider and cased (phase4-route.css).
 import { s, clear } from '../ui/dom.js';
+import { COVERAGE_BINS } from '../ui/routeplan.js';
 
 const f1 = (v) => (Math.round(v * 10) / 10).toString();
 export const ROUTE_IDS = ['short', 'flat', 'sunny'];
@@ -106,10 +108,27 @@ export function placeLabel(points, toPx, name, frac, taken, width = Infinity, he
   return null;
 }
 
-export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null } = {}) {
+export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
+  // phase 4: station coverage, one path per colour bin (cells under the threshold are not drawn)
+  if (coverage) {
+    const { x0, y0, cellKm, n, rx } = coverage, thr = coverage.settings.thresholdDbm;
+    const ds = COVERAGE_BINS.map(() => '');
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const v = rx[j * n + i];
+      if (!(v >= thr)) continue;
+      const b = COVERAGE_BINS.findIndex((q) => v >= q.min);
+      if (b < 0) continue;
+      const [ax, ay] = toPx(x0 + i * cellKm, y0 - j * cellKm), [bx, by] = toPx(x0 + (i + 1) * cellKm, y0 - (j + 1) * cellKm);
+      if (![ax, ay, bx, by].every(Number.isFinite)) continue;
+      ds[b] += `M${f1(ax)} ${f1(ay)}h${f1(bx - ax + 0.3)}v${f1(by - ay + 0.3)}h${f1(-(bx - ax + 0.3))}z`;
+    }
+    ds.forEach((d, b) => { if (d) gEl.append(s('path', { class: 'rp-cov', d, fill: COVERAGE_BINS[b].color })); });
+    const [sx, sy] = toPx(coverage.station.x, coverage.station.y);
+    if (Number.isFinite(sx) && Number.isFinite(sy)) gEl.append(s('g', { class: 'rp-station-mark', transform: `translate(${f1(sx)} ${f1(sy)})` }, s('path', { d: 'M0 -9L6 7H-6Z' }), s('circle', { r: 2.2, cy: -9 })));
+  }
   // phase 2: trap cells (one path of squares), under everything else
   if (traps?.cells?.length) {
     const h = traps.cellKm / 2;
