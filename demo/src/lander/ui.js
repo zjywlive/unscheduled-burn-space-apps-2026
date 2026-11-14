@@ -71,6 +71,7 @@ export function renderHud(el, st, pw, plan) {
     <div class="clock"><span>${fmtMet(st.tMs, plan.times.launchMs)}</span><span>${fmtUtc(st.tMs)}</span></div>
     <dl>
       <dt>Altitude</dt><dd>${alt} <small>${ref}</small></dd>
+      ${st.ground ? `<dt>Ground</dt><dd>${st.ground.aglM >= 2000 ? `${n1(st.ground.aglM / 1000, 2)} km` : `${n0(Math.max(0, st.ground.aglM))} m`} below <small>${st.ground.resM ? `${n0(st.ground.resM)} m LOLA` : 'LOLA'}</small></dd>` : ''}
       <dt>Speed</dt><dd>${spd}</dd>
       <dt>Δv left</dt><dd>${n0(st.dvLeftMs)} m/s <small>reserve ${n0(v.reserveDvMs)}</small></dd>
       <dt>Propellant</dt><dd>${n0(st.propellantKg)} kg <small>mass ${n0(st.massKg)} kg</small></dd>
@@ -123,14 +124,15 @@ export function renderBranches(el, branches, activeId, onSelect) {
   el.querySelectorAll('.card').forEach((c) => c.addEventListener('click', () => onSelect(c.dataset.b)));
 }
 
-export function renderLanding(el, checks, plan, terrainNote) {
+export function renderLanding(el, checks, plan, terrainNote, roverUrl = null) {
   const rows = checks.checks.map((c) => `<tr><td>${esc(c.label)}<small>${esc(c.source)}</small></td><td class="r">${esc(c.value)}</td><td class="r muted">${esc(c.limit)}</td><td class="r ${c.ok ? 'ok' : 'neg'}">${c.ok ? 'OK' : 'NO'}</td></tr>`).join('');
   const s = checks.sky;
   el.innerHTML = `
     <h3>Landing constraints <small>${esc(plan.site.name)}</small></h3>
     <table class="tbl"><tbody>${rows}</tbody></table>
     ${s ? `<p class="note">At touchdown the Sun is at azimuth ${n0(s.sun.azDeg)}°, elevation ${n1(s.sun.elDeg, 2)}°; the Earth at ${n0(s.earth.azDeg)}°, ${n1(s.earth.elDeg, 2)}°. Clearance is measured above the LOLA skyline. Limits are assumptions for this vehicle (Apollo LM design: about 3 m/s vertical, 1.2 m/s horizontal, 12°).</p>` : ''}
-    <p class="note">${esc(terrainNote)}</p>`;
+    <p class="note">${esc(terrainNote)}</p>
+    ${roverUrl ? `<p class="next-step"><a class="btn primary" href="${esc(roverUrl)}">Plan the rover route →</a><small>Step 3: the navigator's route card opens at this site and touchdown time.</small></p>` : ''}`;
 }
 
 const FIELDS = [

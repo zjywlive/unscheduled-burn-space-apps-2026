@@ -1,5 +1,7 @@
 // Entry of demo/lander.html (bundled by tools/build-lander.mjs). Reads the inlined JSON data, plans the mission,
-// builds the three linked scenes and runs the timeline. Deep link: lander.html?site=<id>&t=<ISO time>.
+// builds the three linked scenes and runs the timeline. Deep link: lander.html?site=<id | lat,lon>&t=<ISO time>.
+// Step 2 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
+// stores the site and landing time it plans, and after touchdown it links on to the rover route (step 3).
 import { createEphemeris } from '../ephemeris.js';
 import { createDem, skylineFor, TERRAIN_MAX_LAT } from '../terrain.js';
 import { hasData, readData, loadData } from '../data-loader.js';
@@ -14,12 +16,35 @@ import { buildEarthScene } from './view-earth.js';
 import { buildMoonScene } from './view-moon.js';
 import { buildSurfaceScene } from './view-surface.js';
 import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle } from './ui.js';
+import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.js';
+import { createHiresSet } from '../hires.js';
 
 const $ = (s) => document.querySelector(s);
-const json = (id) => JSON.parse(document.getElementById(id).textContent);
+const json = (id) => JSON.parse(document.getElementById(id)?.textContent ?? 'null');
 const DEFAULT_SITE = 'shackleton';
 const DEFAULT_FROM = Date.parse('2027-01-01T00:00:00Z');
 const PLAYBACK_S = 150;   // the whole timeline in 150 s at 1×
+
+// Where the page starts: URL parameters first (site id or "lat,lon", t), then the stored mission, then the
+// default site with a lit landing window. A stored point south of 80°S that is not a listed site becomes a
+// custom site. A stored landing time is used only with the stored site and inside the ephemeris.
+export function startingPoint(q, mission, sites, eph) {
+  const byId = (id) => sites.find((s) => s.id === id);
+  const custom = (latDeg, lonDeg, name) => (latDeg <= TERRAIN_MAX_LAT ? { id: 'custom', name: name ?? `${latDeg.toFixed(2)}°, ${lonDeg.toFixed(2)}°`, latDeg, lonDeg } : null);
+  const inEph = (t) => Number.isFinite(t) && t > eph.startMs + 10 * 86400e3 && t < eph.endMs - 86400e3;
+  const qs = q.get('site');
+  if (qs || q.get('t')) {
+    const ll = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(qs ?? '');
+    const site = byId(qs) ?? (ll ? custom(Number(ll[1]), Number(ll[2])) : null) ?? byId(DEFAULT_SITE) ?? sites[0];
+    const t = Date.parse(q.get('t') ?? '');
+    return { site, landingMs: inEph(t) ? t : null, from: 'url' };
+  }
+  if (mission) {
+    const site = byId(mission.siteId) ?? custom(mission.latDeg, mission.lonDeg, mission.siteName);
+    if (site) return { site, landingMs: inEph(mission.landingMs) ? mission.landingMs : null, from: 'mission' };
+  }
+  return { site: byId(DEFAULT_SITE) ?? sites[0], landingMs: null, from: 'default' };
+}
 
 export function boot() {
   const T = three();
@@ -28,11 +53,15 @@ export function boot() {
   const eph = createEphemeris(json('data-ephemeris'));
   const sites = json('data-sites').filter((s) => s.latDeg <= TERRAIN_MAX_LAT);
   const meta = json('data-terrain');
+  // high-resolution patches (5/10/20 m) around the listed sites; only the selected site's pack is loaded
+  const hires = createHiresSet(json('data-hires'), (name) => loadData(name, { timeoutMs: 60000 }));
   const q = new URLSearchParams(location.search);
+  const start0 = startingPoint(q, readMission(), sites, eph);
+  const choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
 
   const S = {
-    site: sites.find((s) => s.id === q.get('site')) ?? sites.find((s) => s.id === DEFAULT_SITE) ?? sites[0],
-    landingMs: Date.parse(q.get('t') ?? '') || null,
+    site: start0.site,
+    landingMs: start0.landingMs,
     vehicle: cleanVehicle({ ...VEHICLE_DEFAULTS }),
     dem: null, plan: null, power: null, branches: [], checks: null, active: null,
     f: 0, playing: false, speed: 1, scene: 'earth', auto: true, scenes: null, timeline: null, token: 0, terrainNote: '',
@@ -47,11 +76,22 @@ export function boot() {
   renderer.setClearColor(0x000000, 1);
   bindControls(canvas, () => S.scenes?.[S.scene].controls, () => { $('#auto').classList.remove('on'); });
 
+  // the top bar wraps on narrow screens: the panels below it start at its bottom edge (--top)
+  const setTop = () => document.documentElement.style.setProperty('--top', `${Math.round($('#top').getBoundingClientRect().bottom + 12)}px`);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(setTop).observe($('#top'));
+  window.addEventListener('resize', setTop);
+  setTop();
   // narrow screens start with the details panel closed so the 3D view is visible (the handle reopens it)
   if (window.innerWidth < 760) { $('#side').classList.add('closed'); $('#side-toggle').textContent = 'Details ‹'; }
   // site picker
-  $('#site').innerHTML = sites.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
+  $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
   $('#site').value = S.site.id;
+  // the mission's steps across the pages; this page is step 2
+  const stages = stageBar(document, 'landing');
+  $('#stages').replaceChildren(stages);
+  const roverUrl = () => stageUrl('rover', readMission());
+  const next = $('#next');
+  for (const ev of ['pointerenter', 'focus', 'click']) next.addEventListener(ev, () => { next.href = roverUrl(); });
 
   function readDem() {
     const lv = meta.dem;
@@ -105,6 +145,13 @@ export function boot() {
     S.timeline.setBranches(S.branches, S.active);
     S.f = tKeep ? S.timeline.tToF(tKeep) : 0;
     $('#when').value = new Date(plan.times.landingMs).toISOString().slice(0, 16);
+    // the site and the requested landing time become the mission the next steps start from. Not the planned
+    // touchdown: the planner moves it by up to half an orbit to an overhead pass, and storing that would move the
+    // landing again on every visit (a request is a fixed point; a snapped time is not).
+    writeMission({ siteId: site.id === 'custom' ? null : site.id, siteName: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: S.landingMs });
+    stages.refresh();
+    next.href = roverUrl();
+    $('#next-where').textContent = `${site.name} · ${new Date(plan.times.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
     renderPanels();
     setBranches();
     resize();
@@ -114,12 +161,21 @@ export function boot() {
   async function loadTerrain(plan, token) {
     S.terrainNote = 'Loading terrain…';
     try {
-      const terr = await loadSiteTerrain(meta, plan.site, { onProgress: (m) => status(m) });
+      const terr = await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => status(m) });
       if (token !== S.token) return;
-      S.scenes.surface.setTerrain(terr.sample, { overlay: $('#slope').checked });
+      status('Building the descent terrain…');
+      await new Promise((r) => setTimeout(r, 30));   // let the status paint before the mesh build
+      if (token !== S.token) return;
+      S.terrain = terr;
+      S.scenes.surface.setTerrain(terr.sample, { overlay: $('#slope').checked, fine: terr.fine, resAt: terr.resAt });
       S.terrainSample = terr.sample;
-      S.terrainNote = `Descent terrain: LOLA DEM at ${terr.levelsKm.map((k) => `${Math.round(k * 1000)} m`).join(' / ')} around the site (finest first), with lunar curvature.`;
-      S.checks = landingChecks({ eph, site: plan.site, tMs: plan.times.landingMs, mask: skylineFor(S.dem, plan.site), sample: terr.sample, stepKm: Math.max(0.04, terr.finestKm ?? 0.12), vehicle: plan.vehicle, touchdown: plan.descent.touchdown });
+      const m = (k) => `${Math.round(k * 1000)} m`;
+      const shift = S.scenes.surface.terrainInfo()?.offsetM ?? 0;
+      S.terrainNote = `Descent terrain: LOLA DEM at ${terr.levelsKm.map(m).join(' / ')} around the site (finest first), with lunar curvature.`
+        + (terr.hires ? ` The ${m(terr.hires.kmPerPixel)} patch covers ${Math.round(terr.hires.sizeKm)} × ${Math.round(terr.hires.sizeKm)} km around the site; the mesh uses its full resolution within ${(terr.fine?.halfM ?? 0) / 1000} km of the target and coarsens outward.` : ' No high-resolution patch here.')
+        + (Math.abs(shift) >= 0.5 ? ` The terrain is shifted ${shift > 0 ? 'up' : 'down'} ${Math.abs(shift).toFixed(1)} m so the site matches the 480 m DEM height the trajectory was planned to.` : '');
+      // slopes over two pixels of the finest level (10 m on a 5 m patch, 40 m on the 20 m tiles)
+      S.checks = landingChecks({ eph, site: plan.site, tMs: plan.times.landingMs, mask: skylineFor(S.dem, plan.site), sample: terr.sample, stepKm: Math.max(0.01, 2 * (terr.finestKm ?? 0.06)), vehicle: plan.vehicle, touchdown: plan.descent.touchdown });
       S.scenes.surface.setSpot(S.checks.spot && S.checks.checks.find((c) => c.id === 'slope' && !c.ok) ? S.checks.spot : null);
       status('');
       renderPanels();
@@ -134,7 +190,7 @@ export function boot() {
     const body = $('#tab-body');
     if (tab === 'plan') renderPlan(body, S.plan, S.power);
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
-    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote);
+    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl());
     else if (tab === 'vehicle') renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
   }
 
@@ -182,10 +238,10 @@ export function boot() {
   });
   $('#play').addEventListener('click', () => togglePlay());
   $('#speed').addEventListener('change', (e) => { S.speed = Number(e.target.value); });
-  $('#site').addEventListener('change', (e) => { S.site = sites.find((s) => s.id === e.target.value); S.landingMs = null; replan(); });
+  $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replan(); });
   $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replan(); } });
   $('#find').addEventListener('click', () => { S.landingMs = pickLandingTime(eph, S.site, skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3); replan(); });
-  $('#slope').addEventListener('change', () => { if (S.terrainSample) S.scenes.surface.setTerrain(S.terrainSample, { overlay: $('#slope').checked }); });
+  $('#slope').addEventListener('change', () => { if (S.terrain) S.scenes.surface.setTerrain(S.terrain.sample, { overlay: $('#slope').checked, fine: S.terrain.fine, resAt: S.terrain.resAt }); });
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
     renderPanels();
@@ -225,13 +281,17 @@ export function boot() {
     const t = S.timeline.fToT(S.f);
     const st = S.plan.stateAt(t);
     if (S.auto && st.scene !== S.scene) setScene(st.scene, false);
-    if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; }
+    if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; next.hidden = st.phase !== 'landed'; }
     const sc = S.scenes[S.scene];
     sc.update(st, { dt });
     renderer.render(sc.scene, sc.camera);
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);
     S.timeline.setT(t);
-    if (now - hudAt > 90) { hudAt = now; renderHud($('#hud'), st, S.power.at(t), S.plan); }
+    if (now - hudAt > 90) {
+      hudAt = now;
+      if (st.scene === 'surface') st.ground = S.scenes.surface.groundAt(st);
+      renderHud($('#hud'), st, S.power.at(t), S.plan);
+    }
   }
 }
 

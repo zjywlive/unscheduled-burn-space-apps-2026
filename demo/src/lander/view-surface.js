@@ -10,52 +10,75 @@ import { unitFromLonLat } from '../geometry.js';
 
 export const PATCH_HALF_M = 8000;
 
-// Terrain grid around the site. sample(xKm, yKm) → metres | NaN on the polar map plane.
-// Returns { geometry, slope: Float32Array (deg per vertex), heightAt(eM, nM) }.
-export function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HALF_M, n = 320, slopeLimitDeg = 10, overlay = false } = {}) {
+// Grid lines along one axis of the descent mesh, ascending from −halfM to +halfM and symmetric about 0: steps
+// of fine.stepM out to ±fine.halfM, then steps growing by `growth` up to coarseM, then coarseM to the edge. Without
+// fine, n even steps. One mesh with graded spacing has no seams between resolutions.
+export function gradedAxis(halfM, { fine = null, coarseM = 80, growth = 1.1, n = 320 } = {}) {
+  if (!fine || !(fine.stepM > 0) || !(fine.halfM > 0)) return Array.from({ length: n + 1 }, (_, i) => -halfM + (2 * halfM * i) / n);
+  const side = [];
+  let p = 0, step = fine.stepM;
+  while (p + step <= Math.min(fine.halfM, halfM) + 1e-6) { p += step; side.push(p); }
+  while (p < halfM - 1e-6) {
+    step = Math.min(coarseM, step * growth);
+    p = Math.min(halfM, p + step);
+    if (halfM - p < 0.3 * step) p = halfM;   // no sliver cell at the edge
+    side.push(p);
+  }
+  return [...side.slice().reverse().map((v) => -v), 0, ...side];
+}
+
+// Terrain grid around the site. sample(xKm, yKm) → metres | NaN on the polar map plane. fine: { stepM, halfM }
+// for a finer core around the site (terrain-local.fineCore); offsetM is added to every height (the scene levels
+// the terrain to the planned touchdown height). → { geometry, slope (deg per vertex), axis, N, siteHeightM }
+export function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HALF_M, n = 320, fine = null, slopeLimitDeg = 10, overlay = false, offsetM = 0 } = {}) {
   const T = three();
   let east = unit(cross([0, 0, 1], siteF));
   if (norm(east) < 1e-9) east = [0, 1, 0];
   const north = cross(siteF, east);
-  const N = n + 1, step = (2 * halfM) / n;
+  const axis = gradedAxis(halfM, { fine, n });
+  const N = axis.length;
   const pos = new Float32Array(N * N * 3), col = new Float32Array(N * N * 3), up = new Float32Array(N * N);
   const R = R_MOON;
+  const base = scale(siteF, siteRadiusKm);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const e = -halfM + i * step, nn = halfM - j * step;
-    const d = unit(add(add(scale(siteF, siteRadiusKm), scale(east, e / 1000)), scale(north, nn / 1000)));
+    const e = axis[i], nn = axis[N - 1 - j];
+    const d = unit(add(add(base, scale(east, e / 1000)), scale(north, nn / 1000)));
     const lat = Math.asin(d[2]) / RAD, lon = Math.atan2(d[1], d[0]) / RAD;
     const [x, y] = toXY(lat, lon);
     let h = sample(x, y);
-    if (!Number.isFinite(h)) h = (siteRadiusKm - R) * 1000;
+    h = Number.isFinite(h) ? h + offsetM : (siteRadiusKm - R) * 1000;
     const p = enuAt(siteF, siteRadiusKm, scale(d, R + h / 1000));
     const k = j * N + i;
-    pos.set([p[0], p[2], -p[1]], k * 3);
+    pos[k * 3] = p[0]; pos[k * 3 + 1] = p[2]; pos[k * 3 + 2] = -p[1];
     up[k] = p[2];
   }
-  // slope per vertex from the grid neighbours (central differences on the local up coordinate)
+  // slope per vertex from the grid neighbours (central differences on the local up coordinate, real spacing)
   const slope = new Float32Array(N * N);
+  const g = 0.62;
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const k = j * N + i;
-    const il = Math.max(0, i - 1), ir = Math.min(n, i + 1), jt = Math.max(0, j - 1), jb = Math.min(n, j + 1);
-    const gx = (up[j * N + ir] - up[j * N + il]) / ((ir - il) * step);
-    const gy = (up[jt * N + i] - up[jb * N + i]) / ((jb - jt) * step);
+    const il = Math.max(0, i - 1), ir = Math.min(N - 1, i + 1), jt = Math.max(0, j - 1), jb = Math.min(N - 1, j + 1);
+    const gx = (up[j * N + ir] - up[j * N + il]) / (axis[ir] - axis[il]);
+    const gy = (up[jt * N + i] - up[jb * N + i]) / (axis[N - 1 - jt] - axis[N - 1 - jb]);
     const s = Math.atan(Math.hypot(gx, gy)) / RAD;
     slope[k] = s;
-    const g = 0.62;
     const bad = overlay && s > slopeLimitDeg;
-    col.set(bad ? [0.85, 0.32, 0.3] : [g, g, g * 0.98], k * 3);
+    col[k * 3] = bad ? 0.85 : g; col[k * 3 + 1] = bad ? 0.32 : g; col[k * 3 + 2] = bad ? 0.3 : g * 0.98;
   }
-  const idx = [];
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+  const cells = (N - 1) * (N - 1);
+  const idx = N * N > 65535 ? new Uint32Array(cells * 6) : new Uint16Array(cells * 6);
+  let q = 0;
+  for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
     const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
-    idx.push(a, c, b, b, c, d);
+    idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d;
   }
-  const g = new T.BufferGeometry();
-  g.setAttribute('position', new T.BufferAttribute(pos, 3));
-  g.setAttribute('color', new T.BufferAttribute(col, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return { geometry: g, slope, step, N };
+  const geo = new T.BufferGeometry();
+  geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new T.BufferAttribute(col, 3));
+  geo.setIndex(new T.BufferAttribute(idx, 1));
+  geo.computeVertexNormals();
+  const mid = (N - 1) / 2;
+  return { geometry: geo, slope, axis, N, siteHeightM: up[mid * N + mid] };
 }
 
 export function landerModel() {
@@ -123,10 +146,18 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
   placeholder.rotation.x = -Math.PI / 2;
   placeholder.receiveShadow = true;
   scene.add(placeholder);
-  let terrainInfo = null;
-  function setTerrain(sample, { overlay = false } = {}) {
+  let terrainInfo = null, offsetM = 0, groundSample = null, groundRes = null;
+  // The plan's touchdown height comes from the 480 m DEM; the fine terrain at the site differs by metres to tens
+  // of metres. The whole patch is shifted by that difference so the lander touches its own ground (the shape is
+  // unchanged; only the local reference height moves).
+  function setTerrain(sample, { overlay = false, fine = null, resAt = null } = {}) {
     if (terrain) { scene.remove(terrain); terrain.geometry.dispose(); }
-    terrainInfo = terrainGeometry(plan.siteFixed, siteRadiusKm, sample, { slopeLimitDeg: plan.vehicle.touchdown.maxSlopeDeg, overlay });
+    groundSample = sample; groundRes = resAt;
+    const [sx, sy] = toXY(plan.site.latDeg, plan.site.lonDeg);
+    const hSite = sample(sx, sy);
+    offsetM = Number.isFinite(hSite) ? plan.siteHeightKm * 1000 - hSite : 0;
+    terrainInfo = terrainGeometry(plan.siteFixed, siteRadiusKm, sample, { slopeLimitDeg: plan.vehicle.touchdown.maxSlopeDeg, overlay, fine, offsetM });
+    terrainInfo.offsetM = offsetM;
     terrain = new T.Mesh(terrainInfo.geometry, new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }));
     terrain.castShadow = true;
     terrain.receiveShadow = true;
@@ -189,6 +220,8 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
     if (st.descent) e = toEnu(st.descent.r);
     const far = !e || Math.hypot(e[0], e[1]) > PATCH_HALF_M * 6;
     lander.visible = !far;
+    // the 40 m site pin would run through the lander on the way down: hide it once the lander is close
+    pin.visible = far || Math.hypot(e[0], e[1]) > 60 || e[2] > 80;
     farLbl.el.textContent = far ? `Lander is ${st.descent ? Math.round(Math.hypot(e[0], e[1]) / 1000) + ' km away' : 'still in orbit'}` : '';
     if (!far) {
       lander.position.copy(enu3(e));
@@ -245,9 +278,22 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
     if (spotLbl) { labels.remove(spotLbl); spotLbl = null; }
     spotPin.visible = !!spot;
     if (!spot) return;
-    const p = enu3(enuAt(plan.siteFixed, siteRadiusKm, scale(unitFromLonLat(spot.lonDeg, spot.latDeg), R_MOON + (spot.heightM ?? 0) / 1000)));
+    const p = enu3(enuAt(plan.siteFixed, siteRadiusKm, scale(unitFromLonLat(spot.lonDeg, spot.latDeg), R_MOON + ((spot.heightM ?? 0) + offsetM) / 1000)));
     spotPin.position.copy(p).setY(p.y + 15);
     spotLbl = labels.add(`${spot.ok ? 'Flat spot' : 'Flattest spot'} ${spot.slopeDeg.toFixed(1)}°, ${Math.round(spot.distM)} m`, 'spot', () => spotPin.position.clone().setY(spotPin.position.y + 18));
   }
-  return { scene, camera, controls, update, setTerrain, setBranches, setSpot, toEnu, name: 'surface', terrainInfo: () => terrainInfo };
+  // height of the lander above the DEM directly below it (what a radar altimeter reads), during powered descent:
+  // → { aglM, resM } | null
+  function groundAt(st) {
+    if (!groundSample || !st.descent || st.phase === 'landed' || st.phase === 'descent-coast') return null;
+    const f = rotZ(plan.descentFrame.pdToMci(st.descent.r), -thL);   // Moon-fixed km (landing-time rotation, as toEnu)
+    const u = unit(f);
+    const lat = Math.asin(u[2]) / RAD, lon = Math.atan2(u[1], u[0]) / RAD;
+    const [x, y] = toXY(lat, lon);
+    const h = groundSample(x, y);
+    if (!Number.isFinite(h)) return null;
+    const res = groundRes?.(x, y);
+    return { aglM: (norm(f) - R_MOON) * 1000 - (h + offsetM), resM: res ? res * 1000 : null };
+  }
+  return { scene, camera, controls, update, setTerrain, setBranches, setSpot, toEnu, groundAt, name: 'surface', terrainInfo: () => terrainInfo };
 }

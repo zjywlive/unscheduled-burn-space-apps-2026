@@ -8,9 +8,11 @@ The lander track of the Lunar Landing Site Navigator follows a generic robotic l
 
 ### The page
 
-`demo/lander.html` (open it from `demo/` over http or as a file; deep link `lander.html?site=<id>&t=<ISO time>`):
+`demo/lander.html` (open it from `demo/` over http or as a file; deep link `lander.html?site=<id | lat,lon>&t=<ISO time>`):
 
-- **Three linked scenes** chosen by phase (or by hand): *Transfer* (geocentric, true scale, 1 unit = 1000 km), *Lunar orbit* (Moon-centred inertial, 1 unit = 1 km; the Moon turns under the fixed polar orbit plane; LOLA 480 m relief on the polar cap) and *Descent* (local east-north-up metres on the LOLA DEM around the site, 20/40/120 m levels where available, lunar curvature included, Sun and Earth placed from the ephemeris so the low polar Sun throws long shadows).
+- **Step 2 of the mission flow** (`demo/src/mission-flow.js`): the stage bar in the top bar links 1 Site (navigator) → 2 Landing (this page) → 3 Rover (navigator route card) → 4 3D (globe). Without URL parameters the page starts from the stored mission (`localStorage` key `lsn-mission`: site and landing time); a stored point south of 80°S that is not a listed site becomes a custom site. Every plan writes the site and the *requested* landing time back (the planner moves touchdown by up to half an orbit to an overhead pass; storing that snapped time would move the landing again on each visit). After touchdown a "Plan the rover route →" card (also in the Landing tab) opens step 3 at the site and time.
+- **Three linked scenes** chosen by phase (or by hand): *Transfer* (geocentric, true scale, 1 unit = 1000 km), *Lunar orbit* (Moon-centred inertial, 1 unit = 1 km; the Moon turns under the fixed polar orbit plane; LOLA 480 m relief on the polar cap) and *Descent* (local east-north-up metres on the LOLA DEM around the site, lunar curvature included, Sun and Earth placed from the ephemeris so the low polar Sun throws long shadows).
+- **High-resolution descent terrain** (`lander/terrain-local.js`, `demo/src/hires.js`, `demo/data/hires.json`): the site's 10 × 10 km LOLA patch is the finest level — 5 m (LDEM_875S_5M) at Shackleton and de Gerlache Rim 2; 10 m (LDEM_85S_10M) at Haworth, Malapert Massif, Mons Mouton, Nobile Rim 1; 20 m (LDEM_80S_20M) at IM-2, Peak near Cabeus B, Mons Mouton Plateau, Nobile Rim 2 — then the 20/40 m tiles and the 120 m level. Only the selected site's pack is loaded. The descent mesh is one grid with graded spacing (`gradedAxis`): the patch's own pixel size out to 200 pixels from the target (±1 km at 5 m, ±2 km at 10 m, ±3.5 km at 20 m), then cells growing 10 % per step to 80 m out to ±8 km (about 375 000 vertices at 5 m, built in well under a second). The plan's touchdown height comes from the 480 m DEM, so the whole patch is shifted by the few metres it differs at the site (shown in the Landing tab). The HUD shows the height above the DEM directly under the lander and that DEM's resolution during powered descent; the slope check uses a two-pixel baseline of the finest level (10 m on a 5 m patch).
 - **Timeline** with every phase, event ticks and contingency markers; play at 0.5–4×, drag to scrub, space to play.
 - **HUD**: phase, mission time and UTC, altitude, speed, Δv left, propellant and mass, throttle, attitude mode, array power, load and battery, Sun and Earth visibility.
 - **Panels**: the Δv budget against published Apollo values, the timeline with the loiter explanation, the landing checks (touchdown speeds, DEM slope, nearest spot within 500 m meeting the slope limit, Sun and Earth over the skyline), the editable assumed vehicle, and the contingency cards.
@@ -243,7 +245,7 @@ Abort steering targets a bound orbit with perilune ≥15 km and apolune ≥30 km
 |---|---|---|
 | Vertical touchdown speed | Absolute value ≤2 m/s | Assumed; reference run 1.0000 m/s |
 | Horizontal touchdown speed | ≤1 m/s | Assumed; reference run 0.0014 m/s |
-| Slope | ≤10° | Assumed; LOLA DEM sampled at 20–120 m baseline, default step 120 m; central-difference endpoints are two steps apart |
+| Slope | ≤10° | Assumed; LOLA DEM over two pixels of the finest level loaded: 10 m baseline on the 5 m patches, 20 m on 10 m, 40 m on 20 m (120 m before the terrain loads); central-difference endpoints are two steps apart. Example: de Gerlache Rim 2 reads 15.8° at 10 m (17.1° at 40 m); the nearest spot under 10° moves from 305 m to 102 m away with the 5 m data |
 | Sun above local skyline | Elevation minus skyline >0° at actual landing | JPL Horizons + LOLA [8,9]; picker uses the stricter assumed >0.3° on hourly samples over 48 h |
 | Earth above local skyline | Elevation minus skyline >0° at actual landing | Direct-to-Earth geometry, not guaranteed communication quality |
 
@@ -255,12 +257,12 @@ Apollo LM comparison: **10 ft/s vertical, 4 ft/s horizontal, 12° slope — appr
 - No Earth-equator or launch-site inclination, ascent, launch-window or launch-vehicle performance model.
 - Degree-2 gravity only in the separate force model; mission orbit tracks remain point-mass conics. No mascon-driven decay or station-keeping budget; J3 is listed but unused.
 - Impulsive TCM/DOI geometry and capture/injection states; displayed finite burn durations do not propagate thrust through the orbit. TCMs spend fuel without correcting the path. DOI plane-change fuel is not yet charged; TLI budget uses mean lunar distance while trajectory apogee uses the dated ephemeris.
-- Descent ignores Moon rotation. Flat-sphere descent altitude means height above a smooth constant-radius site sphere, not a flat Cartesian plane; terrain relief is only in the view and landing checks, not collision dynamics.
+- Descent ignores Moon rotation. Flat-sphere descent altitude means height above a smooth constant-radius site sphere, not a flat Cartesian plane; terrain relief is only in the view, the HUD height above ground and the landing checks, not collision dynamics. The 5–20 m LOLA patches are gridded laser altimetry (interpolated between tracks), so they show craters and slopes tens of metres across, not lander-scale rocks.
 - Power assumes an ideal battery, free roll and unconstrained antenna pointing; no thermal/aging/charge-rate model. Braking currently uses the `burn`/orbit load rather than the dedicated descent load; TCM attitude changes are not scheduled.
 - Vehicle numbers, descent gates, control gains and operational decision thresholds are assumed. Hazard/abort rules are screening decisions, not complete flight software or guarantees of reachable alternatives.
 - Environmental estimates are offline and approximate; no live space-weather/conjunction feeds or impact-damage model. Missing terrain/sky checks must not be treated as evidence that a site is safe.
 
-Verification for this documentation snapshot: `node --test 'tests/lander-*.test.mjs'` — 63 passed; `node --test 'tests/*.test.mjs'` — 573 passed, 16 skipped (missing raw-data/backup fixtures), 0 failed. The standalone-page build and browser were not run for this documentation-only task.
+Verification (14 Nov 2026, evening): `node --test tests/lander-*.test.mjs` — 73 passed; `node --test` — 648 tests, 632 passed, 16 skipped (missing raw-data/backup fixtures), 0 failed. The built page was checked in a browser at 1280×800, 1024×768 and 375×812: hi-res patches at Shackleton and de Gerlache Rim 2 (5 m), Mons Mouton (10 m) and IM-2 (20 m), the stage bar, the stored mission round trip and the rover link after touchdown.
 
 ## 11. Sources
 
@@ -274,7 +276,7 @@ Source names below are those supplied in the task or code comments; approximate 
 6. IAU mean lunar radius; NASA Moon fact sheet — mean radius and mean Earth–Moon distance, as cited in `constants.js`.
 7. Lemoine et al. (2014), *Geophysical Research Letters* 41, 3382; GRAIL GRGM900C. [PDS coefficient file `gggrx_0900c_sha.tab`](https://pds-geosciences.wustl.edu/grail/grail-l-lgrs-5-rdr-v1/grail_1001/shadr/gggrx_0900c_sha.tab).
 8. [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) — bundled Sun/Earth ephemeris, `demo/data/ephemeris.json`.
-9. [LOLA PDS archive](https://pds-geosciences.wustl.edu/missions/lro/lola.htm) — lunar DEM and derived skyline/slope. LROC NAC is named as a needed high-resolution hazard source, not an input to this descent model.
+9. [LOLA PDS archive](https://pds-geosciences.wustl.edu/missions/lro/lola.htm) — lunar DEM and derived skyline/slope; the descent patches are cut from the [LOLA GDR polar products](https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/) LDEM_875S_5M, LDEM_85S_10M and LDEM_80S_20M (`tools/fetch-hires.mjs`). LROC NAC is named as a needed high-resolution hazard source, not an input to this descent model.
 10. Orloff (2000), *Apollo by the Numbers*, NASA SP-2000-4029 — approximate Apollo parking-orbit, TLI, LOI and DOI comparisons.
 11. Bennett (1972), NASA TN D-6846 — approximate Apollo powered-descent Δv comparison, as attributed in `budget.js`.
 12. Klumpp (1974), “Apollo lunar descent guidance”, *Automatica* 10, 133–146 — approach guidance-law structure.

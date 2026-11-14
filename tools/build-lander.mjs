@@ -1,8 +1,10 @@
 // Builds demo/lander.html in place: the ES modules under demo/src/lander/ are bundled with tools/build.mjs's
 // bundle() (same module conventions) and written, with the loader stub and the JSON data, between the
 // <!--LANDER:NAME--> … <!--/LANDER:NAME--> markers. The rest of the page (markup and CSS) is edited by hand.
-// The data packs (demo/data/js/*.js) are the ones tools/build.mjs writes; this script does not touch them.
-import { readFileSync, writeFileSync } from 'node:fs';
+// The data packs (demo/data/js/*.js) are the ones tools/build.mjs and tools/fetch-hires.mjs write; this script does
+// not touch them. demo/data/hires.json (the high-resolution patch manifest) is optional: without it the page
+// falls back to the 20/40/120 m levels.
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { bundle, LOADER_STUB } from './build.mjs';
@@ -27,6 +29,7 @@ export function buildLander(demo = join(dirname(fileURLToPath(import.meta.url)),
     jsonScript('data-ephemeris', data('data/ephemeris.json')),
     jsonScript('data-sites', data('data/sites.json')),
     jsonScript('data-terrain', data('data/terrain.json')),
+    jsonScript('data-hires', existsSync(join(demo, 'data', 'hires.json')) ? data('data/hires.json') : null),
   ].join('\n'));
   html = fillMark(html, 'JS', `<script>\n${js}\n</script>`);
   writeFileSync(file, html);
