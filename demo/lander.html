@@ -171,6 +171,30 @@
   .next-step { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 14px 0 0; }
   .next-step small { color: var(--faint); font-size: 11px; }
 
+  /* action bar: the page's actions in one row under the top bar (the panels keep inputs and data);
+     same look as the navigator's bar: 32 px buttons, primary filled, toggles pressed */
+  .ab { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+  .ab-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; min-width: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: #c6c6c6; font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; text-decoration: none; cursor: pointer; }
+  .ab-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+  .ab-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: #fff; }
+  .ab-btn.ab-primary, .ab-btn.ab-dirty { background: #fff; color: #000; }
+  .ab-btn.ab-primary:hover, .ab-btn.ab-dirty:hover { background: #d8d8d8; }
+  .ab-btn:focus-visible, .ab-opt:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+  .ab-icon { flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .ab-short { display: none; }
+  .ab-div { align-self: stretch; width: 1px; margin: 4px 2px; background: rgba(255, 255, 255, 0.14); }
+  .ab-hint { color: #9a9a9a; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ab-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px; }
+  .ab-opt { height: 26px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: #c6c6c6; font: inherit; font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+  .ab-opt:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+  .ab-opt[aria-pressed="true"] { background: rgba(255, 255, 255, 0.2); color: #fff; }
+  .ab-opt.risk[aria-pressed="true"] { background: rgba(229, 72, 77, 0.35); }
+  .ab-sel { display: none; height: 32px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.07); color: #fff; padding: 0 8px; }
+  @media (max-width: 1500px) { #ab-follow .ab-l, #ab-look .ab-l, #ab-replan:not(.ab-dirty) .ab-l, #ab-save .ab-l { display: none; } }
+  @media (max-width: 1180px) { #ab-touch, .ab-hint.ab-l { display: none; } }   /* the touchdown point stays in the rover button's tooltip and the Landing tab */
+  @media (max-width: 1000px) { .ab-seg { display: none; } .ab-sel { display: inline-block; } }
+  @media (max-width: 520px) { #ab-rover .ab-l, #ab-replan .ab-l { display: none; } #ab-rover .ab-short { display: inline; } .ab { gap: 4px; } }
+
   /* camera buttons, bottom left of the 3D view (same look as the globe's) */
   .camctl { position: fixed; left: 16px; bottom: 104px; z-index: 2; display: grid; grid-template-columns: repeat(4, 32px); gap: 4px; transition: bottom 220ms cubic-bezier(0.22, 1, 0.36, 1); }
   .next:not([hidden]) ~ .camctl { bottom: 176px; }
@@ -195,7 +219,12 @@
   .pl-go { display: flex; gap: 6px; }
   .pl-go input { height: 32px; width: 230px; border-radius: var(--radius-control); border: 1px solid var(--line); background: var(--raised); color: #fff; padding: 0 10px; }
   .pl-hint { color: var(--muted); font-size: 12px; }
-  .pl-zoom { position: absolute; right: 16px; top: 84px; display: grid; gap: 4px; }
+  .pl-zoom { position: absolute; right: 16px; top: calc(var(--pl-top, 76px) + 52px); display: grid; gap: 4px; }
+  .pl-act { position: absolute; top: var(--pl-top, 76px); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 6px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(20, 22, 26, 0.72); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); z-index: 2; }
+  .pl-act .ab-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+  @media (max-width: 1500px) { .pl-act .ab-l { display: none; } }   /* the target name stays in the tooltip and the panel */
+  .pl-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-left: 5px; vertical-align: 1px; background: currentColor; }
+  .pl-dot.g-pass { color: var(--ok); } .pl-dot.g-near { color: #e5b34d; } .pl-dot.g-fail { color: #ff7b7f; }
   .pl-key { position: absolute; left: 16px; bottom: 16px; max-width: 420px; padding: 8px 10px; font-size: 11px; color: var(--muted); }
   .pl-k-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; flex-wrap: wrap; }
   .pl-k-bar { width: 64px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #e5484d, #e5b34d 50%, #7fd18b); flex: none; }
@@ -214,7 +243,7 @@
   .pl-badge { display: inline-block; margin: 2px 0 6px; padding: 3px 9px; border-radius: 999px; font-size: 11px; color: var(--ok); border: 1px solid rgba(127, 209, 139, 0.5); }
   .pl-badge.coarse { color: #e5b34d; border-color: rgba(229, 179, 77, 0.55); }
   .pl-fetch code { font-size: 11px; background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 4px; user-select: all; }
-  .pl-read { position: absolute; left: 16px; top: 112px; padding: 6px 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none; max-width: 420px; }
+  .pl-read { position: absolute; left: 16px; top: calc(var(--pl-top, 76px) + 52px); padding: 6px 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none; max-width: 420px; }
   .pl-read b { color: #fff; font-weight: 600; }
   .pl-names { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
   .pl-names[hidden] { display: none; }
@@ -303,10 +332,12 @@
     .pl-side { border-width: 1px 0 0; }
     .pl-top { top: 8px; left: 8px; right: 8px; padding: 6px; gap: 6px; }
     .pl-go input { width: 148px; }
-    .pl-zoom { top: 104px; right: 8px; }
+    .pl-zoom { top: calc(var(--pl-top, 100px) + 48px); right: 8px; }
+    .pl-act { top: var(--pl-top, 100px); left: 8px; right: 8px; transform: none; width: auto; max-width: none; padding: 4px; }
+    .pl-act .ab-l { display: none; }
     .pl-key { left: 8px; right: 8px; bottom: 34px; max-width: none; font-size: 10px; padding: 6px 8px; }
     .pl-k-src, .pl-k-row { display: none; }
-    .pl-read { top: 100px; left: 8px; right: 8px; font-size: 11px; }
+    .pl-read { top: calc(var(--pl-top, 100px) + 48px); left: 8px; right: 52px; font-size: 11px; }
     .pl-k-short { display: flex; }
     /* three rows: steps + next lit window / site + time / views */
     .top { padding: 8px; gap: 6px; }
@@ -318,6 +349,11 @@
     #scenes { order: 3; flex: 1 1 auto; }
     #scenes button { flex: 1; padding: 0 8px; }
     #auto { order: 4; }
+    #plan-site { order: 1; }
+    .ab { order: 9; gap: 2px; }
+    .ab .ab-div { display: none; }
+    .ab .ab-btn { height: 30px; min-width: 30px; padding: 0 6px; }
+    .ab-sel { max-width: 108px; height: 30px; }
     .hud { top: auto; bottom: 100px; left: 16px; right: 16px; width: auto; padding: 10px 12px; }
     .hud dl { grid-template-columns: 70px 1fr 70px 1fr; }
     .side { top: calc(var(--top) + 44px); left: 16px; right: 16px; width: auto; bottom: 100px; }
@@ -369,6 +405,20 @@
     </div>
     <button id="auto" class="btn toggle on" title="Follow the lander and switch views by phase">Auto<span class="wide"> camera</span></button>
   </div>
+  <div id="actbar" class="ab" role="toolbar" aria-label="Lander actions">
+    <button id="ab-follow" class="ab-btn" aria-pressed="true" title="Follow the craft with the camera (0)"><svg class="ab-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6zM8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg><span class="ab-l">Follow craft</span></button>
+    <button id="ab-look" class="ab-btn" aria-pressed="false" title="Look at the lander: real-size close-up with its parts (L)"><svg class="ab-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 3.5h6l1 4H4zM8 7.5v3M4.5 7.5L2.5 12.5M11.5 7.5l2 5M1.5 12.5h2M12.5 12.5h2"/></svg><span class="ab-l">Look at the lander</span></button>
+    <span class="ab-div" aria-hidden="true"></span>
+    <span class="ab-hint ab-l">Fly</span>
+    <div id="ab-branches" class="ab-seg" role="group" aria-label="Contingency to fly"></div>
+    <select id="ab-branch-sel" class="ab-sel" aria-label="Contingency to fly"></select>
+    <span class="ab-div" aria-hidden="true"></span>
+    <button id="ab-replan" class="ab-btn" title="Plan the mission again with the vehicle numbers in the Vehicle tab"><svg class="ab-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg><span class="ab-l">Replan</span></button>
+    <button id="ab-save" class="ab-btn" title="Save this plan as a JSON file (site, times, Δv budget, descent, contingencies)"><svg class="ab-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10"/></svg><span class="ab-l">Save plan</span></button>
+    <span class="ab-div" aria-hidden="true"></span>
+    <span id="ab-touch" class="ab-hint"></span>
+    <a id="ab-rover" class="ab-btn ab-primary" href="index.html" title="Step 2: plan the rover route from the touchdown point (navigator)"><span class="ab-l">Plan the rover route</span><span class="ab-short">Rover</span> →</a>
+  </div>
 </header>
 
 <section id="hud" class="glass hud" aria-live="off"></section>
@@ -386,7 +436,6 @@
 </footer>
 <div id="status" class="status" hidden></div>
 <section id="planner" class="planner" hidden aria-label="Choose where to land"></section>
-<a id="next" class="glass next" href="index.html" hidden><span class="next-t">Touchdown<small id="next-where"></small></span><span class="btn primary">Plan the rover route →</span></a>
 <div id="terrkey" class="glass terrkey" hidden>
   <div class="tk-row"><div class="seg tk-modes" role="group" aria-label="Terrain colour"><button data-tmode="plain" class="on">Plain</button><button data-tmode="height">Height</button><button data-tmode="slope">Slope</button></div><label class="tk-check"><input type="checkbox" id="tk-contours" checked> Contours</label></div>
   <div id="tk-body"></div>
@@ -4785,7 +4834,7 @@ function renderLanding(el, checks, plan, terrainNote, roverUrl = null, landed = 
     ${s ? `<p class="note">At touchdown the Sun is at azimuth ${n0(s.sun.azDeg)}°, elevation ${n1(s.sun.elDeg, 2)}°; the Earth at ${n0(s.earth.azDeg)}°, ${n1(s.earth.elDeg, 2)}°. Clearance is measured above the LOLA skyline. Limits are assumptions for this vehicle (Apollo LM design: about 3 m/s vertical, 1.2 m/s horizontal, 12°).</p>` : ''}
     <p class="note">${esc(terrainNote)}</p>
     ${landed === undefined ? '' : landed ? `<h3>Touchdown point <small>passed to the rover step</small></h3><dl class="kv"><dt>Latitude, longitude</dt><dd>${Math.abs(landed.latDeg).toFixed(5)}°${landed.latDeg < 0 ? 'S' : 'N'}, ${landed.lonDeg.toFixed(5)}°E</dd><dt>From the target</dt><dd>${n1(landed.missM, 1)} m</dd><dt>Time</dt><dd>${esc(fmtUtc(landed.tMs))}</dd><dt>Flown</dt><dd>${landed.source === 'nominal' ? 'nominal descent' : esc(landed.source.replace(/-/g, ' '))}</dd></dl>` : '<h3>Touchdown point</h3><p class="note">No touchdown in the selected contingency (it ends in orbit or waits); the rover step gets the target site only.</p>'}
-    ${roverUrl ? `<p class="next-step"><a class="btn primary" href="${esc(roverUrl)}">Plan the rover route →</a><small>Step 2: the navigator's route card opens at this site and touchdown time.</small></p>` : ''}`;
+    ${roverUrl ? '<p class="note">Next: <b>Plan the rover route</b> in the bar above the view opens step 2 (the navigator\'s route card) at this touchdown point and time.</p>' : ''}`;
 }
 
 const FIELDS = [
@@ -4796,18 +4845,24 @@ function renderVehicle(el, vehicle, onApply) {
   el.innerHTML = `<p class="note">All vehicle numbers are <b>assumed</b> (a generic medium robotic lander, not a real one). Change them and re-plan.</p>
     <div class="form">${FIELDS.map(([k, label, unit]) => `<label><span>${label} <small>assumed · ${unit}</small></span><input type="number" step="any" data-k="${k}" value="${vehicle[k]}"></label>`).join('')}
     <label><span>Loads <small>assumed · W</small></span><input type="text" data-loads value="${Object.entries(vehicle.loadsW).map(([k, v]) => `${k} ${v}`).join(', ')}" readonly></label></div>
-    <div class="form-actions"><button class="btn" data-apply>Re-plan</button><button class="btn ghost" data-reset>Defaults</button></div>
+    <div class="form-actions"><button class="btn ghost" data-reset>Default numbers</button><span class="muted">then <b>Replan</b> in the bar above the view</span></div>
     <h3>Attitude modes</h3><dl class="kv">${Object.entries(ATTITUDE_MODES).map(([k, d]) => `<dt>${esc(MODE_NAME[k] ?? k)}</dt><dd>${esc(d)}</dd>`).join('')}</dl>
     <h3>Actions</h3><dl class="kv">${Object.entries(ACTIONS).map(([k, d]) => `<dt>${esc(k.replace(/-/g, ' '))}</dt><dd>${esc(d)}</dd>`).join('')}</dl>`;
-  el.querySelector('[data-apply]').addEventListener('click', () => {
-    const out = { ...vehicle };
-    el.querySelectorAll('input[data-k]').forEach((i) => { out[i.dataset.k] = Number(i.value); });
-    onApply(out);
-  });
+  // the numbers are inputs; the action (Replan) is in the action bar, which reads them (vehicleFromForm)
+  el.querySelectorAll('input[data-k]').forEach((i) => i.addEventListener('input', () => onApply(null)));
   el.querySelector('[data-reset]').addEventListener('click', () => onApply({ ...VEHICLE_DEFAULTS }));
 }
 
-return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle };
+// the vehicle numbers typed in the Vehicle tab (null when it is not open)
+function vehicleFromForm(el, vehicle) {
+  const inputs = el?.querySelectorAll?.('input[data-k]');
+  if (!inputs?.length) return null;
+  const out = { ...vehicle };
+  inputs.forEach((i) => { out[i.dataset.k] = Number(i.value); });
+  return out;
+}
+
+return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, vehicleFromForm };
 })();
 __m['../mission-flow.js'] = (() => {
 // One mission across the pages (navigator, lander, 3D globe): the chosen landing site and time travel from
@@ -6040,13 +6095,14 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
         <form class="pl-go"><input type="text" placeholder="lat, lon  e.g. 85.4S 35.3E" aria-label="Latitude and longitude"><button class="btn" type="submit">Go</button></form>
         <span class="pl-hint">Click the map to propose a landing point · drag to pan · wheel or pinch to zoom</span>
       </div>
+      <div class="pl-act ab" role="toolbar" aria-label="Planner actions"></div>
       <div class="pl-zoom"><button class="cam" data-z="1.6" aria-label="Zoom in" title="Zoom in">+</button><button class="cam" data-z="0.625" aria-label="Zoom out" title="Zoom out">−</button></div>
       <div class="pl-key glass"></div>
       <div class="pl-read glass" hidden></div>
       <div class="pl-toast" hidden></div>
     </div>
     <aside class="pl-side glass">
-      <header><h2>Choose where to land</h2><button class="btn ghost pl-close" aria-label="Close the planner">Close</button></header>
+      <header><h2>Choose where to land</h2></header>
       <p class="pl-assume"></p>
       <div class="pl-body"><p class="note">Click anywhere on the south polar map (80°S to the pole, where this page has terrain, skyline and descent data), or type a latitude and longitude.</p></div>
     </aside>`;
@@ -6147,6 +6203,9 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
   const toScreen = (x, y) => [S.w / 2 + (x - S.cx) / S.kmPerPx, S.h / 2 - (y - S.cy) / S.kmPerPx];
   const toMap = (px, py) => [S.cx + (px - S.w / 2) * S.kmPerPx, S.cy - (py - S.h / 2) * S.kmPerPx];
   function resize() {
+    // the action bar, read-out and zoom sit under the map's top bar, whatever its height
+    const tb = root.querySelector('.pl-top').getBoundingClientRect(), mb = root.querySelector('.pl-map').getBoundingClientRect();
+    root.style.setProperty('--pl-top', `${Math.round(tb.bottom - mb.top + 8)}px`);
     const r = canvas.getBoundingClientRect();
     S.w = Math.max(1, Math.round(r.width)); S.h = Math.max(1, Math.round(r.height));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -6405,6 +6464,7 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     body.innerHTML = `<p class="note">Green ground on the map is where a landing ellipse would pass every check, amber where it would pass near a limit. Click it, a listed site, or type a latitude and longitude to score a point in detail.</p>
       <h3>Known landing sites <small>flown missions and Artemis III candidate regions, scored like a pick: ellipse slope, Sun over a ${getStayDays()}-day stay from each site's first lit window, overall</small></h3>
       <table class="tbl pl-cmp"><thead><tr><th>Site</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Grade</th></tr></thead><tbody>${rows}</tbody></table>`;
+    renderActions();
     body.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => { const s = sites.find((q) => q.id === tr.dataset.site); S.cx = toXY(s.latDeg, s.lonDeg)[0]; S.cy = toXY(s.latDeg, s.lonDeg)[1]; S.kmPerPx = Math.min(S.kmPerPx, 0.08); setPick(s.latDeg, s.lonDeg); }));
   }
 
@@ -6493,7 +6553,25 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     if (!ll) return say('Type a latitude and longitude, e.g. 85.4S 35.3E or −85.4, 35.3 or 0.67N 23.47E');
     setView('polar'); setPick(ll.latDeg, ll.lonDeg, { center: true });
   });
-  root.querySelector('.pl-close').addEventListener('click', () => close());
+  // the planner's actions, one row over the map (the side panel keeps the figures and tables)
+  const actBox = root.querySelector('.pl-act');
+  function renderActions() {
+    const R0 = S.results, c = R0?.list[S.sel];
+    const target = c ? (c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name) : null;
+    const busy = S.pick && !R0;
+    actBox.innerHTML = `
+      <button class="ab-btn ab-primary" data-a="land" ${c ? '' : 'disabled'} title="${c ? `Plan the whole mission to ${esc(target)} and its first lit landing window` : 'Pick a point first'}">Land here${c ? `<span class="ab-l">: ${esc(target)}</span>` : ''}</button>
+      <button class="ab-btn" data-a="search" ${S.pick && !busy ? '' : 'disabled'} title="Search 15 km around your point again">${busy ? 'Searching…' : 'Find better spots'}</button>
+      ${R0 ? `<div class="ab-seg" role="group" aria-label="Candidate">${R0.list.map((x, n) => `<button class="ab-opt" data-n="${n}" aria-pressed="${n === S.sel}" title="${esc(x.name)}: ${esc(x.verdict.text)}">${n === 0 ? 'Yours' : n}<span class="pl-dot g-${x.verdict.grade}"></span></button>`).join('')}</div>` : ''}
+      <span class="ab-div" aria-hidden="true"></span>
+      <button class="ab-btn" data-a="sites" title="The listed landing sites with their grades">Known sites</button>
+      <button class="ab-btn" data-a="close" title="Back to the 3D view (Esc)">Back to 3D</button>`;
+    actBox.querySelector('[data-a="land"]').addEventListener('click', () => { if (c) { onLand({ site: c.site, landingMs: c.landingMs }); close(); } });
+    actBox.querySelector('[data-a="search"]').addEventListener('click', () => { if (S.pick) setPick(S.pick.latDeg, S.pick.lonDeg); });
+    actBox.querySelector('[data-a="sites"]').addEventListener('click', () => renderSites());
+    actBox.querySelector('[data-a="close"]').addEventListener('click', () => close());
+    actBox.querySelectorAll('[data-n]').forEach((b) => b.addEventListener('click', () => select(Number(b.dataset.n))));
+  }
   function say(t) { toast.textContent = t; toast.hidden = false; clearTimeout(say.t); say.t = setTimeout(() => { toast.hidden = true; }, 4200); }
   async function setView(v) {
     S.view = v;
@@ -6513,6 +6591,7 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     root.querySelector('.pl-go input').value = `${fmtLat(latDeg)} ${fmtLon(lonDeg)}`;
     draw();
     const token = ++S.token;
+    renderActions();
     const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
     const fromMs = getFromMs();
     const dem = getDem();
@@ -6620,16 +6699,13 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
       ${c.polar || c.patch ? '' : `<p class="note pl-fetch">No fine patch here: run <code>node tools/fetch-hires.mjs --at ${c.latDeg.toFixed(3)},${c.lonDeg.toFixed(3)}</code> to fetch one (SLDEM2015 ~59 m between 60°S and 60°N, LOLA polar products near the poles).</p>`}
       <p class="pl-verdict g-${c.verdict.grade}">${esc(c.verdict.text)}</p>
       <ul class="pl-figs">${c.figs.map((f) => `<li class="g-${G[f.grade]}"><div class="pl-f-h"><span>${esc(f.label)}</span><span class="pl-g">${f.grade}</span></div><div class="pl-f-v"><b>${esc(f.text)}</b><span class="muted">limit ${esc(f.limit)}</span></div><small>${esc(f.note)}</small></li>`).join('')}</ul>
-      <button class="btn primary pl-land">Land here: plan the mission to ${esc(c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name)}</button>
       <h3>Better spots nearby <small>the 5 best that pass the hard limits in a 30 × 30 km square around your point, at least 2 km apart, by suitability; same stay and method</small></h3>
       <table class="tbl pl-cmp"><thead><tr><th>#</th><th class="r">km</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Earth</th><th class="r">Dark</th><th class="r">Δv</th></tr></thead><tbody>
       ${R.list.map((x, n) => `<tr data-n="${n}" class="${n === S.sel ? 'on' : ''}"><td>${n === 0 ? 'You' : n}</td><td class="r">${x.distKm.toFixed(1)}</td>${cell(fig('slope', x))}${cell(fig('sun', x))}${cell(fig('earth', x))}${cell(fig('dark', x))}${cell(fig('dv', x))}</tr>`).join('')}
       </tbody></table>
-      <p class="note">Click a row or a numbered spot on the map to see its figures. Rocks smaller than the DEM are not modelled; Sun and Earth use the 480 m skyline; the Δv is from the planned polar orbit with this vehicle (assumed).</p>
-      <button class="btn ghost pl-sites">Known landing sites…</button>`;
+      <p class="note">Choose a candidate in the bar over the map, a row here or a numbered spot on the map to see its figures; <b>Land here</b> in the bar plans the mission to it. Rocks smaller than the DEM are not modelled; the Δv is from the planned polar orbit with this vehicle (assumed).</p>`;
     body.querySelectorAll('.pl-cmp tr[data-n]').forEach((tr) => tr.addEventListener('click', () => select(Number(tr.dataset.n))));
-    body.querySelector('.pl-land').addEventListener('click', () => { onLand({ site: c.site, landingMs: c.landingMs }); close(); });
-    body.querySelector('.pl-sites').addEventListener('click', () => renderSites());
+    renderActions();
   }
   function select(n) { S.sel = n; renderResults(); const c = S.results.list[n]; S.cx = c.xKm; S.cy = c.yKm; draw(); }
 
@@ -6643,6 +6719,7 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     requestAnimationFrame(resize);
     setTimeout(resize, 50);
     if (!S.pick) renderSites();
+    renderActions();
     if (!L.slope) loadLayers();
     else if (S.lastFrom !== getFromMs() || R.startMs !== getStayStartMs()) { siteRes.clear(); scoreSites(); startRegion(); }   // the mission moved: redo both
     S.lastFrom = getFromMs();
@@ -6881,7 +6958,7 @@ const { three, bindControls, createLabels, cameraStep, cameraKey } = __m['view-c
 const { buildEarthScene } = __m['view-earth.js'];
 const { buildMoonScene } = __m['view-moon.js'];
 const { buildSurfaceScene } = __m['view-surface.js'];
-const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep } = __m['ui.js'];
+const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm } = __m['ui.js'];
 const { readMission, writeMission, stageUrl, stageBar } = __m['../mission-flow.js'];
 const { attitudeState } = __m['model.js'];
 const { createCloseup } = __m['closeup.js'];
@@ -6957,7 +7034,7 @@ function boot() {
   const closeup = createCloseup(document);
   const closeupOn = () => closeup.el.isConnected && !$('#side').classList.contains('closed') && document.querySelector('.tabs .on')?.dataset.tab === 'vehicle';
   window.addEventListener('resize', () => { if (closeupOn()) closeup.resize(); });
-  const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); };
+  const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); pressed($('#ab-follow'), false); };
   bindControls(canvas, () => S.scenes?.[S.scene].controls, userCamera);
 
   // the top bar wraps on narrow screens: the panels below it start at its bottom edge (--top)
@@ -6975,8 +7052,50 @@ function boot() {
   const stages = stageBar(document, 'landing');
   $('#stages').replaceChildren(stages);
   const roverUrl = () => stageUrl('rover', readMission());
-  const next = $('#next');
-  for (const ev of ['pointerenter', 'focus', 'click']) next.addEventListener(ev, () => { next.href = roverUrl(); });
+  // the action bar (in the top bar): the page's actions; the side panels keep the inputs and the data
+  const rover = $('#ab-rover');
+  for (const ev of ['pointerenter', 'focus', 'click']) rover.addEventListener(ev, () => { rover.href = roverUrl(); });
+  const pressed = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  // contingency to fly: nominal or one of the branches the page draws (short names; the tab has the full cards)
+  const BRANCH_SHORT = { 'engine-abort': 'Abort', 'hazard-divert': 'Divert', 'wave-off': 'Wave-off', 'engine-low': 'Low thrust', retarget: 'Retarget', 'spe-hold': 'Hold' };
+  const RISKY = new Set(['engine-abort', 'wave-off', 'spe-hold', 'retarget']);
+  function renderBranchBar() {
+    const list = (S.branches ?? []).filter((b) => BRANCH_SHORT[b.id]);
+    const opts = [{ id: null, label: 'Nominal', title: 'The planned descent, no contingency' }, ...list.map((b) => ({ id: b.id, label: BRANCH_SHORT[b.id], title: `${b.title}: ${b.decision.action.replace(/-/g, ' ')}`, risky: RISKY.has(b.id) }))];
+    const seg = $('#ab-branches');
+    seg.innerHTML = opts.map((o) => `<button class="ab-opt${o.risky ? ' risk' : ''}" data-b="${o.id ?? ''}" aria-pressed="${(S.active ?? null) === o.id}" title="${o.title.replace(/"/g, '&quot;')}">${o.label}</button>`).join('');
+    seg.querySelectorAll('[data-b]').forEach((b) => b.addEventListener('click', () => { const id = b.dataset.b || null; if ((S.active ?? null) !== id) selectBranch(id ?? S.active); }));
+    const sel = $('#ab-branch-sel');
+    sel.innerHTML = opts.map((o) => `<option value="${o.id ?? ''}">${o.id ? `Fly: ${o.label}` : 'Fly: nominal'}</option>`).join('');
+    sel.value = S.active ?? '';
+  }
+  $('#ab-branch-sel').addEventListener('change', (e) => { const id = e.target.value || null; if ((S.active ?? null) !== id) selectBranch(id ?? S.active); });
+  // Replan with the numbers typed in the Vehicle tab (highlighted once they differ from the plan's)
+  let vehicleDirty = false;
+  const setDirty = (on) => { vehicleDirty = on; $('#ab-replan').classList.toggle('ab-dirty', on); $('#ab-replan .ab-l').textContent = on ? 'Replan with the new numbers' : 'Replan'; };
+  $('#ab-replan').addEventListener('click', () => {
+    const v = vehicleFromForm($('#tab-body'), S.plan?.vehicle ?? S.vehicle) ?? S.vehicle;
+    S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true });
+  });
+  // Save plan: the mission and the plan's figures as a JSON file
+  $('#ab-save').addEventListener('click', () => {
+    if (!S.plan) return;
+    const p = S.plan, t = p.times, iso = (ms) => new Date(ms).toISOString();
+    const out = {
+      savedAt: iso(Date.now()), page: 'lander.html', mission: readMission(),
+      site: { id: p.site.id, name: p.site.name, latDeg: p.site.latDeg, lonDeg: p.site.lonDeg, heightM: Math.round(p.siteHeightKm * 1000) },
+      times: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, k.endsWith('Ms') ? iso(v) : v])),
+      vehicle: p.vehicle, deltaV: { phases: p.budget.phases.map((x) => ({ name: x.name, dvMs: Math.round(x.dvMs), propellantKg: Math.round(x.propellantKg), by: x.by })), marginMs: Math.round(p.budget.marginMs), reserveDvMs: p.budget.reserveDvMs },
+      descent: { durationS: Math.round(p.descent.durationS), dvUsedMs: Math.round(p.descent.dvUsedMs), touchdown: p.descent.touchdown },
+      landed: S.landed ?? null, flown: S.active ?? 'nominal',
+      contingencies: S.branches.map((b) => ({ id: b.id, title: b.title, action: b.decision.action, reason: b.decision.reason, numbers: b.numbers })),
+      landingChecks: S.checks?.checks ?? null, terrain: S.terrainNote, assumptions: 'Vehicle numbers, descent gates and decision thresholds are assumed (see the Vehicle tab and docs/LANDER.md).',
+    };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
+    a.download = `lander-plan-${(p.site.id === 'custom' ? `${p.site.latDeg.toFixed(2)}_${p.site.lonDeg.toFixed(2)}` : p.site.id)}-${iso(t.landingMs).slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
 
   function readDem() {
     const lv = meta.dem;
@@ -7098,7 +7217,8 @@ function boot() {
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
     else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
     else if (tab === 'vehicle') {
-      renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replanAt({ keepTime: true }); });
+      // inputs only: typing marks the plan out of date (Replan in the bar); "Default numbers" replans at once
+      renderVehicle(body, S.plan.vehicle, (v) => { if (v === null) setDirty(true); else { S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true }); } });
       body.prepend(closeup.el);
       requestAnimationFrame(() => closeup.resize());
     }
@@ -7108,6 +7228,7 @@ function boot() {
     S.scenes.moon.setBranches(S.branches, S.active);
     S.scenes.surface.setBranches(S.branches, S.active);
     S.timeline.setBranches(S.branches, S.active);
+    renderBranchBar();
   }
 
   // the touchdown point of what is shown as flown, in the mission and on the page
@@ -7116,12 +7237,12 @@ function boot() {
     const p = m?.landed ?? null;
     const ll = p ? `${Math.abs(p.latDeg).toFixed(4)}°${p.latDeg < 0 ? 'S' : 'N'} ${p.lonDeg.toFixed(4)}°E` : null;
     const via = p && p.source !== 'nominal' ? `, after the ${p.source.replace(/-/g, ' ')}` : '';
-    $('#next-where').textContent = p
-      ? `${S.site.name} · ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}`
-      : `${S.site.name} · no touchdown in the selected contingency`;
+    $('#ab-touch').textContent = p ? `Lands at ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}` : 'No touchdown in this contingency';
+    $('#ab-touch').title = p ? `${S.site.name} · touchdown ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC` : '';
+    rover.title = `Step 2: plan the rover route from the touchdown point (navigator). ${$('#ab-touch').textContent}`;
     S.landed = p;
     stages.refresh();
-    next.href = roverUrl();
+    rover.href = roverUrl();
   }
 
   function selectBranch(id) {
@@ -7180,10 +7301,13 @@ function boot() {
     $('#tab-body').scrollTop = 0;
   };
   $('#cam-look').addEventListener('click', lookAtLander);
+  $('#ab-look').addEventListener('click', () => { if (closeupOn()) $('#side-toggle').click(); else lookAtLander(); });
+  $('#ab-follow').addEventListener('click', () => $('#auto').click());
   $('#auto').addEventListener('click', () => {
     S.auto = true;
     $('#auto').classList.add('on');
     $('#cam-follow').classList.add('on');
+    pressed($('#ab-follow'), true);
     for (const sc of Object.values(S.scenes)) sc.controls.state.user = false;
   });
   $('#play').addEventListener('click', () => togglePlay());
@@ -7287,7 +7411,7 @@ function boot() {
     const t = S.timeline.fToT(S.f);
     const st = S.plan.stateAt(t);
     if (S.auto && st.scene !== S.scene) setScene(st.scene, false);
-    if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; next.hidden = st.phase !== 'landed'; }
+    if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; }
     const sc = S.scenes[S.scene];
     if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
     const att = attitudeState(st, S.plan);
@@ -7301,6 +7425,7 @@ function boot() {
     if (now - hudAt > 90) {
       hudAt = now;
       if (st.scene === 'surface') st.ground = S.scenes.surface.groundAt(st);
+      pressed($('#ab-look'), closeupOn());
       renderHud($('#hud'), st, S.power.at(t), S.plan);
     }
   }

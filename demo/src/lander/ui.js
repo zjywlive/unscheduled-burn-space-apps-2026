@@ -140,7 +140,7 @@ export function renderLanding(el, checks, plan, terrainNote, roverUrl = null, la
     ${s ? `<p class="note">At touchdown the Sun is at azimuth ${n0(s.sun.azDeg)}°, elevation ${n1(s.sun.elDeg, 2)}°; the Earth at ${n0(s.earth.azDeg)}°, ${n1(s.earth.elDeg, 2)}°. Clearance is measured above the LOLA skyline. Limits are assumptions for this vehicle (Apollo LM design: about 3 m/s vertical, 1.2 m/s horizontal, 12°).</p>` : ''}
     <p class="note">${esc(terrainNote)}</p>
     ${landed === undefined ? '' : landed ? `<h3>Touchdown point <small>passed to the rover step</small></h3><dl class="kv"><dt>Latitude, longitude</dt><dd>${Math.abs(landed.latDeg).toFixed(5)}°${landed.latDeg < 0 ? 'S' : 'N'}, ${landed.lonDeg.toFixed(5)}°E</dd><dt>From the target</dt><dd>${n1(landed.missM, 1)} m</dd><dt>Time</dt><dd>${esc(fmtUtc(landed.tMs))}</dd><dt>Flown</dt><dd>${landed.source === 'nominal' ? 'nominal descent' : esc(landed.source.replace(/-/g, ' '))}</dd></dl>` : '<h3>Touchdown point</h3><p class="note">No touchdown in the selected contingency (it ends in orbit or waits); the rover step gets the target site only.</p>'}
-    ${roverUrl ? `<p class="next-step"><a class="btn primary" href="${esc(roverUrl)}">Plan the rover route →</a><small>Step 2: the navigator's route card opens at this site and touchdown time.</small></p>` : ''}`;
+    ${roverUrl ? '<p class="note">Next: <b>Plan the rover route</b> in the bar above the view opens step 2 (the navigator\'s route card) at this touchdown point and time.</p>' : ''}`;
 }
 
 const FIELDS = [
@@ -151,13 +151,19 @@ export function renderVehicle(el, vehicle, onApply) {
   el.innerHTML = `<p class="note">All vehicle numbers are <b>assumed</b> (a generic medium robotic lander, not a real one). Change them and re-plan.</p>
     <div class="form">${FIELDS.map(([k, label, unit]) => `<label><span>${label} <small>assumed · ${unit}</small></span><input type="number" step="any" data-k="${k}" value="${vehicle[k]}"></label>`).join('')}
     <label><span>Loads <small>assumed · W</small></span><input type="text" data-loads value="${Object.entries(vehicle.loadsW).map(([k, v]) => `${k} ${v}`).join(', ')}" readonly></label></div>
-    <div class="form-actions"><button class="btn" data-apply>Re-plan</button><button class="btn ghost" data-reset>Defaults</button></div>
+    <div class="form-actions"><button class="btn ghost" data-reset>Default numbers</button><span class="muted">then <b>Replan</b> in the bar above the view</span></div>
     <h3>Attitude modes</h3><dl class="kv">${Object.entries(ATTITUDE_MODES).map(([k, d]) => `<dt>${esc(MODE_NAME[k] ?? k)}</dt><dd>${esc(d)}</dd>`).join('')}</dl>
     <h3>Actions</h3><dl class="kv">${Object.entries(ACTIONS).map(([k, d]) => `<dt>${esc(k.replace(/-/g, ' '))}</dt><dd>${esc(d)}</dd>`).join('')}</dl>`;
-  el.querySelector('[data-apply]').addEventListener('click', () => {
-    const out = { ...vehicle };
-    el.querySelectorAll('input[data-k]').forEach((i) => { out[i.dataset.k] = Number(i.value); });
-    onApply(out);
-  });
+  // the numbers are inputs; the action (Replan) is in the action bar, which reads them (vehicleFromForm)
+  el.querySelectorAll('input[data-k]').forEach((i) => i.addEventListener('input', () => onApply(null)));
   el.querySelector('[data-reset]').addEventListener('click', () => onApply({ ...VEHICLE_DEFAULTS }));
+}
+
+// the vehicle numbers typed in the Vehicle tab (null when it is not open)
+export function vehicleFromForm(el, vehicle) {
+  const inputs = el?.querySelectorAll?.('input[data-k]');
+  if (!inputs?.length) return null;
+  const out = { ...vehicle };
+  inputs.forEach((i) => { out[i.dataset.k] = Number(i.value); });
+  return out;
 }

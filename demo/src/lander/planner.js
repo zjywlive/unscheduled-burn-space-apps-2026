@@ -45,13 +45,14 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
         <form class="pl-go"><input type="text" placeholder="lat, lon  e.g. 85.4S 35.3E" aria-label="Latitude and longitude"><button class="btn" type="submit">Go</button></form>
         <span class="pl-hint">Click the map to propose a landing point · drag to pan · wheel or pinch to zoom</span>
       </div>
+      <div class="pl-act ab" role="toolbar" aria-label="Planner actions"></div>
       <div class="pl-zoom"><button class="cam" data-z="1.6" aria-label="Zoom in" title="Zoom in">+</button><button class="cam" data-z="0.625" aria-label="Zoom out" title="Zoom out">−</button></div>
       <div class="pl-key glass"></div>
       <div class="pl-read glass" hidden></div>
       <div class="pl-toast" hidden></div>
     </div>
     <aside class="pl-side glass">
-      <header><h2>Choose where to land</h2><button class="btn ghost pl-close" aria-label="Close the planner">Close</button></header>
+      <header><h2>Choose where to land</h2></header>
       <p class="pl-assume"></p>
       <div class="pl-body"><p class="note">Click anywhere on the south polar map (80°S to the pole, where this page has terrain, skyline and descent data), or type a latitude and longitude.</p></div>
     </aside>`;
@@ -152,6 +153,9 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
   const toScreen = (x, y) => [S.w / 2 + (x - S.cx) / S.kmPerPx, S.h / 2 - (y - S.cy) / S.kmPerPx];
   const toMap = (px, py) => [S.cx + (px - S.w / 2) * S.kmPerPx, S.cy - (py - S.h / 2) * S.kmPerPx];
   function resize() {
+    // the action bar, read-out and zoom sit under the map's top bar, whatever its height
+    const tb = root.querySelector('.pl-top').getBoundingClientRect(), mb = root.querySelector('.pl-map').getBoundingClientRect();
+    root.style.setProperty('--pl-top', `${Math.round(tb.bottom - mb.top + 8)}px`);
     const r = canvas.getBoundingClientRect();
     S.w = Math.max(1, Math.round(r.width)); S.h = Math.max(1, Math.round(r.height));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -410,6 +414,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     body.innerHTML = `<p class="note">Green ground on the map is where a landing ellipse would pass every check, amber where it would pass near a limit. Click it, a listed site, or type a latitude and longitude to score a point in detail.</p>
       <h3>Known landing sites <small>flown missions and Artemis III candidate regions, scored like a pick: ellipse slope, Sun over a ${getStayDays()}-day stay from each site's first lit window, overall</small></h3>
       <table class="tbl pl-cmp"><thead><tr><th>Site</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Grade</th></tr></thead><tbody>${rows}</tbody></table>`;
+    renderActions();
     body.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => { const s = sites.find((q) => q.id === tr.dataset.site); S.cx = toXY(s.latDeg, s.lonDeg)[0]; S.cy = toXY(s.latDeg, s.lonDeg)[1]; S.kmPerPx = Math.min(S.kmPerPx, 0.08); setPick(s.latDeg, s.lonDeg); }));
   }
 
@@ -498,7 +503,25 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     if (!ll) return say('Type a latitude and longitude, e.g. 85.4S 35.3E or −85.4, 35.3 or 0.67N 23.47E');
     setView('polar'); setPick(ll.latDeg, ll.lonDeg, { center: true });
   });
-  root.querySelector('.pl-close').addEventListener('click', () => close());
+  // the planner's actions, one row over the map (the side panel keeps the figures and tables)
+  const actBox = root.querySelector('.pl-act');
+  function renderActions() {
+    const R0 = S.results, c = R0?.list[S.sel];
+    const target = c ? (c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name) : null;
+    const busy = S.pick && !R0;
+    actBox.innerHTML = `
+      <button class="ab-btn ab-primary" data-a="land" ${c ? '' : 'disabled'} title="${c ? `Plan the whole mission to ${esc(target)} and its first lit landing window` : 'Pick a point first'}">Land here${c ? `<span class="ab-l">: ${esc(target)}</span>` : ''}</button>
+      <button class="ab-btn" data-a="search" ${S.pick && !busy ? '' : 'disabled'} title="Search 15 km around your point again">${busy ? 'Searching…' : 'Find better spots'}</button>
+      ${R0 ? `<div class="ab-seg" role="group" aria-label="Candidate">${R0.list.map((x, n) => `<button class="ab-opt" data-n="${n}" aria-pressed="${n === S.sel}" title="${esc(x.name)}: ${esc(x.verdict.text)}">${n === 0 ? 'Yours' : n}<span class="pl-dot g-${x.verdict.grade}"></span></button>`).join('')}</div>` : ''}
+      <span class="ab-div" aria-hidden="true"></span>
+      <button class="ab-btn" data-a="sites" title="The listed landing sites with their grades">Known sites</button>
+      <button class="ab-btn" data-a="close" title="Back to the 3D view (Esc)">Back to 3D</button>`;
+    actBox.querySelector('[data-a="land"]').addEventListener('click', () => { if (c) { onLand({ site: c.site, landingMs: c.landingMs }); close(); } });
+    actBox.querySelector('[data-a="search"]').addEventListener('click', () => { if (S.pick) setPick(S.pick.latDeg, S.pick.lonDeg); });
+    actBox.querySelector('[data-a="sites"]').addEventListener('click', () => renderSites());
+    actBox.querySelector('[data-a="close"]').addEventListener('click', () => close());
+    actBox.querySelectorAll('[data-n]').forEach((b) => b.addEventListener('click', () => select(Number(b.dataset.n))));
+  }
   function say(t) { toast.textContent = t; toast.hidden = false; clearTimeout(say.t); say.t = setTimeout(() => { toast.hidden = true; }, 4200); }
   async function setView(v) {
     S.view = v;
@@ -518,6 +541,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     root.querySelector('.pl-go input').value = `${fmtLat(latDeg)} ${fmtLon(lonDeg)}`;
     draw();
     const token = ++S.token;
+    renderActions();
     const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
     const fromMs = getFromMs();
     const dem = getDem();
@@ -625,16 +649,13 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
       ${c.polar || c.patch ? '' : `<p class="note pl-fetch">No fine patch here: run <code>node tools/fetch-hires.mjs --at ${c.latDeg.toFixed(3)},${c.lonDeg.toFixed(3)}</code> to fetch one (SLDEM2015 ~59 m between 60°S and 60°N, LOLA polar products near the poles).</p>`}
       <p class="pl-verdict g-${c.verdict.grade}">${esc(c.verdict.text)}</p>
       <ul class="pl-figs">${c.figs.map((f) => `<li class="g-${G[f.grade]}"><div class="pl-f-h"><span>${esc(f.label)}</span><span class="pl-g">${f.grade}</span></div><div class="pl-f-v"><b>${esc(f.text)}</b><span class="muted">limit ${esc(f.limit)}</span></div><small>${esc(f.note)}</small></li>`).join('')}</ul>
-      <button class="btn primary pl-land">Land here: plan the mission to ${esc(c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name)}</button>
       <h3>Better spots nearby <small>the 5 best that pass the hard limits in a 30 × 30 km square around your point, at least 2 km apart, by suitability; same stay and method</small></h3>
       <table class="tbl pl-cmp"><thead><tr><th>#</th><th class="r">km</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Earth</th><th class="r">Dark</th><th class="r">Δv</th></tr></thead><tbody>
       ${R.list.map((x, n) => `<tr data-n="${n}" class="${n === S.sel ? 'on' : ''}"><td>${n === 0 ? 'You' : n}</td><td class="r">${x.distKm.toFixed(1)}</td>${cell(fig('slope', x))}${cell(fig('sun', x))}${cell(fig('earth', x))}${cell(fig('dark', x))}${cell(fig('dv', x))}</tr>`).join('')}
       </tbody></table>
-      <p class="note">Click a row or a numbered spot on the map to see its figures. Rocks smaller than the DEM are not modelled; Sun and Earth use the 480 m skyline; the Δv is from the planned polar orbit with this vehicle (assumed).</p>
-      <button class="btn ghost pl-sites">Known landing sites…</button>`;
+      <p class="note">Choose a candidate in the bar over the map, a row here or a numbered spot on the map to see its figures; <b>Land here</b> in the bar plans the mission to it. Rocks smaller than the DEM are not modelled; the Δv is from the planned polar orbit with this vehicle (assumed).</p>`;
     body.querySelectorAll('.pl-cmp tr[data-n]').forEach((tr) => tr.addEventListener('click', () => select(Number(tr.dataset.n))));
-    body.querySelector('.pl-land').addEventListener('click', () => { onLand({ site: c.site, landingMs: c.landingMs }); close(); });
-    body.querySelector('.pl-sites').addEventListener('click', () => renderSites());
+    renderActions();
   }
   function select(n) { S.sel = n; renderResults(); const c = S.results.list[n]; S.cx = c.xKm; S.cy = c.yKm; draw(); }
 
@@ -648,6 +669,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     requestAnimationFrame(resize);
     setTimeout(resize, 50);
     if (!S.pick) renderSites();
+    renderActions();
     if (!L.slope) loadLayers();
     else if (S.lastFrom !== getFromMs() || R.startMs !== getStayStartMs()) { siteRes.clear(); scoreSites(); startRegion(); }   // the mission moved: redo both
     S.lastFrom = getFromMs();

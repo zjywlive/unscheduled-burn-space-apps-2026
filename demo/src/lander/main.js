@@ -15,7 +15,7 @@ import { three, bindControls, createLabels, cameraStep, cameraKey } from './view
 import { buildEarthScene } from './view-earth.js';
 import { buildMoonScene } from './view-moon.js';
 import { buildSurfaceScene } from './view-surface.js';
-import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep } from './ui.js';
+import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm } from './ui.js';
 import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.js';
 import { attitudeState } from './model.js';
 import { createCloseup } from './closeup.js';
@@ -91,7 +91,7 @@ export function boot() {
   const closeup = createCloseup(document);
   const closeupOn = () => closeup.el.isConnected && !$('#side').classList.contains('closed') && document.querySelector('.tabs .on')?.dataset.tab === 'vehicle';
   window.addEventListener('resize', () => { if (closeupOn()) closeup.resize(); });
-  const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); };
+  const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); pressed($('#ab-follow'), false); };
   bindControls(canvas, () => S.scenes?.[S.scene].controls, userCamera);
 
   // the top bar wraps on narrow screens: the panels below it start at its bottom edge (--top)
@@ -109,8 +109,50 @@ export function boot() {
   const stages = stageBar(document, 'landing');
   $('#stages').replaceChildren(stages);
   const roverUrl = () => stageUrl('rover', readMission());
-  const next = $('#next');
-  for (const ev of ['pointerenter', 'focus', 'click']) next.addEventListener(ev, () => { next.href = roverUrl(); });
+  // the action bar (in the top bar): the page's actions; the side panels keep the inputs and the data
+  const rover = $('#ab-rover');
+  for (const ev of ['pointerenter', 'focus', 'click']) rover.addEventListener(ev, () => { rover.href = roverUrl(); });
+  const pressed = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  // contingency to fly: nominal or one of the branches the page draws (short names; the tab has the full cards)
+  const BRANCH_SHORT = { 'engine-abort': 'Abort', 'hazard-divert': 'Divert', 'wave-off': 'Wave-off', 'engine-low': 'Low thrust', retarget: 'Retarget', 'spe-hold': 'Hold' };
+  const RISKY = new Set(['engine-abort', 'wave-off', 'spe-hold', 'retarget']);
+  function renderBranchBar() {
+    const list = (S.branches ?? []).filter((b) => BRANCH_SHORT[b.id]);
+    const opts = [{ id: null, label: 'Nominal', title: 'The planned descent, no contingency' }, ...list.map((b) => ({ id: b.id, label: BRANCH_SHORT[b.id], title: `${b.title}: ${b.decision.action.replace(/-/g, ' ')}`, risky: RISKY.has(b.id) }))];
+    const seg = $('#ab-branches');
+    seg.innerHTML = opts.map((o) => `<button class="ab-opt${o.risky ? ' risk' : ''}" data-b="${o.id ?? ''}" aria-pressed="${(S.active ?? null) === o.id}" title="${o.title.replace(/"/g, '&quot;')}">${o.label}</button>`).join('');
+    seg.querySelectorAll('[data-b]').forEach((b) => b.addEventListener('click', () => { const id = b.dataset.b || null; if ((S.active ?? null) !== id) selectBranch(id ?? S.active); }));
+    const sel = $('#ab-branch-sel');
+    sel.innerHTML = opts.map((o) => `<option value="${o.id ?? ''}">${o.id ? `Fly: ${o.label}` : 'Fly: nominal'}</option>`).join('');
+    sel.value = S.active ?? '';
+  }
+  $('#ab-branch-sel').addEventListener('change', (e) => { const id = e.target.value || null; if ((S.active ?? null) !== id) selectBranch(id ?? S.active); });
+  // Replan with the numbers typed in the Vehicle tab (highlighted once they differ from the plan's)
+  let vehicleDirty = false;
+  const setDirty = (on) => { vehicleDirty = on; $('#ab-replan').classList.toggle('ab-dirty', on); $('#ab-replan .ab-l').textContent = on ? 'Replan with the new numbers' : 'Replan'; };
+  $('#ab-replan').addEventListener('click', () => {
+    const v = vehicleFromForm($('#tab-body'), S.plan?.vehicle ?? S.vehicle) ?? S.vehicle;
+    S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true });
+  });
+  // Save plan: the mission and the plan's figures as a JSON file
+  $('#ab-save').addEventListener('click', () => {
+    if (!S.plan) return;
+    const p = S.plan, t = p.times, iso = (ms) => new Date(ms).toISOString();
+    const out = {
+      savedAt: iso(Date.now()), page: 'lander.html', mission: readMission(),
+      site: { id: p.site.id, name: p.site.name, latDeg: p.site.latDeg, lonDeg: p.site.lonDeg, heightM: Math.round(p.siteHeightKm * 1000) },
+      times: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, k.endsWith('Ms') ? iso(v) : v])),
+      vehicle: p.vehicle, deltaV: { phases: p.budget.phases.map((x) => ({ name: x.name, dvMs: Math.round(x.dvMs), propellantKg: Math.round(x.propellantKg), by: x.by })), marginMs: Math.round(p.budget.marginMs), reserveDvMs: p.budget.reserveDvMs },
+      descent: { durationS: Math.round(p.descent.durationS), dvUsedMs: Math.round(p.descent.dvUsedMs), touchdown: p.descent.touchdown },
+      landed: S.landed ?? null, flown: S.active ?? 'nominal',
+      contingencies: S.branches.map((b) => ({ id: b.id, title: b.title, action: b.decision.action, reason: b.decision.reason, numbers: b.numbers })),
+      landingChecks: S.checks?.checks ?? null, terrain: S.terrainNote, assumptions: 'Vehicle numbers, descent gates and decision thresholds are assumed (see the Vehicle tab and docs/LANDER.md).',
+    };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
+    a.download = `lander-plan-${(p.site.id === 'custom' ? `${p.site.latDeg.toFixed(2)}_${p.site.lonDeg.toFixed(2)}` : p.site.id)}-${iso(t.landingMs).slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
 
   function readDem() {
     const lv = meta.dem;
@@ -232,7 +274,8 @@ export function boot() {
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
     else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
     else if (tab === 'vehicle') {
-      renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replanAt({ keepTime: true }); });
+      // inputs only: typing marks the plan out of date (Replan in the bar); "Default numbers" replans at once
+      renderVehicle(body, S.plan.vehicle, (v) => { if (v === null) setDirty(true); else { S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true }); } });
       body.prepend(closeup.el);
       requestAnimationFrame(() => closeup.resize());
     }
@@ -242,6 +285,7 @@ export function boot() {
     S.scenes.moon.setBranches(S.branches, S.active);
     S.scenes.surface.setBranches(S.branches, S.active);
     S.timeline.setBranches(S.branches, S.active);
+    renderBranchBar();
   }
 
   // the touchdown point of what is shown as flown, in the mission and on the page
@@ -250,12 +294,12 @@ export function boot() {
     const p = m?.landed ?? null;
     const ll = p ? `${Math.abs(p.latDeg).toFixed(4)}°${p.latDeg < 0 ? 'S' : 'N'} ${p.lonDeg.toFixed(4)}°E` : null;
     const via = p && p.source !== 'nominal' ? `, after the ${p.source.replace(/-/g, ' ')}` : '';
-    $('#next-where').textContent = p
-      ? `${S.site.name} · ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}`
-      : `${S.site.name} · no touchdown in the selected contingency`;
+    $('#ab-touch').textContent = p ? `Lands at ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}` : 'No touchdown in this contingency';
+    $('#ab-touch').title = p ? `${S.site.name} · touchdown ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC` : '';
+    rover.title = `Step 2: plan the rover route from the touchdown point (navigator). ${$('#ab-touch').textContent}`;
     S.landed = p;
     stages.refresh();
-    next.href = roverUrl();
+    rover.href = roverUrl();
   }
 
   function selectBranch(id) {
@@ -314,10 +358,13 @@ export function boot() {
     $('#tab-body').scrollTop = 0;
   };
   $('#cam-look').addEventListener('click', lookAtLander);
+  $('#ab-look').addEventListener('click', () => { if (closeupOn()) $('#side-toggle').click(); else lookAtLander(); });
+  $('#ab-follow').addEventListener('click', () => $('#auto').click());
   $('#auto').addEventListener('click', () => {
     S.auto = true;
     $('#auto').classList.add('on');
     $('#cam-follow').classList.add('on');
+    pressed($('#ab-follow'), true);
     for (const sc of Object.values(S.scenes)) sc.controls.state.user = false;
   });
   $('#play').addEventListener('click', () => togglePlay());
@@ -421,7 +468,7 @@ export function boot() {
     const t = S.timeline.fToT(S.f);
     const st = S.plan.stateAt(t);
     if (S.auto && st.scene !== S.scene) setScene(st.scene, false);
-    if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; next.hidden = st.phase !== 'landed'; }
+    if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; }
     const sc = S.scenes[S.scene];
     if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
     const att = attitudeState(st, S.plan);
@@ -435,6 +482,7 @@ export function boot() {
     if (now - hudAt > 90) {
       hudAt = now;
       if (st.scene === 'surface') st.ground = S.scenes.surface.groundAt(st);
+      pressed($('#ab-look'), closeupOn());
       renderHud($('#hud'), st, S.power.at(t), S.plan);
     }
   }

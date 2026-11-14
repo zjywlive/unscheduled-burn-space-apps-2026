@@ -149,7 +149,10 @@ test('page: the built lander carries the patch manifest, the stage bar slot and 
   assert.ok(m, 'data-hires inlined');
   const inl = JSON.parse(m[1]);
   assert.ok(inl.sites.shackleton.kmPerPixel === 0.005 && inl.sites['mons-mouton'].kmPerPixel === 0.01);
-  assert.ok(page.includes('id="stages"') && page.includes('id="next"') && page.includes('Plan the rover route'));
+  assert.ok(page.includes('id="stages"') && page.includes('id="ab-rover"') && page.includes('Plan the rover route'));
+  // the action bar sits in the top bar and carries the page's actions
+  const bar = page.split('id="actbar"')[1].split('</header>')[0];
+  for (const id of ['ab-follow', 'ab-look', 'ab-branches', 'ab-replan', 'ab-save', 'ab-rover']) assert.ok(bar.includes(`id="${id}"`), id);
   const js = page.split('<!--LANDER:JS-->')[1];
   assert.ok(js.includes("__m['../mission-flow.js']") && js.includes("__m['../hires.js']"));
 });
