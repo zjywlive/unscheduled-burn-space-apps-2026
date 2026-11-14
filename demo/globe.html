@@ -97,6 +97,17 @@
   .rp-canvas:focus-visible { outline: 2px solid var(--accent); }
   .rp-tip { position: absolute; top: 4px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,0.75); color: var(--text); font-size: 11px; pointer-events: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .rp-tip[hidden] { display: none; }
+  /* the scrubber lines up with the profile's plot: its thumb centre runs from 44 px to the width − 10 px, as the
+     profile's x axis does (globe-profile.js margins), so the thumb sits under the profile's cursor */
+  .route-hud .scrub { display: grid; grid-template-columns: 37px 1fr 3px; align-items: center; height: 22px; }
+  .route-hud .scrub button { grid-column: 1; width: 30px; height: 22px; padding: 0; justify-self: start; }
+  .route-hud .scrub input[type=range] { grid-column: 2; width: 100%; margin: 0; height: 14px; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; --p: 0%; }
+  .route-hud .scrub input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #ffd23d var(--p), rgba(255,255,255,0.18) var(--p)); }
+  .route-hud .scrub input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #ffd23d; border: 2px solid #111; }
+  .route-hud .scrub input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #ffd23d var(--p), rgba(255,255,255,0.18) var(--p)); }
+  .route-hud .scrub input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #ffd23d; border: 2px solid #111; }
+  .route-hud .ctl { flex-wrap: wrap; }
+  .route-hud .opt { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; white-space: nowrap; }
   .route-hud .rec { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
   .route-hud .rec span { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
   .route-hud .ctl .chips { flex: 1; min-width: 0; }
@@ -243,14 +254,14 @@
 <section class="glass route-hud" aria-label="Route playback">
   <div class="top"><span class="name" id="rh-name">Route</span><span class="when" id="rh-when"></span></div>
   <div id="rh-profile"></div>
-  <div class="ctl">
+  <div class="scrub">
     <button type="button" id="rh-play" aria-label="Play">▶</button>
-    <input type="range" id="rh-t" min="0" max="1000" value="0" aria-label="Time along the drive">
-    <select id="rh-speed" aria-label="Playback speed"></select>
-    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px" title="Play parked (charging) time 40 times faster"><input type="checkbox" id="rh-skip" checked> Fast parking</label>
-    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px"><input type="checkbox" id="rh-follow"> Follow</label>
+    <input type="range" id="rh-t" min="0" max="1000" value="0" aria-label="Distance along the route (lines up with the profile above)">
   </div>
   <div class="ctl">
+    <select id="rh-speed" aria-label="Playback speed"></select>
+    <label class="opt" title="Play parked (charging) time 40 times faster"><input type="checkbox" id="rh-skip" checked> Fast parking</label>
+    <label class="opt"><input type="checkbox" id="rh-follow"> Follow</label>
     <div class="chips" id="rh-chips"></div>
     <div class="rec"><button type="button" id="rh-rec" title="Record the rover's position, attitude and battery during playback">● Record</button><span id="rh-rec-out"></span><button type="button" id="rh-rec-save" title="Save the route with the recorded motion (also downloads it as JSON)">Save</button><button type="button" id="rh-rec-csv" title="Download the recorded motion as CSV">CSV</button></div>
   </div>
@@ -1016,6 +1027,7 @@ const PX_ERROR = 2.2;                  // refine while a cell spans more than th
 const MAX_DEPTH_CYL = 7, MAX_DEPTH_CAP = 10;
 const BUILD_MS = 14;                  // mesh building budget per frame
 const CACHE_MAX = 2600;
+const MIN_DIST_KM = 0.02;     // the camera may come to 20 m of its target (a rover at real size fills the view)
 
 function unit(latDeg, lonDeg) {
   const cl = Math.cos(latDeg * RAD);
@@ -1311,8 +1323,9 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     camera.lookAt(tgt);
     // keep the camera above the ground: the terrain under it and in a ring around it (so a ridge beside it
     // cannot swallow the near plane), plus a margin that grows with the distance to the target
-    const ground = groundAround(camera.position, Math.max(0.08, cam.dist * 0.12));
-    const soft = ground + Math.max(0.03, cam.dist * 0.04), hard = ground + Math.max(0.01, cam.dist * 0.012);
+    // (margins scale with the distance, so a close-up of a 2 m rover is not pushed tens of metres back)
+    const ground = groundAround(camera.position, Math.max(0.006, cam.dist * 0.12));
+    const soft = ground + Math.max(0.003, cam.dist * 0.04), hard = ground + Math.max(0.0015, cam.dist * 0.012);
     if (ease.clear === null || fly || Math.abs(soft - ease.clear) > Math.max(0.2, cam.dist * 0.5)) ease.clear = soft;
     else { ease.clear += (soft - ease.clear) * 0.12; if (Math.abs(soft - ease.clear) > 1e-5) dirty = true; }
     const minR = Math.max(hard, ease.clear);
@@ -1459,7 +1472,7 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
   canvas.addEventListener('pointerup', (e) => { drag = null; canvas.releasePointerCapture(e.pointerId); });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    cam.dist = Math.max(0.4, Math.min(14000, cam.dist * Math.exp(e.deltaY * 0.0012)));
+    cam.dist = Math.max(MIN_DIST_KM, Math.min(14000, cam.dist * Math.exp(e.deltaY * 0.0012)));
     cam.tilt = Math.min(cam.tilt, maxTilt());
     fly = null; dirty = true;
   }, { passive: false });
@@ -1596,7 +1609,7 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
   };
 }
 
-return { SEG, CAP_HALF_KM, BAND_LAT, unit, toLatLon, fromXYNorth, cameraFromHash, cameraToHash, createGlobeView };
+return { SEG, CAP_HALF_KM, BAND_LAT, MIN_DIST_KM, unit, toLatLon, fromXYNorth, cameraFromHash, cameraToHash, createGlobeView };
 })();
 __m['route3d.js'] = (() => {
 // Phase 6 (docs/PHASES.md): a planned route and its simulated drive, handed from the navigator to the 3D
@@ -1765,8 +1778,9 @@ __m['globe-route.js'] = (() => {
 // what the drive met (sunlit, in shadow, one-way, battery under the reserve, not reached) or by slope,
 // markers for the havens, parking stops and where the battery ran out, the no-go ground (traps) as
 // translucent red volumes, the self-driving planner's search (trees, candidates, chosen path) when the payload
-// has one, and the rover: a six-wheeled model standing on the terrain with its pitch and roll, with its
-// coordinate frames (base_link, mast_cam, wheels) for the labels. Sizes follow the zoom.
+// has one, and the rover: a six-wheeled model at its real size (2.2 m) standing on the terrain with its pitch and
+// roll, with its coordinate frames (base_link, mast_cam, wheels) for the labels, and a locator ring (screen-sized,
+// drawn over the terrain) while the real-size model is too small to see. Marker sizes follow the zoom.
 const { FLAGS } = __m['route3d.js'];
 const { slopeColour, rgb01 } = __m['slope-colours.js'];
 
@@ -1774,7 +1788,8 @@ const COLORS = { lit: [0.96, 0.96, 0.96], dark: [0.36, 0.45, 0.66], oneWay: [1, 
 const RAD = Math.PI / 180;
 const ROVER_LEN_M = 2.2;   // model length in metres
 
-function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
+// roverPx: draw the rover that many pixels long instead of at its real size (the navigator's small preview)
+function createRouteLayer(view, payload, { roverPx = null } = {}) {
   const THREE = view.THREE;
   const group = new THREE.Group();
   view.addObject(group);
@@ -1815,7 +1830,9 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     m.renderOrder = 3;
     return m;
   }
-  const buildRibbon = (w) => strip(payload.pts.map((q) => [q[0], q[1]]), w, (i) => colourOf(payload.pts[i]), 0.012 * view.exaggeration + w * 0.4);
+  // lifted a little above the terrain, more when zoomed out (where the tiles are coarser than the heights)
+  const liftFor = (w) => Math.min(0.012 * view.exaggeration, 0.0003 + w * 0.6);
+  const buildRibbon = (w) => strip(payload.pts.map((q) => [q[0], q[1]]), w, (i) => colourOf(payload.pts[i]), liftFor(w));
   const dispose = (o) => { if (!o) return; group.remove(o); o.traverse?.((c) => { c.geometry?.dispose(); c.material?.dispose(); }); };
 
   // ---- no-go volumes: each trap cell a translucent red box standing on the ground ----
@@ -1844,7 +1861,7 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
   function buildSearch(w) {
     const a = payload.autonav;
     if (!a) return null;
-    const g = new THREE.Group(), lift = 0.01 * view.exaggeration + w * 0.5;
+    const g = new THREE.Group(), lift = liftFor(w) + w * 0.1;
     const o = new THREE.Vector3(...view.surface(payload.pts[0][0], payload.pts[0][1], 0));
     const V = (la, lo, extra = 0) => new THREE.Vector3(...view.surface(la, lo, lift + extra)).sub(o);
     if (a.trees?.length) {
@@ -1929,8 +1946,18 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
   axes.visible = false;
   rover.add(axes);
   const FRAMES = { base_link: [0, 0, 0.72], mast_cam: [0.78, 0.38, 2.0], wheel_fl: [0.75, 0.82, 0.26], wheel_rr: [-0.75, -0.82, 0.26] };
+  // drawn after the route ribbon (which does not write depth), so the ribbon under its wheels never paints over it
+  rover.traverse((m) => { if (m.isMesh && m.material !== ghostMat) { m.material.transparent = true; m.renderOrder = 12; } });
   group.add(rover);
-  let roverAt = { latDeg: first[0], lonDeg: first[1] }, att = { headingDeg: 0, pitchDeg: 0, rollDeg: 0 }, roverScale = 0.001;
+  // the locator: a ring with a heading chevron, flat on the ground, a fixed size on screen, never hidden by terrain
+  const locMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const locator = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.72, 1, 40), locMat);
+  const chev = new THREE.Shape(); chev.moveTo(0.62, 0); chev.lineTo(-0.34, 0.36); chev.lineTo(-0.16, 0); chev.lineTo(-0.34, -0.36); chev.closePath();
+  const arrow = new THREE.Mesh(new THREE.ShapeGeometry(chev), locMat);
+  for (const m of [ring, arrow]) { m.renderOrder = 21; locator.add(m); }
+  group.add(locator);
+  let roverAt = { latDeg: first[0], lonDeg: first[1] }, att = { headingDeg: 0, pitchDeg: 0, rollDeg: 0 }, roverScale = 0.001, modelPx = 0;
 
   function place(obj, lat, lon, size, lift = 0) {
     const [x, y, z] = view.surface(lat, lon, lift);
@@ -1948,7 +1975,11 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     let f = N.clone().multiplyScalar(Math.cos(h)).addScaledVector(E, Math.sin(h)).normalize();
     let right = f.clone().cross(U).normalize();
     let up = U.clone();
-    const p = (att.pitchDeg || 0) * RAD, r = (att.rollDeg || 0) * RAD;
+    locator.quaternion.setFromRotationMatrix(basis.makeBasis(f, right.clone().negate(), up));   // flat, along the heading
+    // pitch and roll as drawn: the terrain is drawn with its heights exaggerated, so the model takes the drawn
+    // slope (atan(E · tan)) and sits flush on it; the panels on the left give the real angles
+    const ex = view.exaggeration;
+    const p = Math.atan(ex * Math.tan((att.pitchDeg || 0) * RAD)), r = Math.atan(ex * Math.tan((att.rollDeg || 0) * RAD));
     f.applyAxisAngle(right, p); up.applyAxisAngle(right, p);            // nose up
     right.applyAxisAngle(f, -r); up.applyAxisAngle(f, -r);              // right side up
     const left = right.clone().negate();
@@ -1958,7 +1989,8 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
 
   // per frame: keep sizes in step with the zoom, rebuild what is draped when the zoom, exaggeration or terrain changes
   function frame(terrainStamp) {
-    const kpp = view.kmPerPx(), w = Math.min(3, Math.max(0.02, kpp * 5));
+    // about 5 px wide, down to 0.8 m close up, under a metre off the ground (the rover is 2.2 m long, 2 m tall)
+    const kpp = view.kmPerPx(), w = Math.min(3, Math.max(0.0008, kpp * 5));
     const key = `${terrainStamp}:${view.exaggeration}:${colourBy}`;
     if (!built || built.key !== key || w / built.w > 1.35 || built.w / w > 1.35) {
       dispose(ribbon); ribbon = buildRibbon(w); group.add(ribbon);
@@ -1968,9 +2000,13 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     }
     const s = kpp * 5;
     for (const m of markers) place(m, m.userData.lat, m.userData.lon, s * m.userData.r, s * m.userData.r);
-    // real size (2.2 m) when the camera is close enough, else roverPx pixels long so it stays visible
-    roverScale = Math.max(0.001, (kpp * roverPx) / ROVER_LEN_M);
-    place(rover, roverAt.latDeg, roverAt.lonDeg, roverScale, 0.004 * view.exaggeration * 0.25);
+    // real size (km per model metre), or roverPx long for the preview
+    roverScale = roverPx ? Math.max(0.001, (kpp * roverPx) / ROVER_LEN_M) : 0.001;
+    place(rover, roverAt.latDeg, roverAt.lonDeg, roverScale, roverPx ? 0.001 * view.exaggeration : 0.0002);
+    modelPx = (roverScale * ROVER_LEN_M) / kpp;
+    // the locator while the model is under ~18 px long: 26 px across, fading out as the model grows
+    locator.visible = !roverPx && modelPx < 18;
+    if (locator.visible) { place(locator, roverAt.latDeg, roverAt.lonDeg, kpp * 13, 0.0004); locMat.opacity = Math.min(0.95, 0.35 + (18 - modelPx) / 12); }
     orientRover();
   }
 
@@ -1994,10 +2030,13 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     },
     // world positions (km) of the rover's frames, for their labels
     frames() {
+      if (modelPx < 50) return [];   // too small for its frames to be told apart
       rover.updateMatrixWorld(true);
       return Object.entries(FRAMES).map(([name, [x, y, z]]) => ({ name, p: new THREE.Vector3(x, y, z).applyMatrix4(rover.matrixWorld) }));
     },
     get scaleUp() { return roverScale / 0.001; },
+    // the model's length on screen, px
+    get modelPx() { return modelPx; },
     // the top of the mast above the ground, km (as drawn), for line-of-sight checks
     get topKm() { return roverScale * 2.1; },
     setHidden(on) { if (ghost.visible !== !!on) { ghost.visible = !!on; view.redraw(); } },
@@ -2548,7 +2587,7 @@ function createCameraControls(view, { onUser = () => {}, parent = document.body 
     down: (c, k) => ({ ...c, ...moved(c, -viewKm() * 0.25 * k, 0) }),
     left: (c, k) => ({ ...c, ...moved(c, 0, -viewKm() * 0.25 * k) }),
     right: (c, k) => ({ ...c, ...moved(c, 0, viewKm() * 0.25 * k) }),
-    in: (c, k) => ({ ...c, dist: Math.max(0.4, c.dist * Math.pow(0.6, k)) }),
+    in: (c, k) => ({ ...c, dist: Math.max(0.02, c.dist * Math.pow(0.6, k)) }),
     out: (c, k) => ({ ...c, dist: Math.min(14000, c.dist / Math.pow(0.6, k)), tilt: Math.min(c.tilt, 75) }),
     ccw: (c, k) => ({ ...c, heading: (c.heading - 30 * k + 360) % 360 }),
     cw: (c, k) => ({ ...c, heading: (c.heading + 30 * k) % 360 }),
@@ -3623,7 +3662,7 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; }
   if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
   document.body.classList.add('route-mode');
-  const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : 90 });
+  const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : null });
   const terrain = window.__globe.terrain;
   const heightAt = (lat, lon) => terrain.heightAt(lat, lon);
   const landed = landedFor(mission);
@@ -3699,7 +3738,7 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   const driveH = span ? Math.max(0.05, (span[1] - span[0]) / 3600e3 - stopH) : total / 0.8;
   const pick = SPEEDS.reduce((best, s) => (Math.abs(Math.log(s[0] / (driveH / 25))) < Math.abs(Math.log(best[0] / (driveH / 25))) ? s : best));
   speed.innerHTML = SPEEDS.map(([v, l]) => `<option value="${v}"${v === pick[0] ? ' selected' : ''}>${l}</option>`).join('');
-  if (!span) { slider.title = 'No simulated drive: playing by distance at 0.8 km/h'; }
+  if (!span) { play.title = 'No simulated drive: playing by distance at 0.8 km/h'; }
 
   const colour = { ready: 0xffd23d, driving: 0xffd23d, parked: 0x8ab4f8, arrived: 0x7ee08a, empty: 0xff5252 };
   const label = { ready: 'Ready to leave', driving: 'Driving', parked: 'Parked, charging', arrived: 'Arrived', empty: 'Battery empty' };
@@ -3714,8 +3753,10 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
     attitude.update({ att, limits: payload.limits, baselineM: baseKm * 1000, stateText: label[cur.state] });
     minimap.draw({ latDeg: cur.latDeg, lonDeg: cur.lonDeg, headingDeg: head, headingUp: follow.checked, colourOf: ribbonColour, km: cur.km, colourBy });
     profile.update(cur.km);
-    if (span) { slider.value = String(Math.round(((t - span[0]) / (span[1] - span[0])) * 1000)); $('rh-when').textContent = fmt(t); }
-    else { slider.value = String(Math.round((kmPos / total) * 1000)); $('rh-when').textContent = `${kmPos.toFixed(2)} km of ${total.toFixed(2)} km`; }
+    // the scrubber is by distance, like the profile above it, so the two line up; the time is in the corner
+    const fk = total > 0 ? cur.km / total : 0;
+    slider.value = String(Math.round(fk * 1000)); slider.style.setProperty('--p', `${(fk * 100).toFixed(2)}%`);
+    $('rh-when').textContent = span ? fmt(t) : `${kmPos.toFixed(2)} km of ${total.toFixed(2)} km`;
     const chip = (text, on, bad = false) => `<span class="${bad ? 'bad' : on ? 'on' : ''}">${text}</span>`;
     const f = cur.flags ?? 0;
     $('rh-chips').innerHTML = [
@@ -3738,7 +3779,8 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
     const c = view.camera, h = headingAhead(cur.km, 0.2) ?? head;
     followHead = h; followFrom = performance.now() + 950;
     userTilt = Math.max(c.tilt, 55); setTilt = null; clearFor = 0;
-    view.flyTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: h, dist: Math.min(c.dist, 2.5), tilt: Math.max(c.tilt, 55), ms: 900 });
+    // close enough that the rover at its real size (2.2 m) is about 25 px long
+    view.flyTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: h, dist: Math.min(c.dist, 0.1), tilt: Math.max(c.tilt, 60), ms: 1200 });
   }
   function stopFollow() { if (follow.checked) { follow.checked = false; dirtyHud = true; } }
   follow.addEventListener('change', () => { if (follow.checked) startFollow(); dirtyHud = true; });
@@ -3748,7 +3790,7 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   view.canvas.addEventListener('pointermove', (e) => { if (downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) { stopFollow(); downAt = null; } });
   view.canvas.addEventListener('pointerup', () => { downAt = null; });
 
-  slider.addEventListener('input', () => { const f = Number(slider.value) / 1000; if (span) t = span[0] + f * (span[1] - span[0]); else kmPos = f * total; dirtyHud = true; });
+  slider.addEventListener('input', () => seekKm((Number(slider.value) / 1000) * total));
   play.addEventListener('click', () => {
     const atEnd = span ? t >= span[1] : kmPos >= total;
     if (atEnd) { if (span) t = span[0]; else kmPos = 0; }
@@ -3800,10 +3842,10 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
       el.hidden = !s;
       if (s) el.style.transform = `translate(${Math.round(s.x)}px, ${Math.round(s.y)}px)`;
     }
-    const up = layer.scaleUp;
+    const px = layer.modelPx;
     let note = frameEls.get('_note');
     if (!note) { note = document.createElement('div'); note.className = 'frame-note'; framesBox.appendChild(note); frameEls.set('_note', note); }
-    note.textContent = up > 1.5 ? `Rover drawn ${Math.round(up)}× its real size (2.2 m) to stay visible; frames: x forward (red), y left (green), z up (blue)` : 'Rover at real size (2.2 m); frames: x forward (red), y left (green), z up (blue)';
+    note.textContent = px < 50 ? `The rover is drawn at its real size (2.2 m), ${px < 1 ? 'under a pixel' : `${Math.round(px)} px`} here: zoom in to see it and its frames` : 'Rover at real size (2.2 m); frames: x forward (red), y left (green), z up (blue)';
   }
 
   // ---- recording the motion during playback, and saving it with the route ----

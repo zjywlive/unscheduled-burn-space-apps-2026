@@ -55,7 +55,7 @@ export function createCameraControls(view, { onUser = () => {}, parent = documen
     down: (c, k) => ({ ...c, ...moved(c, -viewKm() * 0.25 * k, 0) }),
     left: (c, k) => ({ ...c, ...moved(c, 0, -viewKm() * 0.25 * k) }),
     right: (c, k) => ({ ...c, ...moved(c, 0, viewKm() * 0.25 * k) }),
-    in: (c, k) => ({ ...c, dist: Math.max(0.4, c.dist * Math.pow(0.6, k)) }),
+    in: (c, k) => ({ ...c, dist: Math.max(0.02, c.dist * Math.pow(0.6, k)) }),
     out: (c, k) => ({ ...c, dist: Math.min(14000, c.dist / Math.pow(0.6, k)), tilt: Math.min(c.tilt, 75) }),
     ccw: (c, k) => ({ ...c, heading: (c.heading - 30 * k + 360) % 360 }),
     cw: (c, k) => ({ ...c, heading: (c.heading + 30 * k) % 360 }),

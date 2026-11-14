@@ -250,7 +250,7 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; }
   if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
   document.body.classList.add('route-mode');
-  const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : 90 });
+  const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : null });
   const terrain = window.__globe.terrain;
   const heightAt = (lat, lon) => terrain.heightAt(lat, lon);
   const landed = landedFor(mission);
@@ -326,7 +326,7 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   const driveH = span ? Math.max(0.05, (span[1] - span[0]) / 3600e3 - stopH) : total / 0.8;
   const pick = SPEEDS.reduce((best, s) => (Math.abs(Math.log(s[0] / (driveH / 25))) < Math.abs(Math.log(best[0] / (driveH / 25))) ? s : best));
   speed.innerHTML = SPEEDS.map(([v, l]) => `<option value="${v}"${v === pick[0] ? ' selected' : ''}>${l}</option>`).join('');
-  if (!span) { slider.title = 'No simulated drive: playing by distance at 0.8 km/h'; }
+  if (!span) { play.title = 'No simulated drive: playing by distance at 0.8 km/h'; }
 
   const colour = { ready: 0xffd23d, driving: 0xffd23d, parked: 0x8ab4f8, arrived: 0x7ee08a, empty: 0xff5252 };
   const label = { ready: 'Ready to leave', driving: 'Driving', parked: 'Parked, charging', arrived: 'Arrived', empty: 'Battery empty' };
@@ -341,8 +341,10 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
     attitude.update({ att, limits: payload.limits, baselineM: baseKm * 1000, stateText: label[cur.state] });
     minimap.draw({ latDeg: cur.latDeg, lonDeg: cur.lonDeg, headingDeg: head, headingUp: follow.checked, colourOf: ribbonColour, km: cur.km, colourBy });
     profile.update(cur.km);
-    if (span) { slider.value = String(Math.round(((t - span[0]) / (span[1] - span[0])) * 1000)); $('rh-when').textContent = fmt(t); }
-    else { slider.value = String(Math.round((kmPos / total) * 1000)); $('rh-when').textContent = `${kmPos.toFixed(2)} km of ${total.toFixed(2)} km`; }
+    // the scrubber is by distance, like the profile above it, so the two line up; the time is in the corner
+    const fk = total > 0 ? cur.km / total : 0;
+    slider.value = String(Math.round(fk * 1000)); slider.style.setProperty('--p', `${(fk * 100).toFixed(2)}%`);
+    $('rh-when').textContent = span ? fmt(t) : `${kmPos.toFixed(2)} km of ${total.toFixed(2)} km`;
     const chip = (text, on, bad = false) => `<span class="${bad ? 'bad' : on ? 'on' : ''}">${text}</span>`;
     const f = cur.flags ?? 0;
     $('rh-chips').innerHTML = [
@@ -365,7 +367,8 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
     const c = view.camera, h = headingAhead(cur.km, 0.2) ?? head;
     followHead = h; followFrom = performance.now() + 950;
     userTilt = Math.max(c.tilt, 55); setTilt = null; clearFor = 0;
-    view.flyTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: h, dist: Math.min(c.dist, 2.5), tilt: Math.max(c.tilt, 55), ms: 900 });
+    // close enough that the rover at its real size (2.2 m) is about 25 px long
+    view.flyTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: h, dist: Math.min(c.dist, 0.1), tilt: Math.max(c.tilt, 60), ms: 1200 });
   }
   function stopFollow() { if (follow.checked) { follow.checked = false; dirtyHud = true; } }
   follow.addEventListener('change', () => { if (follow.checked) startFollow(); dirtyHud = true; });
@@ -375,7 +378,7 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   view.canvas.addEventListener('pointermove', (e) => { if (downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) { stopFollow(); downAt = null; } });
   view.canvas.addEventListener('pointerup', () => { downAt = null; });
 
-  slider.addEventListener('input', () => { const f = Number(slider.value) / 1000; if (span) t = span[0] + f * (span[1] - span[0]); else kmPos = f * total; dirtyHud = true; });
+  slider.addEventListener('input', () => seekKm((Number(slider.value) / 1000) * total));
   play.addEventListener('click', () => {
     const atEnd = span ? t >= span[1] : kmPos >= total;
     if (atEnd) { if (span) t = span[0]; else kmPos = 0; }
@@ -427,10 +430,10 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
       el.hidden = !s;
       if (s) el.style.transform = `translate(${Math.round(s.x)}px, ${Math.round(s.y)}px)`;
     }
-    const up = layer.scaleUp;
+    const px = layer.modelPx;
     let note = frameEls.get('_note');
     if (!note) { note = document.createElement('div'); note.className = 'frame-note'; framesBox.appendChild(note); frameEls.set('_note', note); }
-    note.textContent = up > 1.5 ? `Rover drawn ${Math.round(up)}× its real size (2.2 m) to stay visible; frames: x forward (red), y left (green), z up (blue)` : 'Rover at real size (2.2 m); frames: x forward (red), y left (green), z up (blue)';
+    note.textContent = px < 50 ? `The rover is drawn at its real size (2.2 m), ${px < 1 ? 'under a pixel' : `${Math.round(px)} px`} here: zoom in to see it and its frames` : 'Rover at real size (2.2 m); frames: x forward (red), y left (green), z up (blue)';
   }
 
   // ---- recording the motion during playback, and saving it with the route ----

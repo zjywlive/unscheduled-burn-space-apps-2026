@@ -97,6 +97,17 @@
   .rp-canvas:focus-visible { outline: 2px solid var(--accent); }
   .rp-tip { position: absolute; top: 4px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,0.75); color: var(--text); font-size: 11px; pointer-events: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .rp-tip[hidden] { display: none; }
+  /* the scrubber lines up with the profile's plot: its thumb centre runs from 44 px to the width − 10 px, as the
+     profile's x axis does (globe-profile.js margins), so the thumb sits under the profile's cursor */
+  .route-hud .scrub { display: grid; grid-template-columns: 37px 1fr 3px; align-items: center; height: 22px; }
+  .route-hud .scrub button { grid-column: 1; width: 30px; height: 22px; padding: 0; justify-self: start; }
+  .route-hud .scrub input[type=range] { grid-column: 2; width: 100%; margin: 0; height: 14px; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; --p: 0%; }
+  .route-hud .scrub input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #ffd23d var(--p), rgba(255,255,255,0.18) var(--p)); }
+  .route-hud .scrub input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #ffd23d; border: 2px solid #111; }
+  .route-hud .scrub input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #ffd23d var(--p), rgba(255,255,255,0.18) var(--p)); }
+  .route-hud .scrub input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #ffd23d; border: 2px solid #111; }
+  .route-hud .ctl { flex-wrap: wrap; }
+  .route-hud .opt { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; white-space: nowrap; }
   .route-hud .rec { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
   .route-hud .rec span { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
   .route-hud .ctl .chips { flex: 1; min-width: 0; }
@@ -222,14 +233,14 @@
 <section class="glass route-hud" aria-label="Route playback">
   <div class="top"><span class="name" id="rh-name">Route</span><span class="when" id="rh-when"></span></div>
   <div id="rh-profile"></div>
-  <div class="ctl">
+  <div class="scrub">
     <button type="button" id="rh-play" aria-label="Play">▶</button>
-    <input type="range" id="rh-t" min="0" max="1000" value="0" aria-label="Time along the drive">
-    <select id="rh-speed" aria-label="Playback speed"></select>
-    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px" title="Play parked (charging) time 40 times faster"><input type="checkbox" id="rh-skip" checked> Fast parking</label>
-    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px"><input type="checkbox" id="rh-follow"> Follow</label>
+    <input type="range" id="rh-t" min="0" max="1000" value="0" aria-label="Distance along the route (lines up with the profile above)">
   </div>
   <div class="ctl">
+    <select id="rh-speed" aria-label="Playback speed"></select>
+    <label class="opt" title="Play parked (charging) time 40 times faster"><input type="checkbox" id="rh-skip" checked> Fast parking</label>
+    <label class="opt"><input type="checkbox" id="rh-follow"> Follow</label>
     <div class="chips" id="rh-chips"></div>
     <div class="rec"><button type="button" id="rh-rec" title="Record the rover's position, attitude and battery during playback">● Record</button><span id="rh-rec-out"></span><button type="button" id="rh-rec-save" title="Save the route with the recorded motion (also downloads it as JSON)">Save</button><button type="button" id="rh-rec-csv" title="Download the recorded motion as CSV">CSV</button></div>
   </div>

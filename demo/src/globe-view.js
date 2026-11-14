@@ -19,6 +19,7 @@ const PX_ERROR = 2.2;                  // refine while a cell spans more than th
 const MAX_DEPTH_CYL = 7, MAX_DEPTH_CAP = 10;
 const BUILD_MS = 14;                  // mesh building budget per frame
 const CACHE_MAX = 2600;
+export const MIN_DIST_KM = 0.02;     // the camera may come to 20 m of its target (a rover at real size fills the view)
 
 export function unit(latDeg, lonDeg) {
   const cl = Math.cos(latDeg * RAD);
@@ -314,8 +315,9 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     camera.lookAt(tgt);
     // keep the camera above the ground: the terrain under it and in a ring around it (so a ridge beside it
     // cannot swallow the near plane), plus a margin that grows with the distance to the target
-    const ground = groundAround(camera.position, Math.max(0.08, cam.dist * 0.12));
-    const soft = ground + Math.max(0.03, cam.dist * 0.04), hard = ground + Math.max(0.01, cam.dist * 0.012);
+    // (margins scale with the distance, so a close-up of a 2 m rover is not pushed tens of metres back)
+    const ground = groundAround(camera.position, Math.max(0.006, cam.dist * 0.12));
+    const soft = ground + Math.max(0.003, cam.dist * 0.04), hard = ground + Math.max(0.0015, cam.dist * 0.012);
     if (ease.clear === null || fly || Math.abs(soft - ease.clear) > Math.max(0.2, cam.dist * 0.5)) ease.clear = soft;
     else { ease.clear += (soft - ease.clear) * 0.12; if (Math.abs(soft - ease.clear) > 1e-5) dirty = true; }
     const minR = Math.max(hard, ease.clear);
@@ -462,7 +464,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   canvas.addEventListener('pointerup', (e) => { drag = null; canvas.releasePointerCapture(e.pointerId); });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    cam.dist = Math.max(0.4, Math.min(14000, cam.dist * Math.exp(e.deltaY * 0.0012)));
+    cam.dist = Math.max(MIN_DIST_KM, Math.min(14000, cam.dist * Math.exp(e.deltaY * 0.0012)));
     cam.tilt = Math.min(cam.tilt, maxTilt());
     fly = null; dirty = true;
   }, { passive: false });

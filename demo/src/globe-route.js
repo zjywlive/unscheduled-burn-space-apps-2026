@@ -2,8 +2,9 @@
 // what the drive met (sunlit, in shadow, one-way, battery under the reserve, not reached) or by slope,
 // markers for the havens, parking stops and where the battery ran out, the no-go ground (traps) as
 // translucent red volumes, the self-driving planner's search (trees, candidates, chosen path) when the payload
-// has one, and the rover: a six-wheeled model standing on the terrain with its pitch and roll, with its
-// coordinate frames (base_link, mast_cam, wheels) for the labels. Sizes follow the zoom.
+// has one, and the rover: a six-wheeled model at its real size (2.2 m) standing on the terrain with its pitch and
+// roll, with its coordinate frames (base_link, mast_cam, wheels) for the labels, and a locator ring (screen-sized,
+// drawn over the terrain) while the real-size model is too small to see. Marker sizes follow the zoom.
 import { FLAGS } from './route3d.js';
 import { slopeColour, rgb01 } from './slope-colours.js';
 
@@ -11,7 +12,8 @@ const COLORS = { lit: [0.96, 0.96, 0.96], dark: [0.36, 0.45, 0.66], oneWay: [1, 
 const RAD = Math.PI / 180;
 const ROVER_LEN_M = 2.2;   // model length in metres
 
-export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
+// roverPx: draw the rover that many pixels long instead of at its real size (the navigator's small preview)
+export function createRouteLayer(view, payload, { roverPx = null } = {}) {
   const THREE = view.THREE;
   const group = new THREE.Group();
   view.addObject(group);
@@ -52,7 +54,9 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     m.renderOrder = 3;
     return m;
   }
-  const buildRibbon = (w) => strip(payload.pts.map((q) => [q[0], q[1]]), w, (i) => colourOf(payload.pts[i]), 0.012 * view.exaggeration + w * 0.4);
+  // lifted a little above the terrain, more when zoomed out (where the tiles are coarser than the heights)
+  const liftFor = (w) => Math.min(0.012 * view.exaggeration, 0.0003 + w * 0.6);
+  const buildRibbon = (w) => strip(payload.pts.map((q) => [q[0], q[1]]), w, (i) => colourOf(payload.pts[i]), liftFor(w));
   const dispose = (o) => { if (!o) return; group.remove(o); o.traverse?.((c) => { c.geometry?.dispose(); c.material?.dispose(); }); };
 
   // ---- no-go volumes: each trap cell a translucent red box standing on the ground ----
@@ -81,7 +85,7 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
   function buildSearch(w) {
     const a = payload.autonav;
     if (!a) return null;
-    const g = new THREE.Group(), lift = 0.01 * view.exaggeration + w * 0.5;
+    const g = new THREE.Group(), lift = liftFor(w) + w * 0.1;
     const o = new THREE.Vector3(...view.surface(payload.pts[0][0], payload.pts[0][1], 0));
     const V = (la, lo, extra = 0) => new THREE.Vector3(...view.surface(la, lo, lift + extra)).sub(o);
     if (a.trees?.length) {
@@ -166,8 +170,18 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
   axes.visible = false;
   rover.add(axes);
   const FRAMES = { base_link: [0, 0, 0.72], mast_cam: [0.78, 0.38, 2.0], wheel_fl: [0.75, 0.82, 0.26], wheel_rr: [-0.75, -0.82, 0.26] };
+  // drawn after the route ribbon (which does not write depth), so the ribbon under its wheels never paints over it
+  rover.traverse((m) => { if (m.isMesh && m.material !== ghostMat) { m.material.transparent = true; m.renderOrder = 12; } });
   group.add(rover);
-  let roverAt = { latDeg: first[0], lonDeg: first[1] }, att = { headingDeg: 0, pitchDeg: 0, rollDeg: 0 }, roverScale = 0.001;
+  // the locator: a ring with a heading chevron, flat on the ground, a fixed size on screen, never hidden by terrain
+  const locMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const locator = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.72, 1, 40), locMat);
+  const chev = new THREE.Shape(); chev.moveTo(0.62, 0); chev.lineTo(-0.34, 0.36); chev.lineTo(-0.16, 0); chev.lineTo(-0.34, -0.36); chev.closePath();
+  const arrow = new THREE.Mesh(new THREE.ShapeGeometry(chev), locMat);
+  for (const m of [ring, arrow]) { m.renderOrder = 21; locator.add(m); }
+  group.add(locator);
+  let roverAt = { latDeg: first[0], lonDeg: first[1] }, att = { headingDeg: 0, pitchDeg: 0, rollDeg: 0 }, roverScale = 0.001, modelPx = 0;
 
   function place(obj, lat, lon, size, lift = 0) {
     const [x, y, z] = view.surface(lat, lon, lift);
@@ -185,7 +199,11 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     let f = N.clone().multiplyScalar(Math.cos(h)).addScaledVector(E, Math.sin(h)).normalize();
     let right = f.clone().cross(U).normalize();
     let up = U.clone();
-    const p = (att.pitchDeg || 0) * RAD, r = (att.rollDeg || 0) * RAD;
+    locator.quaternion.setFromRotationMatrix(basis.makeBasis(f, right.clone().negate(), up));   // flat, along the heading
+    // pitch and roll as drawn: the terrain is drawn with its heights exaggerated, so the model takes the drawn
+    // slope (atan(E · tan)) and sits flush on it; the panels on the left give the real angles
+    const ex = view.exaggeration;
+    const p = Math.atan(ex * Math.tan((att.pitchDeg || 0) * RAD)), r = Math.atan(ex * Math.tan((att.rollDeg || 0) * RAD));
     f.applyAxisAngle(right, p); up.applyAxisAngle(right, p);            // nose up
     right.applyAxisAngle(f, -r); up.applyAxisAngle(f, -r);              // right side up
     const left = right.clone().negate();
@@ -195,7 +213,8 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
 
   // per frame: keep sizes in step with the zoom, rebuild what is draped when the zoom, exaggeration or terrain changes
   function frame(terrainStamp) {
-    const kpp = view.kmPerPx(), w = Math.min(3, Math.max(0.02, kpp * 5));
+    // about 5 px wide, down to 0.8 m close up, under a metre off the ground (the rover is 2.2 m long, 2 m tall)
+    const kpp = view.kmPerPx(), w = Math.min(3, Math.max(0.0008, kpp * 5));
     const key = `${terrainStamp}:${view.exaggeration}:${colourBy}`;
     if (!built || built.key !== key || w / built.w > 1.35 || built.w / w > 1.35) {
       dispose(ribbon); ribbon = buildRibbon(w); group.add(ribbon);
@@ -205,9 +224,13 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     }
     const s = kpp * 5;
     for (const m of markers) place(m, m.userData.lat, m.userData.lon, s * m.userData.r, s * m.userData.r);
-    // real size (2.2 m) when the camera is close enough, else roverPx pixels long so it stays visible
-    roverScale = Math.max(0.001, (kpp * roverPx) / ROVER_LEN_M);
-    place(rover, roverAt.latDeg, roverAt.lonDeg, roverScale, 0.004 * view.exaggeration * 0.25);
+    // real size (km per model metre), or roverPx long for the preview
+    roverScale = roverPx ? Math.max(0.001, (kpp * roverPx) / ROVER_LEN_M) : 0.001;
+    place(rover, roverAt.latDeg, roverAt.lonDeg, roverScale, roverPx ? 0.001 * view.exaggeration : 0.0002);
+    modelPx = (roverScale * ROVER_LEN_M) / kpp;
+    // the locator while the model is under ~18 px long: 26 px across, fading out as the model grows
+    locator.visible = !roverPx && modelPx < 18;
+    if (locator.visible) { place(locator, roverAt.latDeg, roverAt.lonDeg, kpp * 13, 0.0004); locMat.opacity = Math.min(0.95, 0.35 + (18 - modelPx) / 12); }
     orientRover();
   }
 
@@ -231,10 +254,13 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
     },
     // world positions (km) of the rover's frames, for their labels
     frames() {
+      if (modelPx < 50) return [];   // too small for its frames to be told apart
       rover.updateMatrixWorld(true);
       return Object.entries(FRAMES).map(([name, [x, y, z]]) => ({ name, p: new THREE.Vector3(x, y, z).applyMatrix4(rover.matrixWorld) }));
     },
     get scaleUp() { return roverScale / 0.001; },
+    // the model's length on screen, px
+    get modelPx() { return modelPx; },
     // the top of the mast above the ground, km (as drawn), for line-of-sight checks
     get topKm() { return roverScale * 2.1; },
     setHidden(on) { if (ghost.visible !== !!on) { ghost.visible = !!on; view.redraw(); } },
