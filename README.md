@@ -2,7 +2,7 @@
 
 Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 
-- **Challenge:** _TBD (chosen at team formation, 14 Nov)_
+- **Challenge:** [Lunar Landing Site Navigator](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/)
 - **Demo:** _TBD_
 - **Project page:** _TBD_
 
