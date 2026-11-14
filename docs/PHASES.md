@@ -8,7 +8,7 @@ Order agreed with the team: **the global terrain model comes first**, because ev
 
 ---
 
-## Phase 1: global lunar terrain model (in progress)
+## Phase 1: global lunar terrain model (done 14 Nov, 16:40 GMT; see status at the end of this section)
 
 **Goal.** One georeferenced elevation model of the whole Moon from real data, with levels of detail:
 global coverage at low resolution, and finer data loaded where it exists. A 3D globe view in the
@@ -48,6 +48,19 @@ served by us.
 - The globe shows the whole Moon on first load and refines while zooming toward the south pole, with
   no seams between levels.
 - Tests pass; the README resource table lists every product.
+
+**Status (14 Nov).** Built and checked:
+- `tools/fetch-global.mjs` and `tools/build-global.mjs` run as planned. G0, G1 and the north cap are committed
+  (31 MB of packs); G2 is about 330 MB, so it is gitignored and built locally with `--g2`.
+- `demo/src/globe-terrain.js` `heightAt()`. Tests: it equals the raw LDEM_16 and LDEM_64 values at
+  their pixel centres; the overlapping levels agree to within about 120 m (median); the known extremes
+  (+10.5 km, −9.1 km) are right.
+- `demo/globe.html` (`tools/build-globe.mjs`, `demo/src/globe-view.js`). Screenshots from
+  `tools/globe-shots.mjs` (headless Chrome, software WebGL): the whole Moon, Tycho at 474 m, Apollo 11,
+  the north pole at 480 m, the south pole at 240 m, Shackleton at 20 m, with no seams between levels.
+  Mesh building takes about 0.2 ms per tile.
+- Not yet: the globe is a separate page and is not built into the navigator; the light is a display light
+  rather than the real Sun at a chosen time; it has not been tried on a phone.
 
 ## Phase 2: rover mobility on real terrain
 

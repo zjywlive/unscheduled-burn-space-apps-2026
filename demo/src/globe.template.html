@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!--STUB-->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Lunar Terrain Globe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --glass: rgba(22, 24, 28, 0.55); --line: rgba(255, 255, 255, 0.12); --text: #e8eaed; --muted: #9aa0a6; --accent: #8ab4f8; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--text); font: 13px/1.4 Inter, system-ui, sans-serif; overflow: hidden; }
+  #globe { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #globe:active { cursor: grabbing; }
+  .glass { position: fixed; background: var(--glass); backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%); border: 1px solid var(--line); border-radius: 12px; }
+  .brand { top: 16px; left: 16px; padding: 10px 14px; }
+  .brand h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  .brand a { color: var(--accent); text-decoration: none; }
+  .panel { top: 16px; right: 16px; width: 248px; padding: 12px; display: grid; gap: 12px; }
+  .panel h2 { margin: 0 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  #presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font: inherit; color: var(--text); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+  .chip:hover { background: rgba(255, 255, 255, 0.14); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg label { padding: 4px 10px; cursor: pointer; color: var(--muted); }
+  .seg input { display: none; }
+  .seg input:checked + span { color: var(--text); }
+  .seg label:has(input:checked) { background: rgba(255, 255, 255, 0.12); }
+  .readout { left: 16px; bottom: 16px; padding: 10px 14px; min-width: 240px; font-variant-numeric: tabular-nums; }
+  #readout-pos { font-weight: 500; }
+  #readout-h { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  #readout-src, #centre-src { color: var(--muted); font-size: 12px; }
+  .scale { margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+  #scale-bar { height: 6px; border: 1.5px solid var(--text); border-top: none; }
+  .status { right: 16px; bottom: 16px; padding: 8px 12px; color: var(--muted); font-size: 12px; max-width: 320px; }
+  #loading:empty { display: none; }
+  #loading { color: var(--accent); margin-top: 2px; }
+  .hint { color: var(--muted); font-size: 11px; line-height: 1.5; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  .site { position: absolute; left: 0; top: 0; pointer-events: auto; font: 500 11px Inter, system-ui, sans-serif; color: #fff; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px; padding: 2px 8px 2px 16px; cursor: pointer; white-space: nowrap; margin: -10px 0 0 -6px; }
+  .site::before { content: ""; position: absolute; left: 5px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #ffb74d; }
+  .site[hidden] { display: none; }
+  body:not(.ready) .panel, body:not(.ready) .readout { opacity: 0.5; }
+</style>
+</head>
+<body>
+<canvas id="globe" aria-label="3D globe of the Moon's terrain"></canvas>
+<div id="labels"></div>
+<header class="glass brand">
+  <h1>Lunar Terrain Globe</h1>
+  <p>Real LOLA elevation, whole Moon · <a href="index.html">South-pole navigator →</a></p>
+</header>
+<aside class="glass panel" aria-label="View controls">
+  <section>
+    <h2>Fly to</h2>
+    <div id="presets"></div>
+  </section>
+  <section>
+    <h2>Vertical exaggeration</h2>
+    <div class="row"><input id="exaggeration" type="range" min="1" max="10" step="1" value="3" aria-label="Vertical exaggeration"><span id="exaggeration-out">3×</span></div>
+  </section>
+  <section>
+    <h2>Surface</h2>
+    <div class="seg" role="radiogroup" aria-label="Surface colour">
+      <label><input type="radio" name="colour" value="shade" checked><span>Shaded</span></label>
+      <label><input type="radio" name="colour" value="height"><span>Height colours</span></label>
+    </div>
+  </section>
+  <p class="hint">Drag to move · scroll to zoom · right-drag or shift-drag to tilt and turn · double-click to zoom in</p>
+</aside>
+<footer class="glass readout" aria-live="polite">
+  <div id="readout-pos">Point at the Moon</div>
+  <div id="readout-h"></div>
+  <div id="readout-src"></div>
+  <div class="scale"><div id="scale-bar"></div><span id="scale-text"></span></div>
+</footer>
+<div class="glass status">
+  <div id="centre-src">Loading…</div>
+  <div id="loading"></div>
+</div>
+<script src="vendor/three.classic.js"></script>
+<!--DATA-->
+<!--JS-->
+</body>
+</html>

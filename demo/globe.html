@@ -1,0 +1,1478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>window.__lsnStore = {}; window.__lsnData = (n, b) => { __lsnStore[n] = b; (window.__lsnWaiters?.[n] ?? []).forEach((f) => f()); };</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Lunar Terrain Globe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --glass: rgba(22, 24, 28, 0.55); --line: rgba(255, 255, 255, 0.12); --text: #e8eaed; --muted: #9aa0a6; --accent: #8ab4f8; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--text); font: 13px/1.4 Inter, system-ui, sans-serif; overflow: hidden; }
+  #globe { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #globe:active { cursor: grabbing; }
+  .glass { position: fixed; background: var(--glass); backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%); border: 1px solid var(--line); border-radius: 12px; }
+  .brand { top: 16px; left: 16px; padding: 10px 14px; }
+  .brand h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  .brand a { color: var(--accent); text-decoration: none; }
+  .panel { top: 16px; right: 16px; width: 248px; padding: 12px; display: grid; gap: 12px; }
+  .panel h2 { margin: 0 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  #presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font: inherit; color: var(--text); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+  .chip:hover { background: rgba(255, 255, 255, 0.14); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg label { padding: 4px 10px; cursor: pointer; color: var(--muted); }
+  .seg input { display: none; }
+  .seg input:checked + span { color: var(--text); }
+  .seg label:has(input:checked) { background: rgba(255, 255, 255, 0.12); }
+  .readout { left: 16px; bottom: 16px; padding: 10px 14px; min-width: 240px; font-variant-numeric: tabular-nums; }
+  #readout-pos { font-weight: 500; }
+  #readout-h { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  #readout-src, #centre-src { color: var(--muted); font-size: 12px; }
+  .scale { margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+  #scale-bar { height: 6px; border: 1.5px solid var(--text); border-top: none; }
+  .status { right: 16px; bottom: 16px; padding: 8px 12px; color: var(--muted); font-size: 12px; max-width: 320px; }
+  #loading:empty { display: none; }
+  #loading { color: var(--accent); margin-top: 2px; }
+  .hint { color: var(--muted); font-size: 11px; line-height: 1.5; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  .site { position: absolute; left: 0; top: 0; pointer-events: auto; font: 500 11px Inter, system-ui, sans-serif; color: #fff; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px; padding: 2px 8px 2px 16px; cursor: pointer; white-space: nowrap; margin: -10px 0 0 -6px; }
+  .site::before { content: ""; position: absolute; left: 5px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #ffb74d; }
+  .site[hidden] { display: none; }
+  body:not(.ready) .panel, body:not(.ready) .readout { opacity: 0.5; }
+</style>
+</head>
+<body>
+<canvas id="globe" aria-label="3D globe of the Moon's terrain"></canvas>
+<div id="labels"></div>
+<header class="glass brand">
+  <h1>Lunar Terrain Globe</h1>
+  <p>Real LOLA elevation, whole Moon · <a href="index.html">South-pole navigator →</a></p>
+</header>
+<aside class="glass panel" aria-label="View controls">
+  <section>
+    <h2>Fly to</h2>
+    <div id="presets"></div>
+  </section>
+  <section>
+    <h2>Vertical exaggeration</h2>
+    <div class="row"><input id="exaggeration" type="range" min="1" max="10" step="1" value="3" aria-label="Vertical exaggeration"><span id="exaggeration-out">3×</span></div>
+  </section>
+  <section>
+    <h2>Surface</h2>
+    <div class="seg" role="radiogroup" aria-label="Surface colour">
+      <label><input type="radio" name="colour" value="shade" checked><span>Shaded</span></label>
+      <label><input type="radio" name="colour" value="height"><span>Height colours</span></label>
+    </div>
+  </section>
+  <p class="hint">Drag to move · scroll to zoom · right-drag or shift-drag to tilt and turn · double-click to zoom in</p>
+</aside>
+<footer class="glass readout" aria-live="polite">
+  <div id="readout-pos">Point at the Moon</div>
+  <div id="readout-h"></div>
+  <div id="readout-src"></div>
+  <div class="scale"><div id="scale-bar"></div><span id="scale-text"></span></div>
+</footer>
+<div class="glass status">
+  <div id="centre-src">Loading…</div>
+  <div id="loading"></div>
+</div>
+<script src="vendor/three.classic.js"></script>
+<script type="application/json" id="data-terrain">{"source":"NASA PDS, LRO LOLA LDEM_75S_240M (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_240m.img)","generatedAt":"2026-11-12T08:01:56.374Z","dem":{"file":"dem_480m.bin","size":1906,"kmPerPixel":0.48,"dnToMeters":0.5},"horizon":{"file":"horizon_grid.bin","size":320,"cellKm":2,"halfKm":320,"azimuths":72,"offsetDeg":-5,"stepDeg":0.1,"observerM":2,"maxKm":300,"sourceKmPerPixel":0.24},"levels":[{"name":"dem_480m","file":"dem_480m.bin","size":1906,"kmPerPixel":0.48,"dnToMeters":0.5,"halfKm":457.44},{"name":"dem_240m","file":"dem_240m.bin","size":2700,"kmPerPixel":0.24,"dnToMeters":0.5,"halfKm":324},{"name":"dem_120m","file":"dem_120m.bin","size":2600,"kmPerPixel":0.12,"dnToMeters":0.5,"halfKm":156},{"name":"dem_40m","tiled":true,"kmPerPixel":0.04,"dnToMeters":0.5,"tilePx":256,"apronPx":1,"halfKm":307.2,"tiles":["r00c29","r00c30","r00c31","r01c29","r01c30","r01c31","r14c37","r14c38","r14c39","r15c36","r15c37","r15c38","r15c39","r16c29","r16c30","r16c36","r16c37","r16c38","r16c39","r17c28","r17c29","r17c30","r17c31","r17c36","r17c37","r17c38","r18c28","r18c29","r18c30","r18c31","r18c36","r18c37","r18c38","r18c39","r19c25","r19c26","r19c29","r19c30","r19c36","r19c37","r19c38","r19c39","r20c24","r20c25","r20c26","r20c27","r20c37","r20c38","r20c43","r20c44","r20c45","r21c12","r21c24","r21c25","r21c26","r21c27","r21c43","r21c44","r21c45","r21c46","r22c11","r22c12","r22c13","r22c25","r22c26","r22c43","r22c44","r22c45","r22c46","r23c11","r23c12","r23c13","r24c11","r24c12","r24c13","r26c27","r26c28","r26c29","r26c30","r26c31","r26c32","r27c24","r27c25","r27c26","r27c27","r27c28","r27c29","r27c30","r27c31","r27c32","r27c33","r28c24","r28c25","r28c26","r28c27","r28c28","r28c29","r28c30","r28c31","r28c32","r28c33","r29c25","r29c26","r29c27","r29c28","r29c29","r29c30","r29c31","r29c32","r29c33","r30c26","r30c27","r30c28","r30c29","r30c30","r30c31","r30c32","r30c33","r31c26","r31c27","r31c28","r31c29","r31c30","r31c31","r31c32","r31c33","r32c26","r32c27","r32c28","r32c29","r32c30","r32c31","r32c32","r32c33","r33c27","r33c28","r33c29","r33c30","r33c31","r33c32"],"noData":-32768,"sourceHalfKm":304,"coverage":{"poleKm":40,"siteKm":12,"sites":["im1","im2","shackleton","peak-near-cabeus-b","haworth","malapert-massif","mons-mouton-plateau","mons-mouton","nobile-rim-1","nobile-rim-2","de-gerlache-rim-2"]},"source":"LDEM_80S_40M.IMG"},{"name":"dem_20m","tiled":true,"kmPerPixel":0.02,"dnToMeters":0.5,"tilePx":256,"apronPx":1,"halfKm":76.8,"tiles":["r10c05","r10c06","r10c07","r11c05","r11c06","r11c07","r11c08","r11c12","r11c13","r11c14","r11c15","r11c16","r11c17","r12c05","r12c06","r12c07","r12c11","r12c12","r12c13","r12c14","r12c15","r12c16","r12c17","r12c18","r13c11","r13c12","r13c13","r13c14","r13c15","r13c16","r13c17","r13c18","r14c11","r14c12","r14c13","r14c14","r14c15","r14c16","r14c17","r14c18","r15c11","r15c12","r15c13","r15c14","r15c15","r15c16","r15c17","r15c18","r16c11","r16c12","r16c13","r16c14","r16c15","r16c16","r16c17","r16c18","r17c11","r17c12","r17c13","r17c14","r17c15","r17c16","r17c17","r17c18","r18c11","r18c12","r18c13","r18c14","r18c15","r18c16","r18c17"],"noData":-32768,"sourceHalfKm":75.84,"coverage":{"poleKm":20,"siteKm":6,"sites":["shackleton","de-gerlache-rim-2"]},"source":"LDEM_875S_20M.IMG"}],"horizons":[{"name":"horizon_grid","file":"horizon_grid.bin","size":320,"cellKm":2,"halfKm":320,"azimuths":72,"offsetDeg":-5,"stepDeg":0.1,"observerM":2,"maxKm":300,"sourceKmPerPixel":0.24},{"name":"horizon_1km","file":"horizon_1km.bin","size":640,"cellKm":1,"halfKm":320,"azimuths":72,"offsetDeg":-5,"stepDeg":0.1,"observerM":2,"maxKm":300,"sourceKmPerPixel":0.24}],"sources":[{"name":"ldem_75s_240m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_240m.img","bytes":29062688},{"name":"ldem_75s_240m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_240m.lbl","bytes":4990},{"name":"ldem_75s_120m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_120m.img","bytes":116250752},{"name":"ldem_75s_120m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_120m.lbl","bytes":4991},{"name":"ldem_80s_40m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_40m.img","bytes":462080000},{"name":"ldem_80s_40m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_40m.lbl","bytes":4991},{"name":"ldem_875s_20m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_875s_20m.img","bytes":115034112},{"name":"ldem_875s_20m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_875s_20m.lbl","bytes":4988},{"name":"LPSR_75S_120M_201608.IMG","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/LPSR_75S_120M_201608.IMG","bytes":116250752},{"name":"LPSR_75S_120M_201608.LBL","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/LPSR_75S_120M_201608.LBL","bytes":3913},{"name":"AVGVISIB_75S_120M_201608.IMG","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608.IMG","bytes":116250752},{"name":"AVGVISIB_75S_120M_201608.LBL","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608.LBL","bytes":4092},{"name":"AVGVISIB_75S_120M_201608_EARTH.IMG","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608_EARTH.IMG","bytes":116250752},{"name":"AVGVISIB_75S_120M_201608_EARTH.LBL","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608_EARTH.LBL","bytes":4112}],"slope":[{"name":"slope_2km","file":"slope_2km.bin","size":320,"cellKm":2,"scale":0.25,"baselineKm":0.24},{"name":"slope_1km","file":"slope_1km.bin","size":640,"cellKm":1,"scale":0.25,"baselineKm":0.24}],"shadow":[{"name":"shadow_2km","file":"shadow_2km.bin","size":320,"cellKm":2,"halfKm":320,"source":"LPSR_75S_120M_201608.IMG (Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update)","rule":"0 when more than half of the 120 m PSR pixels whose centres fall in the cell are permanent shadow; otherwise the map-plane distance in km from the cell centre to the nearest PSR pixel centre in a PSR patch (8-connected) of at least 1 km² ground area, rounded, at least 1, capped at 255. Patches and distances use the whole 120 m raster (±457 km).","minPatchKm2":1,"connectivity":8,"majority":0.5,"capKm":255},{"name":"shadow_1km","file":"shadow_1km.bin","size":640,"cellKm":1,"halfKm":320,"source":"LPSR_75S_120M_201608.IMG (Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update)","rule":"0 when more than half of the 120 m PSR pixels whose centres fall in the cell are permanent shadow; otherwise the map-plane distance in km from the cell centre to the nearest PSR pixel centre in a PSR patch (8-connected) of at least 1 km² ground area, rounded, at least 1, capped at 255. Patches and distances use the whole 120 m raster (±457 km).","minPatchKm2":1,"connectivity":8,"majority":0.5,"capKm":255}],"psr":{"file":"psr_120m.bin","size":5400,"kmPerPixel":0.12,"halfKm":324,"bitOrder":"rows top to bottom, most significant bit first","source":"LPSR_75S_120M_201608.IMG (Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update)","rule":"Bit = 1 where the official permanently-shadowed-region flag (DN × 0.000025 + 0.5) is 1: the pixel never sees any part of the Sun over the 18.6-year simulation at 1 h steps. Centred 5400² crop of the 120 m source; no resampling."},"nasaAvg":{"sun":{"file":"nasa_sun_480m.bin","size":1350,"kmPerPixel":0.48,"halfKm":324,"scale":250,"noData":255,"source":"AVGVISIB_75S_120M_201608.IMG","meaning":"share of time steps with any part of the solar disc above the local horizon"},"earth":{"file":"nasa_earth_480m.bin","size":1350,"kmPerPixel":0.48,"halfKm":324,"scale":250,"noData":255,"source":"AVGVISIB_75S_120M_201608_EARTH.IMG","meaning":"share of time steps with any part of the Earth disc above the local horizon"},"source":"Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update","span":"18.6 years, 1 h steps","rule":"Byte = round(mean of the 4 × 4 120 m pixels × 250); 255 = no data. Centred ±324 km window of the 120 m source."}}</script>
+<script type="application/json" id="data-sites">[{"id":"apollo11","name":"Apollo 11","subtitle":"Tranquility Base, 1969","latDeg":0.67416,"lonDeg":23.47314,"source":"https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html","verified":true,"group":"missions"},{"id":"apollo17","name":"Apollo 17","subtitle":"Taurus-Littrow, 1972","latDeg":20.1911,"lonDeg":30.7723,"source":"https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html","verified":true,"group":"missions"},{"id":"blueghost1","name":"Blue Ghost M1","subtitle":"Mare Crisium, 2025 (CLPS)","latDeg":18.5623,"lonDeg":61.8103,"source":"https://lroc.im-ldi.com/images/1400","verified":true,"group":"missions"},{"id":"chandrayaan3","name":"Chandrayaan-3","subtitle":"Shiv Shakti point, 2023","latDeg":-69.3733,"lonDeg":32.3191,"source":"https://lroc.im-ldi.com/images/1314","verified":true,"group":"missions"},{"id":"change4","name":"Chang'e-4","subtitle":"Von Kármán crater, 2019","latDeg":-45.4446,"lonDeg":177.5991,"source":"https://lroc.im-ldi.com/images/1087","verified":true,"group":"missions"},{"id":"im1","name":"IM-1 Odysseus","subtitle":"Malapert A, 2024 (CLPS)","latDeg":-80.13,"lonDeg":1.44,"source":"https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/","verified":true,"group":"missions"},{"id":"im2","name":"IM-2 Athena","subtitle":"Mons Mouton, 2025 (CLPS)","latDeg":-84.7906,"lonDeg":29.1957,"source":"https://lroc.im-ldi.com/images/1408","verified":true,"group":"missions"},{"id":"shackleton","name":"Shackleton ridge","subtitle":"Connecting ridge, candidate","latDeg":-89.45,"lonDeg":222.69,"source":"https://doi.org/10.1016/j.icarus.2010.10.030","verified":true,"group":"missions"},{"id":"peak-near-cabeus-b","name":"Peak near Cabeus B","subtitle":"Artemis III candidate region","latDeg":-83.6,"lonDeg":291.2,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_CABEUSPKLO1","verified":false,"group":"candidates"},{"id":"haworth","name":"Haworth","subtitle":"Artemis III candidate region","latDeg":-86.7,"lonDeg":336.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_HAWORTH_LO1","verified":false,"group":"candidates"},{"id":"malapert-massif","name":"Malapert Massif","subtitle":"Artemis III candidate region","latDeg":-86,"lonDeg":0.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MALAPERTLO1","verified":false,"group":"candidates"},{"id":"mons-mouton-plateau","name":"Mons Mouton Plateau","subtitle":"Artemis III candidate region","latDeg":-84.3,"lonDeg":30.6,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MOUTNPLTLO1","verified":false,"group":"candidates"},{"id":"mons-mouton","name":"Mons Mouton","subtitle":"Artemis III candidate region","latDeg":-85.4,"lonDeg":35.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MTMOUTONLO1","verified":false,"group":"candidates"},{"id":"nobile-rim-1","name":"Nobile Rim 1","subtitle":"Artemis III candidate region","latDeg":-85.4,"lonDeg":35.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MTMOUTONLO1","verified":false,"group":"candidates"},{"id":"nobile-rim-2","name":"Nobile Rim 2","subtitle":"Artemis III candidate region","latDeg":-84.20156,"lonDeg":60.69989,"source":"https://www.hou.usra.edu/meetings/lpsc2025/pdf/1149.pdf","verified":true,"group":"candidates"},{"id":"de-gerlache-rim-2","name":"de Gerlache Rim 2","subtitle":"Artemis III candidate region","latDeg":-88.5,"lonDeg":293.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_DEGERRIMLO1","verified":false,"group":"candidates"}]</script>
+<script src="data/js/globe_g0.js"></script>
+<script src="data/js/globe_n480.js"></script>
+<script src="data/js/dem_480m.js"></script>
+<script>
+'use strict';
+const __m = {};
+__m['data-loader.js'] = (() => {
+// Data packs (spec phase 3 §5.1). Each demo/data/js/<name>.js is one classic script line,
+// window.__lsnData("<name>", "<base64>"), which the inline boot script stores in window.__lsnStore and
+// which wakes the waiters in window.__lsnWaiters[name]. Works from file://: no fetch, no modules.
+// `env` ({ window, document }) exists for tests; the page leaves it out.
+
+const decoded = new WeakMap();   // window → Map(name → Uint8Array), so a pack is decoded once
+const pending = new WeakMap();   // window → Map(name → Promise)
+const NAME = /^[a-z0-9_]+$/;
+
+function envOf(env) {
+  const win = env?.window ?? globalThis.window ?? globalThis;
+  const doc = env?.document ?? win.document ?? globalThis.document;
+  return { win, doc };
+}
+
+function cache(map, win) {
+  if (!map.has(win)) map.set(win, new Map());
+  return map.get(win);
+}
+
+function decode(b64) {
+  if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64);
+  const text = atob(b64);
+  const out = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i);
+  return out;
+}
+
+function hasData(name, env) {
+  const { win } = envOf(env);
+  return cache(decoded, win).has(name) || typeof win.__lsnStore?.[name] === 'string';
+}
+
+// Bytes of a pack already in the store, in a fresh buffer (offset 0, so Int16Array views work).
+// The base64 text is dropped from the store once decoded.
+function readData(name, env) {
+  const { win } = envOf(env);
+  const done = cache(decoded, win);
+  if (done.has(name)) return done.get(name);
+  const b64 = win.__lsnStore?.[name];
+  if (typeof b64 !== 'string') throw new Error(`data pack ${name} is not loaded`);
+  const bytes = decode(b64.trim());
+  done.set(name, bytes);
+  delete win.__lsnStore[name];
+  return bytes;
+}
+
+// Resolves with the bytes; injects <script src="data/js/<name>.js"> if the pack is not there yet.
+// Rejects if the script fails to load, loads without delivering the pack, or takes over timeoutMs.
+function loadData(name, { timeoutMs = 30000 } = {}, env) {
+  const { win, doc } = envOf(env);
+  if (!NAME.test(name)) return Promise.reject(new Error(`bad data pack name ${name}`));
+  if (hasData(name, env)) {
+    try { return Promise.resolve(readData(name, env)); } catch (e) { return Promise.reject(e); }
+  }
+  const inflight = cache(pending, win);
+  if (inflight.has(name)) return inflight.get(name);
+  const promise = new Promise((resolve, reject) => {
+    win.__lsnStore ??= {};
+    win.__lsnWaiters ??= {};
+    const script = doc.createElement('script');
+    let timer = null;
+    const finish = (err) => {
+      if (timer === null) return;   // settled already
+      clearTimeout(timer); timer = null;
+      // a new array, so a forEach in __lsnData that is calling us does not skip the next waiter
+      win.__lsnWaiters[name] = (win.__lsnWaiters[name] ?? []).filter((f) => f !== onData);
+      inflight.delete(name);
+      if (err) { script.remove?.(); reject(err); return; }
+      try { resolve(readData(name, env)); } catch (e) { reject(e); }
+    };
+    function onData() { finish(null); }
+    win.__lsnWaiters[name] = [...(win.__lsnWaiters[name] ?? []), onData];
+    timer = setTimeout(() => finish(new Error(`data pack ${name} timed out after ${timeoutMs} ms`)), timeoutMs);
+    script.onerror = () => finish(new Error(`data pack ${name} failed to load`));
+    script.onload = () => { if (!hasData(name, env)) finish(new Error(`data pack ${name} loaded without data`)); };
+    script.src = `data/js/${name}.js`;
+    (doc.head ?? doc.body ?? doc.documentElement).appendChild(script);
+  });
+  inflight.set(name, promise);
+  return promise;
+}
+
+// Phase 4: many packs (elevation tiles) with at most `concurrency` scripts loading at once, nearest-first
+// order kept. onEach(name, bytes | null, error | null) runs as each one settles (an exception in it is
+// rethrown asynchronously and does not stop the loads). Never rejects: resolves
+// with a Map(name → Uint8Array | Error) once all have settled.
+function loadPacks(names, { concurrency = 6, timeoutMs = 30000, onEach } = {}, env) {
+  const list = [...new Set(names)];
+  const results = new Map();
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const name = list[next++];
+      let bytes = null, error = null;
+      try { bytes = await loadData(name, { timeoutMs }, env); } catch (err) { error = err; }
+      results.set(name, error ?? bytes);
+      try { onEach?.(name, bytes, error); } catch (e) { setTimeout(() => { throw e; }, 0); }   // surfaces, does not stop the loads
+    }
+  };
+  const n = Math.max(1, Math.min(concurrency, list.length));
+  return Promise.all(Array.from({ length: n }, worker)).then(() => results);
+}
+
+return { hasData, readData, loadData, loadPacks };
+})();
+__m['terrain.js'] = (() => {
+// South-pole terrain: polar stereographic projection, LOLA height lookup and the terrain skyline
+// (spec phase 2 §2.2–§2.3). Map plane in km: pole at the origin, 0°E up (+y), 90°E right (+x).
+
+const MAP_HALF_KM = 320;
+const GRID_SIZE = 320;
+const GRID_CELL_KM = 2;
+const TERRAIN_MAX_LAT = -80;
+const OBSERVER_M = 2;
+
+const R = 1737.4;
+const RAD = Math.PI / 180;
+const DEG = 180 / Math.PI;
+
+function toXY(latDeg, lonDeg) {
+  const r = 2 * R * Math.tan(((90 + latDeg) / 2) * RAD);
+  const lon = lonDeg * RAD;
+  return [r * Math.sin(lon), r * Math.cos(lon)];
+}
+
+function fromXY(xKm, yKm) {
+  const r = Math.hypot(xKm, yKm);
+  const latDeg = 2 * Math.atan(r / (2 * R)) * DEG - 90;
+  let lonDeg = Math.atan2(xKm, yKm) * DEG;
+  if (lonDeg < 0) lonDeg += 360;
+  if (lonDeg >= 360) lonDeg -= 360;
+  return { latDeg, lonDeg };
+}
+
+// Heights in metres, bilinear between pixel centres; null outside the grid. The grid spans ±halfKm
+// to its pixel edges, centred on the pole; by default halfKm = size × kmPerPixel / 2.
+function createDem({ data, size, kmPerPixel, dnToMeters = 0.5, halfKm }) {
+  // the default keeps the phase 2 arithmetic exactly, so outputs stay byte-identical
+  const c = halfKm === undefined ? size / 2 - 0.5 : halfKm / kmPerPixel - 0.5;
+  function heightAtXY(xKm, yKm) {
+    const col = xKm / kmPerPixel + c;
+    const row = c - yKm / kmPerPixel;
+    if (!(col >= 0 && row >= 0 && col <= size - 1 && row <= size - 1)) return null;
+    const c0 = Math.min(Math.floor(col), size - 2), r0 = Math.min(Math.floor(row), size - 2);
+    const fc = col - c0, fr = row - r0;
+    const i = r0 * size + c0;
+    const top = data[i] + (data[i + 1] - data[i]) * fc;
+    const bottom = data[i + size] + (data[i + size + 1] - data[i + size]) * fc;
+    return (top + (bottom - top) * fr) * dnToMeters;
+  }
+  // sample(): the same height, NaN instead of null (phase 4)
+  function sample(xKm, yKm) {
+    const v = heightAtXY(xKm, yKm);
+    return v === null ? NaN : v;
+  }
+  // grid(xs, ys): heights at (xs[i], ys[j]) for many i, j, with the per-column and per-row arithmetic done
+  // once (the tiled hillshade, phase 4) → (i, j) => metres | NaN. Same bilinear values as sample().
+  function grid(xs, ys) {
+    const C0 = new Int32Array(xs.length), FC = new Float64Array(xs.length), R0 = new Int32Array(ys.length), FR = new Float64Array(ys.length);
+    for (let i = 0; i < xs.length; i++) {
+      const col = xs[i] / kmPerPixel + c;
+      if (!(col >= 0 && col <= size - 1)) { C0[i] = -1; continue; }
+      C0[i] = Math.min(Math.floor(col), size - 2); FC[i] = col - C0[i];
+    }
+    for (let j = 0; j < ys.length; j++) {
+      const row = c - ys[j] / kmPerPixel;
+      if (!(row >= 0 && row <= size - 1)) { R0[j] = -1; continue; }
+      R0[j] = Math.min(Math.floor(row), size - 2); FR[j] = row - R0[j];
+    }
+    return (i, j) => {
+      const c0 = C0[i], r0 = R0[j];
+      if (c0 < 0 || r0 < 0) return NaN;
+      const k = r0 * size + c0, fc = FC[i];
+      const top = data[k] + (data[k + 1] - data[k]) * fc;
+      const bottom = data[k + size] + (data[k + size + 1] - data[k + size]) * fc;
+      return (top + (bottom - top) * FR[j]) * dnToMeters;
+    };
+  }
+  return {
+    size, kmPerPixel, halfKm: halfKm ?? (size * kmPerPixel) / 2,
+    heightAtXY, sample, grid,
+    heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
+  };
+}
+
+// ---------- tiled levels (task book phase 4 §4.1) ----------
+// A tiled level is a grid of tilePx² tiles over ±halfKm; tile (row, col) covers
+// x ∈ [−halfKm + col·T, −halfKm + (col+1)·T), y ∈ (halfKm − (row+1)·T, halfKm − row·T], T = tilePx × kmPerPixel,
+// row 0 at the top (+y). Each tile file holds (tilePx + 2·apronPx)² Int16 LE values with one pixel of
+// apron from the neighbours, so a bilinear lookup anywhere in the tile reads only that tile. −32768 is
+// no data. Only the tiles listed in `tiles` ("rRRcCC") exist; the pack of a tile is "<name>_rRRcCC".
+
+const NO_DATA = -32768;
+// At most this many tile packs for one viewport, whatever the canvas size: the level is chosen so that
+// its listed tiles in view stay within the budget (64 tiles of 258² Int16 = 8.5 MB). See pick().
+const TILE_BUDGET = 64;
+
+const tileKm = (level) => level.tilePx * level.kmPerPixel;
+const tileGridSize = (level) => Math.round((2 * level.halfKm) / tileKm(level));
+const tileId = (row, col) => `r${String(row).padStart(2, '0')}c${String(col).padStart(2, '0')}`;
+const tilePack = (level, row, col) => `${level.name}_${tileId(row, col)}`;
+
+// "<level>_rRRcCC" or "rRRcCC" → { level (name or null), row, col }; null if the name is not a tile.
+function parseTile(name) {
+  const m = /^(?:(.+)_)?r(\d{2})c(\d{2})$/.exec(String(name));
+  return m ? { level: m[1] ?? null, row: Number(m[2]), col: Number(m[3]) } : null;
+}
+
+// Tile extent in km: x ∈ [x0, x1), y ∈ (y0, y1].
+function tileBounds(level, row, col) {
+  const T = tileKm(level);
+  return { x0: -level.halfKm + col * T, x1: -level.halfKm + (col + 1) * T, y0: level.halfKm - (row + 1) * T, y1: level.halfKm - row * T };
+}
+
+// Row and column ranges (inclusive) of the tile grid that meet `bounds`, clipped to the grid; null if none.
+function tileRange(level, b) {
+  const T = tileKm(level), n = tileGridSize(level);
+  if (!b) return { c0: 0, c1: n - 1, r0: 0, r1: n - 1 };
+  const c0 = Math.max(0, Math.floor((b.x0 + level.halfKm) / T)), c1 = Math.min(n - 1, Math.floor((b.x1 + level.halfKm) / T));
+  const r0 = Math.max(0, Math.floor((level.halfKm - b.y1) / T)), r1 = Math.min(n - 1, Math.floor((level.halfKm - b.y0) / T));
+  return c1 < c0 || r1 < r0 ? null : { c0, c1, r0, r1 };
+}
+
+function listedSet(level) {
+  if (level._listed) return level._listed;
+  const set = new Set();
+  for (const id of level.tiles ?? []) { const t = parseTile(id); if (t) set.add(t.row * 1000 + t.col); }
+  if (Object.isExtensible(level)) Object.defineProperty(level, '_listed', { value: set, enumerable: false });
+  return set;
+}
+
+// The listed tiles of a tiled level (terrain.json entry or createTiledDem result) that meet `bounds`
+// (km; all of them without bounds), nearest the centre of `bounds` first: [{ row, col, id, pack }].
+function tilesIn(level, bounds) {
+  const r = tileRange(level, bounds);
+  if (!r) return [];
+  const set = listedSet(level), out = [];
+  for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) {
+    if (set.has(row * 1000 + col)) out.push({ row, col, id: tileId(row, col), pack: tilePack(level, row, col) });
+  }
+  if (bounds) {
+    const mx = (bounds.x0 + bounds.x1) / 2, my = (bounds.y0 + bounds.y1) / 2, T = tileKm(level);
+    const dist = (t) => Math.hypot(-level.halfKm + (t.col + 0.5) * T - mx, level.halfKm - (t.row + 0.5) * T - my);
+    out.sort((a, b) => dist(a) - dist(b) || a.row - b.row || a.col - b.col);
+  }
+  return out;
+}
+
+// Is every part of `b` inside listed tiles of `level`?
+function listedCovers(level, b) {
+  const r = tileRange(level, b);
+  if (!r) return false;
+  const T = tileKm(level), n = tileGridSize(level);
+  // the clipped range must reach the box edges, or part of the box is off the tile grid
+  if (-level.halfKm + r.c0 * T > b.x0 || -level.halfKm + (r.c1 + 1) * T < b.x1 || level.halfKm - r.r0 * T < b.y1 || level.halfKm - (r.r1 + 1) * T > b.y0) return false;
+  const set = listedSet(level);
+  for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) if (!set.has(row * 1000 + col)) return false;
+  return n > 0;
+}
+
+// Heights from a tiled level; tiles arrive one by one with addTile(). Same interface as createDem
+// (heightAtXY → metres | null, sample → metres | NaN), plus the tile bookkeeping.
+function createTiledDem({ name, kmPerPixel, dnToMeters = 0.5, tilePx, apronPx = 1, halfKm, tiles = [] }) {
+  const level = { name, tiled: true, kmPerPixel, dnToMeters, tilePx, apronPx, halfKm, tiles: [...tiles] };
+  const n = tileGridSize(level), T = tileKm(level), stride = tilePx + 2 * apronPx;
+  const slots = new Array(n * n).fill(null);
+  const listed = listedSet(level);
+  let loaded = 0;
+  function sample(xKm, yKm) {
+    const gx = (xKm + halfKm) / kmPerPixel, gy = (halfKm - yKm) / kmPerPixel;   // in level pixels from the top left
+    const tc = Math.floor(gx / tilePx), tr = Math.floor(gy / tilePx);
+    if (tc < 0 || tr < 0 || tc >= n || tr >= n) return NaN;
+    const t = slots[tr * n + tc];
+    if (t === null) return NaN;
+    const col = gx - tc * tilePx - 0.5 + apronPx, row = gy - tr * tilePx - 0.5 + apronPx;
+    const c0 = Math.min(stride - 2, Math.max(0, Math.floor(col))), r0 = Math.min(stride - 2, Math.max(0, Math.floor(row)));
+    const i = r0 * stride + c0;
+    const a = t[i], b = t[i + 1], c = t[i + stride], d = t[i + stride + 1];
+    if (a === NO_DATA || b === NO_DATA || c === NO_DATA || d === NO_DATA) return NaN;
+    const fc = col - c0, fr = row - r0;
+    const top = a + (b - a) * fc, bottom = c + (d - c) * fc;
+    return (top + (bottom - top) * fr) * dnToMeters;
+  }
+  function heightAtXY(xKm, yKm) {
+    const v = sample(xKm, yKm);
+    return v === v ? v : null;
+  }
+  // grid(xs, ys) → (i, j) => metres | NaN at (xs[i], ys[j]): sample() with the per-column and per-row
+  // arithmetic done once (the hillshade's inner loop).
+  function grid(xs, ys) {
+    const TC = new Int32Array(xs.length), C0 = new Int32Array(xs.length), FC = new Float64Array(xs.length);
+    const TR = new Int32Array(ys.length), R0 = new Int32Array(ys.length), FR = new Float64Array(ys.length);
+    for (let i = 0; i < xs.length; i++) {
+      const gx = (xs[i] + halfKm) / kmPerPixel, tc = Math.floor(gx / tilePx);
+      if (tc < 0 || tc >= n) { TC[i] = -1; continue; }
+      const col = gx - tc * tilePx - 0.5 + apronPx, c0 = Math.min(stride - 2, Math.max(0, Math.floor(col)));
+      TC[i] = tc; C0[i] = c0; FC[i] = col - c0;
+    }
+    for (let j = 0; j < ys.length; j++) {
+      const gy = (halfKm - ys[j]) / kmPerPixel, tr = Math.floor(gy / tilePx);
+      if (tr < 0 || tr >= n) { TR[j] = -1; continue; }
+      const row = gy - tr * tilePx - 0.5 + apronPx, r0 = Math.min(stride - 2, Math.max(0, Math.floor(row)));
+      TR[j] = tr * n; R0[j] = r0 * stride; FR[j] = row - r0;
+    }
+    return (i, j) => {
+      const tc = TC[i], tr = TR[j];
+      if (tc < 0 || tr < 0) return NaN;
+      const t = slots[tr + tc];
+      if (t === null) return NaN;
+      const k = R0[j] + C0[i];
+      const a = t[k], b = t[k + 1], c = t[k + stride], d = t[k + stride + 1];
+      if (a === NO_DATA || b === NO_DATA || c === NO_DATA || d === NO_DATA) return NaN;
+      const fc = FC[i], top = a + (b - a) * fc, bottom = c + (d - c) * fc;
+      return (top + (bottom - top) * FR[j]) * dnToMeters;
+    };
+  }
+  // tile: "rRRcCC", "<name>_rRRcCC" or { row, col }; data: Int16Array, or the pack's bytes (Uint8Array)
+  function addTile(tile, data) {
+    const t = typeof tile === 'string' ? parseTile(tile) : tile;
+    if (!t || !(t.row >= 0 && t.row < n && t.col >= 0 && t.col < n)) throw new Error(`${name}: no tile ${tile}`);
+    if (t.level && t.level !== name) throw new Error(`${name}: tile ${tile} belongs to ${t.level}`);
+    let v = data;
+    if (!(v instanceof Int16Array)) {
+      const u = v instanceof Uint8Array ? v : new Uint8Array(v);
+      v = u.byteOffset % 2 === 0 ? new Int16Array(u.buffer, u.byteOffset, u.byteLength >> 1) : new Int16Array(u.slice().buffer);
+    }
+    if (v.length !== stride * stride) throw new Error(`${name}: tile ${tile} has ${v.length} values, expected ${stride * stride}`);
+    const k = t.row * n + t.col;
+    if (slots[k] === null) loaded++;
+    slots[k] = v;
+    if (!listed.has(t.row * 1000 + t.col)) { listed.add(t.row * 1000 + t.col); level.tiles.push(tileId(t.row, t.col)); }
+    return level;
+  }
+  const hasTile = (row, col) => row >= 0 && row < n && col >= 0 && col < n && slots[row * n + col] !== null;
+  Object.assign(level, {
+    tileKm: T, gridSize: n,
+    sample, heightAtXY, grid,
+    heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
+    addTile, hasTile,
+    // listed tiles meeting bounds that are not loaded yet, as pack names
+    missing: (bounds) => tilesIn(level, bounds).filter((t) => !hasTile(t.row, t.col)).map((t) => t.pack),
+  });
+  Object.defineProperty(level, 'loadedCount', { get: () => loaded, enumerable: true });
+  return level;
+}
+
+// Plain levels: a level covers a viewport when the hillshade can sample all of it: heights exist to half
+// a pixel inside halfKm, and the slope reaches out one more step of up to two pixels, so keep 2.5 pixels
+// clear (otherwise the edge columns come out black at ±156 km on the 120 m level).
+const covers = (dem, b) => !b || Math.max(Math.abs(b.x0), Math.abs(b.x1), Math.abs(b.y0), Math.abs(b.y1)) + 2.5 * dem.kmPerPixel <= dem.halfKm + 1e-9;
+const meets = (dem, b) => !b || (Math.min(b.x0, b.x1) < dem.halfKm && Math.max(b.x0, b.x1) > -dem.halfKm && Math.min(b.y0, b.y1) < dem.halfKm && Math.max(b.y0, b.y1) > -dem.halfKm);
+const pad = (b, km) => b && { x0: b.x0 - km, y0: b.y0 - km, x1: b.x1 + km, y1: b.y1 + km };
+const EPS = 1 + 1e-9;
+
+// The phase 3 rule over the plain (untiled) levels, coarse to fine.
+function pickPlain(plain, kmPerPxWanted, bounds) {
+  if (!plain.length) return null;
+  const ok = plain.filter((d) => covers(d, bounds));
+  if (!ok.length) return plain.reduce((a, b) => (b.halfKm > a.halfKm ? b : a));
+  return ok.find((d) => d.kmPerPixel <= kmPerPxWanted * EPS) ?? ok[ok.length - 1];
+}
+
+// Which tiled level to use for a viewport, and which tile packs it needs (shared by createPyramid and
+// map/tiers.js). `levels`: terrain.json entries or pyramid levels, any order. Rule:
+// 1. base = the phase 3 choice among the plain levels. If it is fine enough, no tiles.
+// 2. Candidates: tiled levels finer than base with listed tiles in view. Take the coarsest that is fine
+//    enough (else the finest); while its listed tiles in view exceed maxTiles, go one level coarser;
+//    if none fits, no tiles.
+// 3. Packs: the chosen level's tiles in view, then tiles of coarser candidates where the chosen level
+//    has no listed tile, up to maxTiles in all (nearest the centre first).
+// → { level, base, chain: [chosen, coarser candidates…] (fine to coarse), packs: [names] }, level null if none.
+function planTiles(levels, kmPerPxWanted, bounds, { maxTiles = TILE_BUDGET } = {}) {
+  const sorted = [...levels].sort((a, b) => b.kmPerPixel - a.kmPerPixel);
+  const base = pickPlain(sorted.filter((d) => !d.tiled), kmPerPxWanted, bounds);
+  const none = { level: null, base, chain: [], packs: [] };
+  if (base && base.kmPerPixel <= kmPerPxWanted * EPS) return none;
+  const sel = (l) => pad(bounds, 2.5 * l.kmPerPixel);   // the hillshade samples a little beyond the view
+  const cands = sorted.filter((d) => d.tiled && (!base || d.kmPerPixel < base.kmPerPixel) && tilesIn(d, sel(d)).length > 0);
+  if (!cands.length) return none;
+  let i = cands.findIndex((d) => d.kmPerPixel <= kmPerPxWanted * EPS);
+  if (i < 0) i = cands.length - 1;
+  while (i >= 0 && bounds && tilesIn(cands[i], sel(cands[i])).length > maxTiles) i--;
+  if (i < 0) return none;
+  const level = cands[i];
+  const chain = cands.slice(0, i + 1).reverse();
+  const packs = tilesIn(level, sel(level)).map((t) => t.pack);
+  for (const coarser of chain.slice(1)) {
+    for (const t of tilesIn(coarser, sel(coarser))) {
+      if (packs.length >= maxTiles) break;
+      const tb = tileBounds(coarser, t.row, t.col), b = sel(coarser);
+      const part = b ? { x0: Math.max(tb.x0, b.x0), x1: Math.min(tb.x1, b.x1), y0: Math.max(tb.y0, b.y0), y1: Math.min(tb.y1, b.y1) } : tb;
+      const finer = chain.slice(0, chain.indexOf(coarser));
+      if (!finer.some((f) => listedCovers(f, part))) packs.push(t.pack);
+    }
+  }
+  return { level, base, chain, packs };
+}
+
+// Several DEMs of the same ground (spec phase 3 §4.1, phase 4 §4.1). `levels` (coarse to fine, live) holds
+// plain DEMs (createDem) and tiled ones (createTiledDem). pick(kmPerPxWanted, bounds) returns:
+// - over the plain levels, as in phase 3: among the levels that cover `bounds` ({ x0, y0, x1, y1 } km),
+//   the coarsest whose pixels are no coarser than kmPerPxWanted; if none is fine enough, the finest
+//   covering one; if none covers, the widest one; null for an empty pyramid. With no tiled level this
+//   is the whole rule, so phase 3 callers get exactly what they got.
+// - when planTiles() chooses a tiled level: a composite DEM whose heights come from the chosen level and
+//   fall back, point by point, to coarser levels where a tile is not listed, not loaded yet or has no
+//   data: { tiled, composite, name, kmPerPixel (of the chosen level), halfKm, chain (fine to coarse),
+//   heightAtXY, sample, heightAt, kmPerPixelAt(x, y), missing (pack names), version }.
+function createPyramid(levels = []) {
+  const list = [];
+  let version = 0;
+  function add(dem) {
+    const i = list.findIndex((d) => d.kmPerPixel === dem.kmPerPixel);
+    if (i >= 0) list.splice(i, 1);
+    list.push(dem);
+    list.sort((a, b) => b.kmPerPixel - a.kmPerPixel);   // coarse to fine
+    version++;
+    return dem;
+  }
+  for (const dem of levels) add(dem);
+  // a tile pack ("dem_40m_r27c30") into its level; returns false if no level of that name is in the pyramid
+  function addTile(pack, data) {
+    const t = parseTile(pack);
+    const level = t && list.find((d) => d.tiled && d.name === t.level);
+    if (!level) return false;
+    level.addTile(t, data);
+    version++;
+    return true;
+  }
+  function pick(kmPerPxWanted, bounds, { maxTiles = TILE_BUDGET } = {}) {
+    if (!list.some((d) => d.tiled)) return pickPlain(list, kmPerPxWanted, bounds);
+    const plan = planTiles(list, kmPerPxWanted, bounds, { maxTiles });
+    if (!plan.level) return plan.base;
+    // fine to coarse: the chosen tiled level, coarser tiled candidates, plain levels finer than the base
+    // that reach into the view (partial coverage is fine point by point), then the base
+    const plainFiner = list.filter((d) => !d.tiled && d !== plan.base && plan.base && d.kmPerPixel < plan.base.kmPerPixel && d.kmPerPixel > plan.level.kmPerPixel && meets(d, bounds));
+    const chain = [...plan.chain, ...plainFiner, ...(plan.base ? [plan.base] : [])].sort((a, b) => a.kmPerPixel - b.kmPerPixel);
+    return composite(plan.level, chain, plan.base, plan.packs.filter((p) => { const t = parseTile(p); const l = list.find((d) => d.name === t.level); return !l.hasTile(t.row, t.col); }));
+  }
+  function composite(level, chain, base, missing) {
+    function sample(xKm, yKm) {
+      for (let i = 0; i < chain.length; i++) { const v = chain[i].sample(xKm, yKm); if (v === v) return v; }
+      return NaN;
+    }
+    function heightAtXY(xKm, yKm) { const v = sample(xKm, yKm); return v === v ? v : null; }
+    return {
+      tiled: true, composite: true, name: level.name, level, base, chain, missing, version,
+      kmPerPixel: level.kmPerPixel, halfKm: base?.halfKm ?? level.halfKm,
+      sample, heightAtXY,
+      heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
+      // the resolution that serves this point (for "Terrain 120 m" next to the readout); null off all levels
+      kmPerPixelAt(xKm, yKm) {
+        for (let i = 0; i < chain.length; i++) { const v = chain[i].sample(xKm, yKm); if (v === v) return chain[i].kmPerPixel; }
+        return null;
+      },
+    };
+  }
+  // tile packs a viewport still needs (listed, not loaded), at most maxTiles; [] when no tiled level is chosen
+  function missing(kmPerPxWanted, bounds, opts) {
+    const d = pick(kmPerPxWanted, bounds, opts);
+    return d?.composite ? d.missing : [];
+  }
+  return { levels: list, add, addTile, pick, missing, get version() { return version; } };
+}
+
+// Distances along the ground (km): one pixel, then steps of max(pixel, 1.5 % of the distance).
+const stepCache = new Map();
+function steps(kmPerPixel, maxKm) {
+  const key = `${kmPerPixel}:${maxKm}`;
+  if (stepCache.has(key)) return stepCache.get(key);
+  const cos = [], sin = [];
+  for (let d = kmPerPixel; d <= maxKm; d += Math.max(kmPerPixel, 0.015 * d)) {
+    cos.push(Math.cos(d / R));
+    sin.push(Math.sin(d / R));
+  }
+  const out = { cos: Float64Array.from(cos), sin: Float64Array.from(sin) };
+  stepCache.set(key, out);
+  return out;
+}
+
+// Highest terrain elevation angle (deg) in each azimuth seen from a point 2 m above the ground.
+function horizonProfile(dem, latDeg, lonDeg, { azimuths = 360, maxKm = 300, observerM = OBSERVER_M } = {}) {
+  const hP = dem.heightAt(latDeg, lonDeg);
+  if (hP === null) return null;
+  const phi = latDeg * RAD, lam = lonDeg * RAD;
+  const cp = Math.cos(phi), sp = Math.sin(phi), cl = Math.cos(lam), sl = Math.sin(lam);
+  const p0x = cp * cl, p0y = cp * sl, p0z = sp;
+  const ex = -sl, ey = cl;                       // local east (ez = 0)
+  const nx = -sp * cl, ny = -sp * sl, nz = cp;   // local north
+  const r0 = R + (hP + observerM) / 1000;
+  const { cos, sin } = steps(dem.kmPerPixel, maxKm);
+  const out = new Float32Array(azimuths);
+  for (let i = 0; i < azimuths; i++) {
+    const a = (i * 2 * Math.PI) / azimuths;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const tx = ca * nx + sa * ex, ty = ca * ny + sa * ey, tz = ca * nz;
+    let best = -Infinity;
+    for (let k = 0; k < cos.length; k++) {
+      const px = cos[k] * p0x + sin[k] * tx;
+      const py = cos[k] * p0y + sin[k] * ty;
+      const pz = cos[k] * p0z + sin[k] * tz;
+      const q = 2 * R / (1 - pz);
+      const h = dem.heightAtXY(q * py, q * px);
+      if (h === null) break;
+      const r1 = R + h / 1000;
+      const e = Math.atan2(r1 * cos[k] - r0, r1 * sin[k]);
+      if (e > best) best = e;
+    }
+    out[i] = best === -Infinity ? 0 : best * DEG;
+  }
+  return out;
+}
+
+function horizonAt(profile, azDeg) {
+  const n = profile.length;
+  if (azDeg === null || azDeg === undefined) {
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += profile[i];
+    return sum / n;
+  }
+  const x = ((((azDeg % 360) + 360) % 360) / 360) * n;
+  const i0 = Math.floor(x) % n;
+  const f = x - Math.floor(x);
+  return profile[i0] + (profile[(i0 + 1) % n] - profile[i0]) * f;
+}
+
+const ZERO = Object.assign(() => 0, { profile: null });
+
+function skylineFor(dem, site) {
+  if (!dem || !(site.latDeg <= TERRAIN_MAX_LAT)) return ZERO;
+  const profile = horizonProfile(dem, site.latDeg, site.lonDeg);
+  if (!profile) return ZERO;
+  return Object.assign((azDeg) => horizonAt(profile, azDeg), { profile });
+}
+
+return { MAP_HALF_KM, GRID_SIZE, GRID_CELL_KM, TERRAIN_MAX_LAT, OBSERVER_M, toXY, fromXY, createDem, NO_DATA, TILE_BUDGET, tileKm, tileGridSize, tileId, tilePack, parseTile, tileBounds, tilesIn, createTiledDem, planTiles, createPyramid, horizonProfile, horizonAt, skylineFor };
+})();
+__m['globe-terrain.js'] = (() => {
+// Global lunar terrain model (phase 1, docs/PHASES.md): one height for any latitude and longitude on the
+// Moon, from the finest level that is loaded at that point.
+//
+//   south pole   the existing polar-stereographic pyramid (20 m → 480 m), below about 75°S
+//   north pole   globe_n480, LOLA 75°N–90°N averaged to 480 m
+//   G2           globe_g2 tiles, LOLA LDEM_64, 474 m (built locally; absent packs fall back)
+//   G1           globe_g1 tiles, LOLA LDEM_16, 1.9 km
+//   G0           globe_g0, LOLA LDEM_4, 7.6 km, always loaded
+//
+// All levels are LOLA heights in 0.5 m DN above the 1737.4 km sphere, so they stack without re-levelling.
+// Pack layout and encoding: tools/build-global.mjs.
+const { toXY, createDem } = __m['terrain.js'];
+
+const MOON_R_KM = 1737.4;
+const DN_TO_M = 0.5;
+const RAD = Math.PI / 180;
+
+const G0 = Object.freeze({ name: 'globe_g0', label: '7.6 km', ppd: 4, width: 1440, height: 720, kmPerPixel: 7.58084 });
+const G1 = Object.freeze({ name: 'globe_g1', label: '1.9 km', ppd: 16, tileDeg: 15, tilePx: 240, apronPx: 1, rows: 12, cols: 24, kmPerPixel: 1.89521 });
+const G2 = Object.freeze({ name: 'globe_g2', label: '474 m', ppd: 64, tileDeg: 3.75, tilePx: 240, apronPx: 1, rows: 48, cols: 96, kmPerPixel: 0.473802 });
+const TILED = Object.freeze([G1, G2]);
+const NORTH = Object.freeze({ name: 'globe_n480', label: '480 m (north pole)', size: 1906, kmPerPixel: 0.48, minLatDeg: 75 });
+const SOUTH_MAX_LAT = -75;
+
+const normLon = (lon) => ((lon % 360) + 360) % 360;
+
+// North polar stereographic (PDS LOLA polar products): x = r sin λ, y = −r cos λ, r = 2R tan((90° − φ)/2).
+function toXYNorth(latDeg, lonDeg) {
+  const r = 2 * MOON_R_KM * Math.tan(((90 - latDeg) / 2) * RAD);
+  return [r * Math.sin(lonDeg * RAD), -r * Math.cos(lonDeg * RAD)];
+}
+
+// Undoes the delta coding of tools/build-global.mjs in place (Int16 wrap-around, as the encoder).
+function deltaDecode(d, width) {
+  for (let i = 0; i < d.length; i++) {
+    const col = i % width;
+    if (col > 0) d[i] = d[i] + d[i - 1];
+    else if (i >= width) d[i] = d[i] + d[i - width];
+  }
+  return d;
+}
+
+async function gunzip(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+// Pack bytes (gzip of delta-coded Int16 LE) → Int16Array of heights in DN.
+async function decodePack(bytes, width) {
+  const raw = await gunzip(bytes);
+  const out = new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2);
+  return deltaDecode(out, width ?? Math.round(Math.sqrt(out.length)));
+}
+
+const tileName = (level, r, c) => `${level.name}_r${String(r).padStart(2, '0')}c${String(c).padStart(2, '0')}`;
+
+function tileOf(level, latDeg, lonDeg) {
+  const r = Math.min(level.rows - 1, Math.max(0, Math.floor((90 - latDeg) / level.tileDeg)));
+  const c = Math.min(level.cols - 1, Math.floor(normLon(lonDeg) / level.tileDeg));
+  return { r, c };
+}
+
+// Tiles of a level touching a lat/lon box (lon may run past 360 or below 0; it wraps).
+function tilesInBox(level, latMin, latMax, lonMin, lonMax) {
+  const r0 = Math.max(0, Math.floor((90 - latMax) / level.tileDeg)), r1 = Math.min(level.rows - 1, Math.floor((90 - latMin) / level.tileDeg - 1e-9));
+  const span = lonMax - lonMin;
+  const c0 = Math.floor(lonMin / level.tileDeg), c1 = span >= 360 ? c0 + level.cols - 1 : Math.floor(lonMax / level.tileDeg - 1e-9);
+  const out = [];
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push({ r, c: ((c % level.cols) + level.cols) % level.cols });
+  return out;
+}
+
+// Bilinear height (DN) in the whole G0 grid; longitude wraps, latitude clamps to the outer pixel centres.
+function sampleG0(data, latDeg, lonDeg) {
+  const { width, height, ppd } = G0;
+  const y = Math.min(height - 1, Math.max(0, (90 - latDeg) * ppd - 0.5));
+  const x = normLon(lonDeg) * ppd - 0.5;
+  const y0 = Math.min(height - 2, Math.floor(y)), fy = y - y0;
+  const xf = Math.floor(x), fx = x - xf;
+  const x0 = ((xf % width) + width) % width, x1 = (x0 + 1) % width;
+  const a = data[y0 * width + x0], b = data[y0 * width + x1], c = data[(y0 + 1) * width + x0], d = data[(y0 + 1) * width + x1];
+  const top = a + (b - a) * fx, bottom = c + (d - c) * fx;
+  return top + (bottom - top) * fy;
+}
+
+// Bilinear height (DN) inside one tile with its apron.
+function sampleTile(level, tile, r, c, latDeg, lonDeg) {
+  const s = level.tilePx + 2 * level.apronPx;
+  const y = (90 - latDeg) * level.ppd - r * level.tilePx - 0.5 + level.apronPx;
+  let lon = normLon(lonDeg);
+  if (c === 0 && lon > 360 - level.tileDeg) lon -= 360;
+  const x = lon * level.ppd - c * level.tilePx - 0.5 + level.apronPx;
+  const y0 = Math.min(s - 2, Math.max(0, Math.floor(y))), x0 = Math.min(s - 2, Math.max(0, Math.floor(x)));
+  const fy = Math.min(1, Math.max(0, y - y0)), fx = Math.min(1, Math.max(0, x - x0));
+  const i = y0 * s + x0;
+  const top = tile[i] + (tile[i + 1] - tile[i]) * fx, bottom = tile[i + s] + (tile[i + s + 1] - tile[i + s]) * fx;
+  return top + (bottom - top) * fy;
+}
+
+// load(name) → Promise<Uint8Array> of a data pack (data-loader.js loadData in the page).
+// south: optional polar pyramid levels (terrain.js createDem / createTiledDem objects with sample(x, y)),
+// passed as a function returning the current list, coarse to fine; see southFrom().
+function createGlobeTerrain({ load, south = null, onChange = () => {} }) {
+  let g0 = null, north = null, version = 0;
+  const tiles = new Map(TILED.map((l) => [l.name, new Map()]));   // level → "r,c" → Int16Array
+  const pending = new Map();   // pack name → Promise
+  const failed = new Set();
+
+  async function init() {
+    g0 = await decodePack(await load(G0.name), G0.width);
+    try {
+      const data = await decodePack(await load(NORTH.name), NORTH.size);
+      north = createDem({ data, size: NORTH.size, kmPerPixel: NORTH.kmPerPixel, dnToMeters: DN_TO_M });
+    } catch { north = null; }
+    version++;
+    return api;
+  }
+
+  function hasTile(level, r, c) { return tiles.get(level.name).has(`${r},${c}`); }
+
+  function loadTile(level, r, c) {
+    const name = tileName(level, r, c);
+    if (hasTile(level, r, c)) return Promise.resolve(true);
+    if (failed.has(name)) return Promise.resolve(false);
+    if (pending.has(name)) return pending.get(name);
+    const p = load(name)
+      .then((bytes) => decodePack(bytes, level.tilePx + 2 * level.apronPx))
+      .then((data) => { tiles.get(level.name).set(`${r},${c}`, data); version++; onChange({ level, r, c }); return true; })
+      .catch(() => { failed.add(name); return false; })
+      .finally(() => pending.delete(name));
+    pending.set(name, p);
+    return p;
+  }
+
+  // Loads (at most max) tiles of a level over a lat/lon box; resolves with the number newly loaded.
+  async function need(level, latMin, latMax, lonMin, lonMax, { max = 48 } = {}) {
+    const want = tilesInBox(level, latMin, latMax, lonMin, lonMax).filter(({ r, c }) => !hasTile(level, r, c) && !failed.has(tileName(level, r, c))).slice(0, max);
+    const done = await Promise.all(want.map(({ r, c }) => loadTile(level, r, c)));
+    return done.filter(Boolean).length;
+  }
+
+  // [metres, source label, ground km per pixel] from the finest level loaded at the point.
+  function sample(latDeg, lonDeg) {
+    if (south && latDeg < SOUTH_MAX_LAT) {
+      const levels = south();
+      if (levels.length) {
+        const [x, y] = toXY(latDeg, lonDeg);
+        for (let i = levels.length - 1; i >= 0; i--) {
+          const v = levels[i].sample(x, y);
+          if (v === v) return [v, `${Math.round(levels[i].kmPerPixel * 1000)} m (south pole)`, levels[i].kmPerPixel];
+        }
+      }
+    }
+    if (north && latDeg > NORTH.minLatDeg) {
+      const v = north.sample(...toXYNorth(latDeg, lonDeg));
+      if (v === v) return [v, NORTH.label, NORTH.kmPerPixel];
+    }
+    for (let i = TILED.length - 1; i >= 0; i--) {
+      const level = TILED[i];
+      const { r, c } = tileOf(level, latDeg, lonDeg);
+      const t = tiles.get(level.name).get(`${r},${c}`);
+      if (t) return [sampleTile(level, t, r, c, latDeg, lonDeg) * DN_TO_M, level.label, level.kmPerPixel];
+    }
+    if (!g0) return [0, 'none', null];
+    return [sampleG0(g0, latDeg, lonDeg) * DN_TO_M, G0.label, G0.kmPerPixel];
+  }
+
+  const api = {
+    init, need, loadTile, hasTile, sample,
+    heightAt: (latDeg, lonDeg) => sample(latDeg, lonDeg)[0],
+    get version() { return version; },
+    get ready() { return g0 !== null; },
+    get hasNorth() { return north !== null; },
+    isMissing: (level, r, c) => failed.has(tileName(level, r, c)),
+  };
+  return api;
+}
+
+// A south() function for createGlobeTerrain from a terrain.js pyramid: its levels, coarse to fine.
+const southFrom = (pyramid) => () => pyramid.levels;
+
+return { MOON_R_KM, DN_TO_M, G0, G1, G2, TILED, NORTH, SOUTH_MAX_LAT, normLon, toXYNorth, deltaDecode, gunzip, decodePack, tileName, tileOf, tilesInBox, sampleG0, sampleTile, createGlobeTerrain, southFrom };
+})();
+__m['globe-view.js'] = (() => {
+// 3D globe of the global terrain model (phase 1). three.js comes from vendor/three.classic.js (window.THREE).
+//
+// Terrain is a quadtree of meshes, refined by screen-space error and loaded on demand:
+//   - between 80°S and 80°N, cylindrical nodes (36 roots of 40° × 40°);
+//   - at each pole, polar-stereographic nodes (one root of ±320 km), so the south-pole terrain is a
+//     square grid and not slivers of longitude. Caps draw over the band where the two overlap.
+// Every vertex height comes from globe-terrain.js heightAt(), so all levels share one surface. Each node
+// has a skirt (its edge pulled down) that hides cracks between neighbours of different detail.
+// Units are km; the Moon's centre is the origin, +Y the north pole, +X 0°E, −Z 90°E.
+const { MOON_R_KM, G1, G2 } = __m['globe-terrain.js'];
+const { fromXY } = __m['terrain.js'];
+
+const RAD = Math.PI / 180, DEG = 180 / Math.PI;
+const SEG = 32;                 // grid cells per node side
+const CAP_HALF_KM = 320;        // polar root: ±320 km (≈ 79.4° latitude at the corners' axes)
+const BAND_LAT = 80;            // cylindrical band edge
+const CAP_KEEP_KM = 2 * MOON_R_KM * Math.tan(((90 - BAND_LAT) / 2) * RAD) + 6;   // cap triangles kept inside this radius
+const PX_ERROR = 2.2;                  // refine while a cell spans more than this many pixels
+const MAX_DEPTH_CYL = 7, MAX_DEPTH_CAP = 10;
+const BUILD_MS = 14;                  // mesh building budget per frame
+const CACHE_MAX = 2600;
+
+function unit(latDeg, lonDeg) {
+  const cl = Math.cos(latDeg * RAD);
+  return [cl * Math.cos(lonDeg * RAD), Math.sin(latDeg * RAD), -cl * Math.sin(lonDeg * RAD)];
+}
+function toLatLon(x, y, z) {
+  const r = Math.hypot(x, y, z);
+  let lon = Math.atan2(-z, x) * DEG;
+  if (lon < 0) lon += 360;
+  return { latDeg: Math.asin(y / r) * DEG, lonDeg: lon };
+}
+function fromXYNorth(xKm, yKm) {
+  const r = Math.hypot(xKm, yKm);
+  let lon = Math.atan2(xKm, -yKm) * DEG;
+  if (lon < 0) lon += 360;
+  return { latDeg: 90 - 2 * Math.atan(r / (2 * MOON_R_KM)) * DEG, lonDeg: lon };
+}
+
+// #lat=…&lon=…&dist=…&tilt=…&heading=… (km and degrees): a shareable camera
+function cameraFromHash(hash) {
+  const q = new URLSearchParams(String(hash).replace(/^#/, ''));
+  const out = {};
+  for (const k of ['lat', 'lon', 'dist', 'tilt', 'heading']) { const v = Number(q.get(k)); if (q.has(k) && Number.isFinite(v)) out[k] = v; }
+  return out;
+}
+function cameraToHash(c) {
+  return `#lat=${c.lat.toFixed(4)}&lon=${c.lon.toFixed(4)}&dist=${c.dist.toPrecision(4)}&tilt=${Math.round(c.tilt)}&heading=${Math.round(c.heading)}`;
+}
+
+// ---------- quadtree nodes ----------
+function roots() {
+  const out = [];
+  for (const lat0 of [-80, -40, 0, 40]) for (let lon0 = 0; lon0 < 360; lon0 += 40) out.push({ kind: 'cyl', depth: 0, lat0, lat1: lat0 + 40, lon0, lon1: lon0 + 40 });
+  for (const pole of ['S', 'N']) out.push({ kind: 'cap', pole, depth: 0, x0: -CAP_HALF_KM, x1: CAP_HALF_KM, y0: -CAP_HALF_KM, y1: CAP_HALF_KM });
+  for (const n of out) n.id = nodeId(n);
+  return out;
+}
+function nodeId(n) { return n.kind === 'cyl' ? `c${n.depth}:${n.lat0.toFixed(4)}:${n.lon0.toFixed(4)}` : `${n.pole}${n.depth}:${n.x0.toFixed(4)}:${n.y0.toFixed(4)}`; }
+function children(n) {
+  if (n._kids) return n._kids;
+  const d = n.depth + 1, k = [];
+  if (n.kind === 'cyl') {
+    const lm = (n.lat0 + n.lat1) / 2, om = (n.lon0 + n.lon1) / 2;
+    for (const [a, b] of [[n.lat0, lm], [lm, n.lat1]]) for (const [c, e] of [[n.lon0, om], [om, n.lon1]]) k.push({ kind: 'cyl', depth: d, lat0: a, lat1: b, lon0: c, lon1: e });
+  } else {
+    const xm = (n.x0 + n.x1) / 2, ym = (n.y0 + n.y1) / 2;
+    for (const [a, b] of [[n.y0, ym], [ym, n.y1]]) for (const [c, e] of [[n.x0, xm], [xm, n.x1]]) k.push({ kind: 'cap', pole: n.pole, depth: d, x0: c, x1: e, y0: a, y1: b });
+  }
+  for (const c of k) { c.id = nodeId(c); c.parent = n; }   // relief: see reliefKm()
+  n._kids = k;
+  return k;
+}
+// lat/lon of grid point (i, j) of a node, i along x / longitude, j along y / latitude (j = 0 at the south edge)
+function nodeLatLon(n, u, v) {
+  if (n.kind === 'cyl') return { latDeg: n.lat0 + (n.lat1 - n.lat0) * v, lonDeg: n.lon0 + (n.lon1 - n.lon0) * u };
+  const x = n.x0 + (n.x1 - n.x0) * u, y = n.y0 + (n.y1 - n.y0) * v;
+  return n.pole === 'S' ? fromXY(x, y) : fromXYNorth(x, y);
+}
+function nodeSizeKm(n) {
+  if (n.kind === 'cap') return n.x1 - n.x0;
+  const mid = Math.cos(((n.lat0 + n.lat1) / 2) * RAD);
+  return Math.max((n.lat1 - n.lat0), (n.lon1 - n.lon0) * mid) * MOON_R_KM * RAD;
+}
+function capRadius(n, u, v) { return Math.hypot(n.x0 + (n.x1 - n.x0) * u, n.y0 + (n.y1 - n.y0) * v); }
+function nodeOutsideCap(n) {   // the whole node beyond the cap's kept radius
+  if (n.kind !== 'cap') return false;
+  const nx = Math.max(n.x0, Math.min(0, n.x1)), ny = Math.max(n.y0, Math.min(0, n.y1));
+  return Math.hypot(nx, ny) > CAP_KEEP_KM;
+}
+
+// Largest |height| (m) known for a node: measured when its mesh (or an ancestor's) was built; until then
+// the Moon's extreme relief. Bounds use it times the exaggeration, so small tiles get tight spheres.
+function reliefM(n) {
+  for (let p = n; p; p = p.parent) if (p._reliefM !== undefined) return p._reliefM + 150;
+  return 11000;
+}
+
+// ---------- the view ----------
+function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {} } = {}) {
+  const THREE = window.THREE;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 20000);
+  const sun = new THREE.DirectionalLight(0xffffff, 3.2);
+  scene.add(sun, sun.target, new THREE.AmbientLight(0xffffff, 0.18));
+  scene.add(makeStars(THREE));
+  const group = new THREE.Group();
+  scene.add(group);
+  const matCyl = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+  const matCap = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+
+  const state = { exaggeration: 3, colour: 'shade' };
+  const cam = { lat: -20, lon: 20, dist: 6200, heading: 0, tilt: 0, ...initial };
+  const cache = new Map();   // node id → { mesh, used, stale }
+  const top = roots();
+  let frame = 0, raf = 0, dirty = true, fly = null, lastStatus = '', stats = {};
+  const perf = { buildMs: 0, builds: 0, renderMs: 0, frames: 0 };
+
+  // ---- mesh building ----
+  function colourFor(hM, out, k) {
+    if (state.colour === 'height') {
+      const t = Math.min(1, Math.max(0, (hM + 9000) / 19500));
+      const stops = [[0.0, [0.13, 0.17, 0.55]], [0.25, [0.1, 0.55, 0.8]], [0.45, [0.25, 0.75, 0.35]], [0.6, [0.95, 0.9, 0.3]], [0.8, [0.9, 0.35, 0.15]], [1, [0.98, 0.95, 0.95]]];
+      let i = 0; while (i < stops.length - 2 && t > stops[i + 1][0]) i++;
+      const [t0, c0] = stops[i], [t1, c1] = stops[i + 1], f = (t - t0) / (t1 - t0);
+      out[k] = c0[0] + (c1[0] - c0[0]) * f; out[k + 1] = c0[1] + (c1[1] - c0[1]) * f; out[k + 2] = c0[2] + (c1[2] - c0[2]) * f;
+    } else {
+      const g = 0.36 + 0.05 * Math.max(-1, Math.min(1, hM / 6000));   // lunar grey (linear), a touch lighter on high ground
+      out[k] = g; out[k + 1] = g * 0.985; out[k + 2] = g * 0.96;
+    }
+  }
+
+  function buildMesh(n) {
+    const N = SEG + 1, B = N + 2;   // B: with a one-sample border for normals
+    const E = state.exaggeration / 1000;
+    const P = new Float64Array(B * B * 3), H = new Float64Array(B * B);
+    for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) {
+      const u = (i - 1) / SEG, v = (j - 1) / SEG;
+      const { latDeg, lonDeg } = nodeLatLon(n, u, v);
+      const h = terrain.heightAt(Math.max(-90, Math.min(90, latDeg)), lonDeg);
+      const r = MOON_R_KM + h * E, [x, y, z] = unit(latDeg, lonDeg), k = (j * B + i) * 3;
+      P[k] = x * r; P[k + 1] = y * r; P[k + 2] = z * r; H[j * B + i] = h;
+    }
+    const c = P.slice(((1 + SEG / 2) * B + 1 + SEG / 2) * 3, ((1 + SEG / 2) * B + 1 + SEG / 2) * 3 + 3);   // centre sample
+    let hmax = 0;
+    for (let k = 0; k < H.length; k++) { const a = Math.abs(H[k]); if (a > hmax) hmax = a; }
+    n._reliefM = hmax;
+    // deep enough to cover the height step to a coarser neighbour (a few cells of relief, exaggerated)
+    const skirtKm = nodeSizeKm(n) * 0.04 + 0.04 * state.exaggeration;
+    const verts = N * N + 4 * SEG;
+    const pos = new Float32Array(verts * 3), nor = new Float32Array(verts * 3), col = new Float32Array(verts * 3);
+    const at = (i, j) => ((j + 1) * B + (i + 1)) * 3;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const k = at(i, j), o = (j * N + i) * 3;
+      pos[o] = P[k] - c[0]; pos[o + 1] = P[k + 1] - c[1]; pos[o + 2] = P[k + 2] - c[2];
+      const xa = at(i + 1, j), xb = at(i - 1, j), ya = at(i, j + 1), yb = at(i, j - 1);
+      const ax = P[xa] - P[xb], ay = P[xa + 1] - P[xb + 1], az = P[xa + 2] - P[xb + 2];
+      const bx = P[ya] - P[yb], by = P[ya + 1] - P[yb + 1], bz = P[ya + 2] - P[yb + 2];
+      let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      // keep normals pointing out of the Moon (the grid's handedness differs between kinds and poles)
+      if (nx * P[k] + ny * P[k + 1] + nz * P[k + 2] < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      nor[o] = nx / l; nor[o + 1] = ny / l; nor[o + 2] = nz / l;
+      colourFor(H[(j + 1) * B + (i + 1)], col, o);
+    }
+    // skirt: the edge ring again, pulled towards the centre of the Moon
+    const ring = [];
+    for (let i = 0; i < SEG; i++) ring.push([i, 0]);
+    for (let j = 0; j < SEG; j++) ring.push([SEG, j]);
+    for (let i = SEG; i > 0; i--) ring.push([i, SEG]);
+    for (let j = SEG; j > 0; j--) ring.push([0, j]);
+    ring.forEach(([i, j], s) => {
+      const src = (j * N + i) * 3, o = (N * N + s) * 3, k = at(i, j);
+      const r = Math.hypot(P[k], P[k + 1], P[k + 2]), f = (r - skirtKm) / r;
+      pos[o] = P[k] * f - c[0]; pos[o + 1] = P[k + 1] * f - c[1]; pos[o + 2] = P[k + 2] * f - c[2];
+      nor.copyWithin(o, src, src + 3); col.copyWithin(o, src, src + 3);
+    });
+    const idx = [];
+    // winding: surface triangles face out of the Moon, skirt triangles face away from the tile, so the
+    // materials can be single-sided (a back face seen through a hairline crack would light up dark)
+    const face = (a, b, d, wx, wy, wz) => {
+      const ax = pos[b * 3] - pos[a * 3], ay = pos[b * 3 + 1] - pos[a * 3 + 1], az = pos[b * 3 + 2] - pos[a * 3 + 2];
+      const bx = pos[d * 3] - pos[a * 3], by = pos[d * 3 + 1] - pos[a * 3 + 1], bz = pos[d * 3 + 2] - pos[a * 3 + 2];
+      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      if (nx * wx + ny * wy + nz * wz >= 0) idx.push(a, b, d); else idx.push(a, d, b);
+    };
+    const out = (a) => [pos[a * 3] + c[0], pos[a * 3 + 1] + c[1], pos[a * 3 + 2] + c[2]];   // radial direction
+    const keep = (i, j) => n.kind !== 'cap' || capRadius(n, i / SEG, j / SEG) <= CAP_KEEP_KM;
+    for (let j = 0; j < SEG; j++) for (let i = 0; i < SEG; i++) {
+      if (!(keep(i, j) || keep(i + 1, j) || keep(i, j + 1) || keep(i + 1, j + 1))) continue;
+      const a = j * N + i, b = a + 1, d = a + N, e = d + 1;
+      const w = out(a);
+      face(a, b, e, ...w); face(a, e, d, ...w);
+    }
+    ring.forEach(([i, j], s) => {
+      const [i2, j2] = ring[(s + 1) % ring.length];
+      if (n.kind === 'cap' && !keep(i, j) && !keep(i2, j2)) return;
+      const a = j * N + i, b = j2 * N + i2, sa = N * N + s, sb = N * N + ((s + 1) % ring.length);
+      const w = [pos[a * 3], pos[a * 3 + 1], pos[a * 3 + 2]];   // from the tile centre to its edge
+      face(a, sa, b, ...w); face(b, sa, sb, ...w);
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeBoundingSphere();
+    const mesh = new THREE.Mesh(g, n.kind === 'cap' ? matCap : matCyl);
+    mesh.position.set(c[0], c[1], c[2]);
+    mesh.userData.node = n;
+    return mesh;
+  }
+
+  function nodeBounds(n) {
+    if (n._centre) return;
+    const { latDeg, lonDeg } = nodeLatLon(n, 0.5, 0.5);
+    const [x, y, z] = unit(latDeg, lonDeg);
+    n._centre = new THREE.Vector3(x * MOON_R_KM, y * MOON_R_KM, z * MOON_R_KM);
+    let rad = 0;
+    for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0], [0.5, 1], [0, 0.5], [1, 0.5]]) {
+      const p = nodeLatLon(n, u, v), q = unit(p.latDeg, p.lonDeg);
+      rad = Math.max(rad, Math.hypot(q[0] * MOON_R_KM - n._centre.x, q[1] * MOON_R_KM - n._centre.y, q[2] * MOON_R_KM - n._centre.z));
+    }
+    n._radius = rad;   // flat; select() adds the relief (±11 km × exaggeration)
+  }
+
+  // ---- data requests for a node about to be drawn ----
+  function requestData(n) {
+    const spacing = nodeSizeKm(n) / SEG;
+    if (n.kind === 'cyl') {
+      const box = [n.lat0 - 0.01, n.lat1 + 0.01, n.lon0 - 0.01, n.lon1 + 0.01];
+      if (spacing < G1.kmPerPixel * 3) terrain.need(G1, ...box);
+      if (spacing < G2.kmPerPixel * 3) terrain.need(G2, ...box);
+    } else if (n.pole === 'S') {
+      requestSouth(spacing, { x0: n.x0, x1: n.x1, y0: n.y0, y1: n.y1 });
+    } else if (spacing < G1.kmPerPixel * 3) {
+      terrain.need(G1, BAND_LAT - 6, 90, 0, 360, { max: 24 });
+    }
+  }
+
+  // Marks built meshes over a lat/lon box (or a whole pole) stale, so they rebuild with new data.
+  function invalidate({ latMin = -90, latMax = 90, lonMin = 0, lonMax = 360, pole = null } = {}) {
+    for (const [, e] of cache) {
+      const n = e.mesh.userData.node;
+      if (pole) { if (n.kind === 'cap' && n.pole === pole) e.stale = true; continue; }
+      if (n.kind === 'cyl') {
+        if (n.lat1 < latMin || n.lat0 > latMax || n.lon1 < lonMin || n.lon0 > lonMax) continue;
+        e.stale = true;
+      } else if ((n.pole === 'N' && latMax > BAND_LAT - 6) || (n.pole === 'S' && latMin < -(BAND_LAT - 6))) e.stale = true;
+    }
+    dirty = true;
+  }
+
+  function rebuildAll() { for (const [, e] of cache) e.stale = true; dirty = true; }
+
+  // ---- camera ----
+  function surfaceR(lat, lon) { return MOON_R_KM + terrain.heightAt(lat, lon) * state.exaggeration / 1000; }
+  function placeCamera() {
+    const T = unit(cam.lat, cam.lon), r = surfaceR(cam.lat, cam.lon);
+    const U = new THREE.Vector3(...T), tgt = U.clone().multiplyScalar(r);
+    const N = new THREE.Vector3(-Math.sin(cam.lat * RAD) * Math.cos(cam.lon * RAD), Math.cos(cam.lat * RAD), Math.sin(cam.lat * RAD) * Math.sin(cam.lon * RAD));
+    const Ea = new THREE.Vector3(-Math.sin(cam.lon * RAD), 0, -Math.cos(cam.lon * RAD));
+    const f = N.clone().multiplyScalar(Math.cos(cam.heading * RAD)).add(Ea.clone().multiplyScalar(Math.sin(cam.heading * RAD)));
+    const t = cam.tilt * RAD;
+    const back = U.clone().multiplyScalar(Math.cos(t)).sub(f.clone().multiplyScalar(Math.sin(t)));
+    camera.position.copy(tgt).addScaledVector(back, cam.dist);
+    camera.up.copy(U.clone().multiplyScalar(Math.sin(t)).add(f.clone().multiplyScalar(Math.cos(t))));
+    camera.lookAt(tgt);
+    camera.updateMatrixWorld();   // select() culls with this frame's matrices, not the last render's
+    camera.near = Math.max(0.002, cam.dist * 0.002);
+    camera.far = cam.dist + 3 * MOON_R_KM;
+    camera.updateProjectionMatrix();
+    // Display light, not the real Sun: low (30° above the local horizon at the view centre) and from the
+    // upper left of the screen, so relief reads at every zoom; at whole-Moon scale it gives a gibbous phase.
+    const az = (cam.heading - 135) * RAD, el = 30 * RAD;
+    const horiz = N.clone().multiplyScalar(Math.cos(az)).add(Ea.clone().multiplyScalar(Math.sin(az)));
+    const L = U.clone().multiplyScalar(Math.sin(el)).addScaledVector(horiz, Math.cos(el)).normalize();
+    sun.position.copy(tgt).addScaledVector(L, 5000);
+    sun.target.position.copy(tgt);
+  }
+
+  // ---- selection ----
+  // A node is refined only when all of its visible children have meshes; until then it is drawn itself and
+  // its children are queued. So two levels never overlap (no z-fighting) and there is never a hole.
+  const frustum = new THREE.Frustum(), projView = new THREE.Matrix4(), sphere = new THREE.Sphere();
+  function visible(n, camU, horizon) {
+    if (nodeOutsideCap(n)) return false;
+    nodeBounds(n);
+    const rad = n._radius + reliefM(n) * state.exaggeration / 1000;
+    sphere.center.copy(n._centre); sphere.radius = rad;
+    if (!frustum.intersectsSphere(sphere)) return false;
+    const ang = Math.acos(Math.max(-1, Math.min(1, n._centre.clone().normalize().dot(camU))));
+    return ang - Math.asin(Math.min(1, rad / n._centre.length())) <= horizon;
+  }
+  function select() {
+    projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(projView);
+    const K = renderer.domElement.clientHeight / (2 * Math.tan((camera.fov / 2) * RAD));
+    const camU = camera.position.clone().normalize();
+    const horizon = Math.acos(Math.min(1, (MOON_R_KM - 12 * state.exaggeration) / camera.position.length()));
+    const draw = [], build = [];
+    const ready = (n) => cache.has(n.id);
+    const visit = (n) => {
+      const rad = n._radius + reliefM(n) * state.exaggeration / 1000;
+      const d = Math.max(0.001, camera.position.distanceTo(n._centre) - rad);
+      const err = (nodeSizeKm(n) / SEG) / d * K;
+      const max = n.kind === 'cap' ? MAX_DEPTH_CAP : MAX_DEPTH_CYL;
+      if (err > PX_ERROR && n.depth < max) {
+        const kids = children(n).filter((c) => visible(c, camU, horizon));
+        const missing = kids.filter((c) => !ready(c));
+        if (ready(n)) cache.get(n.id).used = frame;   // an ancestor of what is drawn: keep it
+        if (!missing.length) { for (const c of kids) visit(c); return; }
+        build.push(...missing);
+        for (const c of kids) if (ready(c)) cache.get(c.id).used = frame;   // keep the ready siblings from eviction
+      }
+      if (ready(n)) draw.push(n); else build.push(n);
+    };
+    for (const r of top) if (visible(r, camU, horizon)) visit(r);
+    return { draw, build };
+  }
+
+  function frameLoop() {
+    raf = requestAnimationFrame(frameLoop);
+    frame++;
+    if (fly) stepFly();
+    if (!dirty && !fly) return;
+    dirty = false;
+    resize();
+    placeCamera();
+    onCamera({ ...cam });
+    const { draw, build } = select();
+    const t0 = performance.now();
+    const budget = () => performance.now() - t0 < BUILD_MS;
+    const make = (n) => {
+      const old = cache.get(n.id);
+      if (old) { group.remove(old.mesh); old.mesh.geometry.dispose(); }
+      requestData(n);
+      const tb = performance.now();
+      const e = { mesh: buildMesh(n), used: frame, stale: false };
+      perf.buildMs += performance.now() - tb; perf.builds++;
+      cache.set(n.id, e); group.add(e.mesh);
+      dirty = true;   // draw it next frame (and refine further)
+    };
+    // missing meshes first (coarse to fine), then stale ones that are on screen
+    build.sort((a, b) => a.depth - b.depth);
+    for (const n of build) { if (!budget()) break; if (!cache.has(n.id)) make(n); }
+    const stale = draw.filter((n) => cache.get(n.id).stale).sort((a, b) => a.depth - b.depth);
+    for (const n of stale) { if (!budget()) break; make(n); }
+    if (build.some((n) => !cache.has(n.id)) || draw.some((n) => cache.get(n.id).stale)) dirty = true;
+    const shown = new Set(draw.map((n) => cache.get(n.id).mesh));
+    for (const n of draw) cache.get(n.id).used = frame;
+    for (const [, e] of cache) e.mesh.visible = shown.has(e.mesh);
+    stats = { drawn: draw.length, queued: build.filter((n) => !cache.has(n.id)).length, cached: cache.size, maxDepth: Math.max(0, ...draw.map((n) => n.depth)) };
+    if (cache.size > CACHE_MAX) evict();
+    const tr = performance.now();
+    renderer.render(scene, camera);
+    perf.renderMs += performance.now() - tr; perf.frames++;
+    const status = `${draw.length}/${stats.queued}`;
+    if (status !== lastStatus) { lastStatus = status; onStatus(stats); }
+  }
+
+  function evict() {
+    const old = [...cache.entries()].filter(([, e]) => e.used < frame - 30).sort((a, b) => a[1].used - b[1].used);
+    for (const [id, e] of old.slice(0, cache.size - CACHE_MAX * 0.8)) { group.remove(e.mesh); e.mesh.geometry.dispose(); cache.delete(id); }
+  }
+
+  function resize() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio())) {
+      renderer.setSize(w, h, false);
+      camera.aspect = w / Math.max(1, h);
+    }
+  }
+
+  // ---- controls ----
+  let drag = null;
+  const kmPerPx = () => cam.dist / (canvas.clientHeight / (2 * Math.tan((camera.fov / 2) * RAD)));
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, y: e.clientY, rotate: e.button === 2 || e.shiftKey || e.ctrlKey };
+    fly = null;
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.rotate) {
+      cam.heading = (cam.heading - dx * 0.3 + 360) % 360;
+      cam.tilt = Math.max(0, Math.min(maxTilt(), cam.tilt + dy * 0.25));
+    } else {
+      const s = kmPerPx() / MOON_R_KM * DEG;   // degrees of arc per pixel at the target
+      const h = cam.heading * RAD;
+      const north = (dy * Math.cos(h) + dx * Math.sin(h)) * s, east = (-dx * Math.cos(h) + dy * Math.sin(h)) * s;
+      cam.lat = Math.max(-89.999, Math.min(89.999, cam.lat + north));
+      cam.lon = (cam.lon + east / Math.max(0.02, Math.cos(cam.lat * RAD)) + 360) % 360;
+    }
+    dirty = true;
+  });
+  canvas.addEventListener('pointerup', (e) => { drag = null; canvas.releasePointerCapture(e.pointerId); });
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    cam.dist = Math.max(0.4, Math.min(14000, cam.dist * Math.exp(e.deltaY * 0.0012)));
+    cam.tilt = Math.min(cam.tilt, maxTilt());
+    fly = null; dirty = true;
+  }, { passive: false });
+  canvas.addEventListener('dblclick', (e) => {
+    const hit = pick(e.clientX, e.clientY);
+    if (hit) flyTo({ lat: hit.latDeg, lon: hit.lonDeg, dist: cam.dist * 0.35 });
+  });
+  const maxTilt = () => (cam.dist > 2500 ? 0 : cam.dist > 600 ? 40 : 75);
+
+  // ---- fly-to ----
+  function flyTo({ lat, lon, dist = cam.dist, heading = 0, tilt = 0, ms = 1800 }) {
+    let dl = ((lon - cam.lon + 540) % 360) - 180;
+    const from = { ...cam }, to = { lat, lon: cam.lon + dl, dist, heading, tilt };
+    const arc = Math.acos(Math.max(-1, Math.min(1, new THREE.Vector3(...unit(from.lat, from.lon)).dot(new THREE.Vector3(...unit(lat, lon))))));
+    const peak = Math.max(from.dist, dist, arc * MOON_R_KM * 0.9);
+    fly = { from, to, peak, t0: performance.now(), ms };
+    dirty = true;
+  }
+  function stepFly() {
+    const { from, to, peak, t0, ms } = fly;
+    const t = Math.min(1, (performance.now() - t0) / ms), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    cam.lat = from.lat + (to.lat - from.lat) * e;
+    cam.lon = (from.lon + (to.lon - from.lon) * e + 360) % 360;
+    // distance: log-interpolate through a peak so long flights rise above the surface
+    const lf = Math.log(from.dist), lt = Math.log(to.dist), lp = Math.log(peak);
+    const base = lf + (lt - lf) * e, lift = Math.max(0, lp - Math.max(lf, lt)) * 4 * e * (1 - e);
+    cam.dist = Math.exp(base + lift);
+    let dh = ((to.heading - from.heading + 540) % 360) - 180;
+    cam.heading = (from.heading + dh * e + 360) % 360;
+    cam.tilt = from.tilt + (to.tilt - from.tilt) * e;
+    dirty = true;
+    if (t >= 1) fly = null;
+  }
+
+  // ---- picking ----
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  function pick(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(group.children.filter((m) => m.visible), false);
+    if (!hits.length) return null;
+    const p = hits[0].point;
+    return toLatLon(p.x, p.y, p.z);
+  }
+
+  function makeStars(T) {
+    const n = 2500, p = new Float32Array(n * 3);
+    let s = 7;
+    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < n; i++) {
+      const z = 2 * rnd() - 1, a = 2 * Math.PI * rnd(), q = Math.sqrt(1 - z * z), R = 18000;
+      p[i * 3] = R * q * Math.cos(a); p[i * 3 + 1] = R * z; p[i * 3 + 2] = R * q * Math.sin(a);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(p, 3));
+    return new T.Points(g, new T.PointsMaterial({ color: 0x9aa4b2, size: 1.2, sizeAttenuation: false }));
+  }
+
+  // screen position of a lat/lon (for labels); null when behind the Moon or off screen
+  const tmp = new THREE.Vector3();
+  function project(lat, lon) {
+    const [x, y, z] = unit(lat, lon), r = surfaceR(lat, lon);
+    tmp.set(x * r, y * r, z * r);
+    const toCam = camera.position.clone().sub(tmp);
+    if (toCam.dot(new THREE.Vector3(x, y, z)) < 0) return null;
+    tmp.project(camera);
+    if (tmp.z > 1 || Math.abs(tmp.x) > 1.05 || Math.abs(tmp.y) > 1.05) return null;
+    return { x: (tmp.x + 1) / 2 * canvas.clientWidth, y: (1 - tmp.y) / 2 * canvas.clientHeight };
+  }
+
+  frameLoop();
+  window.addEventListener('resize', () => { dirty = true; });
+
+  return {
+    flyTo, pick, project, invalidate,
+    jumpTo(c) { fly = null; Object.assign(cam, c); dirty = true; },
+    debug() {
+      placeCamera();
+      const { draw, build } = select();
+      const camU = camera.position.clone().normalize();
+      const horizon = Math.acos(Math.min(1, (MOON_R_KM - 12 * state.exaggeration) / camera.position.length()));
+      const roots = top.map((r) => ({ id: r.id, vis: visible(r, camU, horizon) }));
+      return { cam: { ...cam }, camPos: camera.position.toArray().map((v) => +v.toFixed(2)), camR: +camera.position.length().toFixed(2), near: camera.near, far: camera.far, draw: draw.map((n) => n.id), build: build.map((n) => n.id).slice(0, 20), roots: roots.filter((r) => r.vis).map((r) => r.id) };
+    },
+    get camera() { return { ...cam }; },
+    get stats() { return stats; },
+    get perf() { return { ...perf, msPerBuild: +(perf.buildMs / Math.max(1, perf.builds)).toFixed(2), msPerRender: +(perf.renderMs / Math.max(1, perf.frames)).toFixed(2) }; },
+    kmPerPx,
+    setExaggeration(v) { state.exaggeration = v; rebuildAll(); },
+    setColour(mode) { state.colour = mode; for (const [, e] of cache) e.stale = true; dirty = true; },
+    redraw() { dirty = true; },
+    onFrame(fn) { const loop = () => { fn(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); },
+    destroy() { cancelAnimationFrame(raf); renderer.dispose(); },
+  };
+}
+
+return { SEG, CAP_HALF_KM, BAND_LAT, unit, toLatLon, fromXYNorth, cameraFromHash, cameraToHash, createGlobeView };
+})();
+__m['globe-main.js'] = (() => {
+// Entry of demo/globe.html (phase 1): the whole Moon from the global terrain model, in 3D.
+const { loadData } = __m['data-loader.js'];
+const { createDem, createPyramid, createTiledDem } = __m['terrain.js'];
+const { createGlobeTerrain, southFrom } = __m['globe-terrain.js'];
+const { createGlobeView, cameraFromHash, cameraToHash } = __m['globe-view.js'];
+
+function readJson(id) {
+  const el = document.getElementById(id);
+  return el ? JSON.parse(el.textContent) : null;
+}
+
+const PRESETS = [
+  { id: 'near', label: 'Whole Moon', lat: 8, lon: 12, dist: 6200 },
+  { id: 'far', label: 'Far side', lat: 5, lon: 180, dist: 6200 },
+  { id: 'south', label: 'South pole', lat: -88.6, lon: 0, dist: 520, tilt: 0 },
+  { id: 'shackleton', label: 'Shackleton', lat: -89.67, lon: 129.78, dist: 55, tilt: 50, heading: 30 },
+  { id: 'tycho', label: 'Tycho', lat: -43.31, lon: 348.64, dist: 260, tilt: 45 },
+  { id: 'apollo11', label: 'Apollo 11', lat: 0.674, lon: 23.473, dist: 90, tilt: 35 },
+];
+
+function startGlobe() {
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('globe');
+  const meta = readJson('data-terrain');
+  const sites = readJson('data-sites') ?? [];
+  let inflight = 0;
+  const counted = (p) => { inflight++; showLoading(); return p.finally(() => { inflight--; showLoading(); }); };
+  const load = (name) => counted(loadData(name, { timeoutMs: 60000 }));
+
+  // south pole: the existing polar pyramid, 480 m at start, finer levels and tiles on demand
+  const pyramid = createPyramid([]);
+  const southPending = new Set();
+  let view = null, invalidateSouthQueued = false;
+  const invalidateSouth = () => {
+    if (invalidateSouthQueued) return;
+    invalidateSouthQueued = true;
+    requestAnimationFrame(() => { invalidateSouthQueued = false; view?.invalidate({ pole: 'S' }); });
+  };
+  function requestSouth(spacingKm, bounds) {
+    if (!meta) return;
+    for (const l of meta.levels ?? []) {
+      if (spacingKm > l.kmPerPixel * 3 || southPending.has(l.name)) continue;
+      if (!l.tiled) {
+        if (pyramid.levels.some((d) => !d.tiled && d.kmPerPixel === l.kmPerPixel)) continue;
+        southPending.add(l.name);
+        load(l.name).then((b) => {
+          pyramid.add(createDem({ data: new Int16Array(b.buffer), size: l.size, kmPerPixel: l.kmPerPixel, dnToMeters: l.dnToMeters, halfKm: l.halfKm }));
+          invalidateSouth();
+        }).catch(() => {});
+        continue;
+      }
+      const level = pyramid.levels.find((d) => d.tiled && d.name === l.name);
+      for (const pack of level.missing(bounds).slice(0, 12)) {
+        if (southPending.has(pack)) continue;
+        southPending.add(pack);
+        load(pack).then((b) => { pyramid.addTile(pack, b); invalidateSouth(); }).catch(() => {}).finally(() => southPending.delete(pack));
+      }
+    }
+  }
+
+  const terrain = createGlobeTerrain({
+    load,
+    south: southFrom(pyramid),
+    onChange: ({ level, r, c }) => view?.invalidate({ latMin: 90 - (r + 1) * level.tileDeg, latMax: 90 - r * level.tileDeg, lonMin: c * level.tileDeg, lonMax: (c + 1) * level.tileDeg }),
+  });
+
+  // ---- UI ----
+  const chips = $('presets');
+  for (const p of PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = p.label;
+    b.addEventListener('click', () => view?.flyTo({ lat: p.lat, lon: p.lon, dist: p.dist, tilt: p.tilt ?? 0, heading: p.heading ?? 0 }));
+    chips.appendChild(b);
+  }
+  const ex = $('exaggeration'), exOut = $('exaggeration-out');
+  ex.addEventListener('input', () => { exOut.textContent = `${ex.value}×`; view?.setExaggeration(Number(ex.value)); });
+  for (const r of document.querySelectorAll('input[name="colour"]')) r.addEventListener('change', () => view?.setColour(r.value));
+
+  const labels = $('labels');
+  const labelEls = sites.filter((s) => Number.isFinite(s.latDeg)).map((s) => {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'site'; el.textContent = s.name; el.title = `${s.name}: ${s.latDeg.toFixed(2)}°, ${s.lonDeg.toFixed(2)}°E`;
+    el.addEventListener('click', () => view?.flyTo({ lat: s.latDeg, lon: s.lonDeg, dist: Math.min(view.camera.dist, 120), tilt: 40 }));
+    labels.appendChild(el);
+    return { s, el };
+  });
+
+  function showLoading() { $('loading').textContent = inflight ? `Loading terrain · ${inflight}` : ''; }
+
+  const fmt = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '—');
+  let lastPick = 0;
+  canvas.addEventListener('pointermove', (e) => {
+    const now = performance.now();
+    if (!view || now - lastPick < 50) return;
+    lastPick = now;
+    const hit = view.pick(e.clientX, e.clientY);
+    if (!hit) { $('readout-pos').textContent = 'Point at the Moon'; $('readout-h').textContent = ''; $('readout-src').textContent = ''; return; }
+    const [h, src] = terrain.sample(hit.latDeg, hit.lonDeg);
+    const lon = hit.lonDeg > 180 ? `${fmt(360 - hit.lonDeg)}°W` : `${fmt(hit.lonDeg)}°E`;
+    $('readout-pos').textContent = `${fmt(Math.abs(hit.latDeg))}°${hit.latDeg < 0 ? 'S' : 'N'}  ${lon}`;
+    $('readout-h').textContent = `${h >= 0 ? '+' : '−'}${Math.abs(h / 1000).toFixed(3)} km`;
+    $('readout-src').textContent = `LOLA ${src}`;
+  });
+
+  function niceLength(maxKm) {
+    const p = Math.pow(10, Math.floor(Math.log10(maxKm)));
+    for (const m of [5, 2, 1]) if (m * p <= maxKm) return m * p;
+    return p;
+  }
+  function frame() {
+    if (!view) return;
+    const kpp = view.kmPerPx(), km = niceLength(kpp * 130);
+    $('scale-bar').style.width = `${Math.round(km / kpp)}px`;
+    $('scale-text').textContent = km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`;
+    const c = view.camera;
+    $('centre-src').textContent = `Data at centre: LOLA ${terrain.sample(c.lat, c.lon)[1]}`;
+    const showLabels = c.dist < 4000;
+    for (const { s, el } of labelEls) {
+      const p = showLabels ? view.project(s.latDeg, s.lonDeg) : null;
+      el.hidden = !p;
+      if (p) el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+    }
+  }
+
+  (async () => {
+    try {
+      if (meta) {
+        const b = await load('dem_480m');
+        pyramid.add(createDem({ data: new Int16Array(b.buffer), size: meta.dem.size, kmPerPixel: meta.dem.kmPerPixel, dnToMeters: meta.dem.dnToMeters }));
+        for (const l of meta.levels ?? []) if (l.tiled) pyramid.add(createTiledDem(l));
+      }
+      await terrain.init();
+      let hashTimer = 0;
+      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c)), 300); };
+      view = createGlobeView(canvas, terrain, { requestSouth, initial: cameraFromHash(location.hash), onCamera });
+      view.onFrame(frame);
+      window.__globe = { view, terrain, pyramid };   // for debugging from the console
+      window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
+      document.body.classList.add('ready');
+    } catch (e) {
+      $('loading').textContent = `Could not load the terrain: ${e.message}`;
+    }
+  })();
+}
+
+startGlobe();
+
+return { startGlobe };
+})();
+</script>
+</body>
+</html>

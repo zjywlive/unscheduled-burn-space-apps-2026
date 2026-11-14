@@ -18,7 +18,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 
 | Variable | Unit | Source | Status | Code | Notes |
 |---|---|---|---|---|---|
-| Elevation (DEM) | m | data: LOLA polar DEMs at 20 / 40 / 120 / 240 / 480 m | ✅ | `terrain.js`, `data/dem_*` | 20 m and 40 m are tiled over 120 m near the pole |
+| Elevation (DEM) | m | data: LOLA global DEMs (7.6 km / 1.9 km / 474 m) + polar DEMs (south 20–480 m, north 480 m) | ✅ | `globe-terrain.js` `heightAt`, `terrain.js` | One height for any lat/lon from the finest level loaded; see PHASES.md phase 1 |
 | Slope magnitude | deg | derived from DEM | ✅ | `route-plan.js`, `data/slope_*` | per node, plus a 3 × 3 mean for the "flat" cost |
 | Rover max climb slope | deg | assumed (default 15°) | 🟡 | `route-plan.js` `DEFAULT_MAX_SLOPE` | one cap for both directions today |
 | **Directional (non-reversible) slope** | deg | derived: slope along the direction of travel | ⬜ | | A slope the rover can drive down but not back up. The route needs a separate **descent limit** and **climb limit**, and the search must check that a return path exists (one-way edges in A*) |
@@ -30,7 +30,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Max leg length | km | assumed (160 km) | ✅ | `route-plan.js` `MAX_LEG_KM` | |
 | Route cost weights | — | assumed | ✅ | `route-plan.js` `COSTS`, `SUNNY_WEIGHTS` | short / flat / sunny |
 | Rover speed | km/h | input | ⬜ | | needed to turn km into hours (energy, comms windows, night arrival) |
-| 3D route view (2D topo → 3D) | — | derived from DEM | 🟡 | `map/` | 2D hillshade today; 3D terrain with route ribbon (see reference images) not built |
+| 3D route view (2D topo → 3D) | — | derived from DEM | 🟡 | `globe-view.js`, `map/` | 3D terrain globe built (phase 1); route ribbon on it is phase 6 |
 
 ## 2. Sunlight and thermal
 
@@ -112,7 +112,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 
 | Variable | Unit | Source | Status | Code | Notes |
 |---|---|---|---|---|---|
-| **Stitched base maps** | — | data | 🟡 | `tools/build-*.mjs` | LOLA 20 / 40 / 120 m tiles + NASA PSR + illumination averages already stitched; add rock abundance, temperature and imagery as overlays |
+| **Stitched base maps** | — | data | 🟡 | `tools/build-global.mjs`, `tools/build-*.mjs` | Global LOLA levels and both polar caps stitched into one model, plus NASA PSR and illumination averages; still to add: rock abundance, temperature, imagery |
 
 ---
 
