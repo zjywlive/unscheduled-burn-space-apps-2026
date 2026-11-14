@@ -62,7 +62,7 @@ export function expectedBytes(l) {
   return size;
 }
 
-async function download(f, size) {
+export async function download(f, size) {
   const path = rawPath(f), part = new URL(`${f.name}.part`, path);
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
