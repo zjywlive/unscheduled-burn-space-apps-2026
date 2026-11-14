@@ -94,7 +94,8 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Dead-reckoning drift | % of distance | assumed (2 %) | ✅ | `contingency.js` `HAVEN_DEFAULTS` | arrival uncertainty on the haven drive | |
 | Rover attitude (pitch, roll, yaw) | deg | derived from the DEM gradient under the rover, over 2 pixels of the finest terrain loaded | ✅ | `rover-attitude.js` `attitudeAt` | the 3D rover model tilts with it; panels on the left of the globe |
 | Recorded motion | samples | simulated playback | ✅ | `globe-main.js`, `mission-save.js` `RECORDING_FIELDS` | time, lat/lon, km, height, pitch, roll, yaw, battery, flags; one sample per 30 s of drive time (at most ~3000), saved with the route |
-| Rover model size | m | assumed (2.2 m long) | ✅ | `globe-route.js` `ROVER_LEN_M` | drawn larger when zoomed out so it stays visible (the frames label says how much) |
+| Rover model size | m | assumed (2.2 m long) | ✅ | `globe-route.js` `ROVER_LEN_M` | drawn at real size; a screen-sized locator ring marks it while it is under ~18 px |
+| Real-light shading (2D map) | — | derived: Sun direction from the ephemeris per pixel, shadows marched over the DEM (~40 km, steps growing 10 %) | ✅ | `map/terrain-style.js` | display exposure floored at a 15° Sun (assumed); Earthshine not modelled |
 
 ## 6. Time and scenario
 

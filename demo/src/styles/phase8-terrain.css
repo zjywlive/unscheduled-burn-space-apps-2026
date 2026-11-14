@@ -1,0 +1,67 @@
+/* ---------- terrain styles, contour lines, the Sun and Earth readout (ui/mapview.js, ui/mapframe.js) ----------
+   The terrain chip and the readout share the floats row's frosted glass; sizes follow the slope legend. */
+.terrain-dock { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: min(440px, calc(100vw - 24px)); }
+.terrain-chip, .sun-panel {
+  color: var(--muted); font-size: 11px; line-height: 14px;
+  background: var(--glass-panel, rgba(20, 20, 22, 0.94)); -webkit-backdrop-filter: var(--glass-fx, none); backdrop-filter: var(--glass-fx, none);
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, none);
+}
+.terrain-chip { display: flex; flex-direction: column; gap: 6px; padding: 5px 6px 5px 10px; border-radius: 18px; }
+.terrain-chip[data-working="on"] .tc-title::after { content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 6px; border-radius: 50%; background: var(--text); opacity: 0.6; animation: tc-pulse 1s ease-in-out infinite; }
+@keyframes tc-pulse { 50% { opacity: 0.15; } }
+@media (prefers-reduced-motion: reduce) { .terrain-chip[data-working="on"] .tc-title::after { animation: none; } }
+.tc-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tc-title { color: var(--text); font-weight: 500; margin-right: 2px; }
+.tc-seg { display: inline-flex; gap: 2px; }
+.tc-div { width: 1px; height: 14px; background: var(--hair, rgba(255, 255, 255, 0.14)); margin: 0 2px; }
+.tc-btn {
+  height: 24px; padding: 0 8px; border: 0; border-radius: 12px; background: none; color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap;
+}
+.tc-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.tc-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.tc-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.tc-sunhandle { color: var(--text); }
+.tc-sunhandle[hidden], .sun-panel[hidden], .tc-legend[hidden], .tc-topo[hidden], .tc-interval[hidden] { display: none; }
+.tc-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding: 0 4px 2px 0; }
+.tc-topo { display: inline-flex; align-items: center; gap: 6px; }
+.tc-key { color: var(--text); }
+.tc-bar { display: inline-block; width: 72px; height: 6px; border-radius: 3px; }
+.tc-lo, .tc-hi, .tc-interval { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.sun-panel { width: 304px; padding: 8px 10px 10px; border-radius: var(--r1, 12px); }
+.sun-head { display: flex; align-items: center; justify-content: space-between; }
+.sun-title { margin: 0; color: var(--text); font-size: 12px; font-weight: 500; line-height: 16px; }
+.sun-close { height: 22px; padding: 0 8px; border: 0; border-radius: 11px; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.sun-close:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.sun-close:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.sun-where { margin: 0 0 6px; color: var(--muted); }
+.sun-body { display: flex; gap: 10px; align-items: flex-start; }
+.sun-sch { flex: none; width: 72px; height: 72px; }
+.sch-moon { fill: rgba(255, 255, 255, 0.06); stroke: var(--muted); stroke-width: 1; }
+.sch-axis { stroke: var(--muted); stroke-width: 1; }
+.sch-eq { stroke: var(--muted); stroke-width: 0.8; stroke-dasharray: 2 2; opacity: 0.7; }
+.sch-sun line { stroke: var(--sun, #ffd23d); stroke-width: 1; opacity: 0.6; }
+.sch-sun circle { fill: var(--sun, #ffd23d); }
+.sch-earth line { stroke: var(--earth, #5aa9ff); stroke-width: 1; opacity: 0.6; }
+.sch-earth circle { fill: var(--earth, #5aa9ff); }
+.sch-s, .sch-x { fill: var(--muted); font-size: 7px; }
+.sun-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; min-width: 0; }
+.sun-rows dt { color: var(--muted); }
+.sun-rows dd { margin: 0; color: var(--text); text-align: right; white-space: nowrap; }
+.sun-note { display: block; color: var(--muted); font-size: 10px; line-height: 12px; }
+.sun-why { margin: 8px 0 0; color: var(--muted); font-size: 10.5px; line-height: 14px; }
+
+/* the Sun and Earth directions at the view centre */
+.map-sky { position: absolute; z-index: 3; width: 260px; height: 260px; overflow: visible; pointer-events: none; }
+.sky-line { stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.sky-head { stroke: none; }
+.sky-sun { stroke: var(--sun, #ffd23d); fill: var(--sun, #ffd23d); }
+.sky-earth { stroke: var(--earth, #5aa9ff); fill: var(--earth, #5aa9ff); }
+.sky-shadow { stroke: #fff; fill: #fff; stroke-dasharray: 3 3; }
+.sky-dot { fill: none; stroke: #fff; stroke-width: 1.2; }
+.sky-text, .sky-note { font: 500 12px/14px var(--font, system-ui, sans-serif); stroke: none; paint-order: stroke; }
+.sky-text { stroke: rgba(0, 0, 0, 0.8); stroke-width: 3px; stroke-dasharray: none; stroke-linejoin: round; }
+.sky-text.sky-sun { fill: var(--sun, #ffd23d); }
+.sky-text.sky-earth { fill: var(--earth, #5aa9ff); }
+.sky-text.sky-shadow { fill: #fff; }
+.sky-note { fill: rgba(255, 255, 255, 0.7); font-size: 10px; font-weight: 400; stroke: rgba(0, 0, 0, 0.8); stroke-width: 3px; stroke-linejoin: round; }

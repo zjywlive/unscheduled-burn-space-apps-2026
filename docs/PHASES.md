@@ -245,3 +245,14 @@ minimap.
 - Checked in headless Chrome: route handoff (171 points, 3 waypoints, 89 trap cells), follow, contours, the
   self-driving search in 3D, record → save (record listed, trees thinned), waypoints → navigator link, mapped areas,
   the navigator's preview window. Tests: `mission-save`, `mission-records`, `route3d` (new payload fields).
+- Later the same evening: the follow camera tilts down while terrain hides the rover (and an x-ray outline shows
+  it otherwise); the rover is drawn at its real size (2.2 m), sitting on the drawn (exaggerated) slope, with a
+  locator ring while it is too small to see, and the camera may come to 20 m; the playback scrubber runs by
+  distance and lines up with the elevation profile to the pixel.
+- **Navigator map detail** (`map/terrain-style.js`, `ui/mapframe.js`, `ui/mapview.js`): a Terrain chip with Data
+  (as before), Topo (multi-directional hillshade × height tint, heat colours at 35 %) and Real light (lit by the Sun
+  at the playhead from the ephemeris, per pixel, with cast shadows marched over the terrain out to ~40 km, curvature
+  included); contour lines with labelled index lines and an interval that follows the zoom; a Sun & Earth readout
+  (azimuth / elevation, subsolar latitude from the 1.54° axis tilt, sub-Earth point from libration, Earth range)
+  and Sun / Earth / shadow arrows at the view centre. Built in slices after a gesture; 130–300 ms per full picture
+  at 1440 × 900 in headless Chrome. Tests: `tests/terrain-style.test.mjs`.

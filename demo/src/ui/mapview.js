@@ -16,6 +16,8 @@ import { createRouteCard } from './routecard.js';
 import { scaleBarFor } from '../map/overlay.js';
 import { DASH } from '../format.js';
 import { MAX_ZOOM } from '../map/view.js';
+import { TERRAIN_STYLES, TINT } from '../map/terrain-style.js';
+import { azEl } from '../geometry.js';
 
 // phase 5: 'now' is the Live view (the playhead's light, no window needed); the others add up a mission window
 export const MODES = [['now', 'Live'], ['both', 'Both in view'], ['sun', 'Sunlit'], ['earth', 'Earth in view'], ['change', 'Change'], ['score', 'Suitability']];
@@ -30,6 +32,8 @@ const SCALE_TIP = 'Polar stereographic map, true to scale at the pole. Near 80°
 // fix L10b: the side panels' open or folded state, for this browser session (default open)
 const PANELS_KEY = 'lsn-panels-v4';
 const BEST_KEY = 'lsn-best-v4';
+const TERRAIN_KEY = 'lsn-terrain-v1';   // terrain style, contours, Sun and Earth readout (this browser, localStorage)
+const RAD = Math.PI / 180;
 const LAYERS_KEY = 'lsn-layers-v5';   // Best cells, site labels, graticule (this browser, localStorage)
 function readStore(key) { try { return sessionStorage.getItem(key); } catch { return null; } }
 function writeStore(key, v) { try { sessionStorage.setItem(key, v); } catch { /* storage off: in memory only */ } }
@@ -46,6 +50,28 @@ export function fmtHeight(m) {
   if (m === null || m === undefined || !Number.isFinite(m)) return DASH;
   const v = Math.round(m);
   return `${v < 0 ? MINUS : '+'}${heightFmt.format(Math.abs(v))} m`;
+}
+
+// A small schematic of the Moon: its spin axis (vertical, south pole down), the equator, and where the Sun
+// and the Earth stand in latitude, angles drawn five times too large (1.5° would not show).
+function moonSchematic() {
+  const X = 5;
+  const sun = s('g', { class: 'sch-sun' }, s('line', { x1: 0, y1: 0, x2: 0, y2: 0 }), s('circle', { r: 4 }));
+  const earth = s('g', { class: 'sch-earth' }, s('line', { x1: 0, y1: 0, x2: 0, y2: 0 }), s('circle', { r: 3 }));
+  const el = s('svg', { class: 'sun-sch', viewBox: '0 0 84 84', width: 84, height: 84, role: 'img', 'aria-label': 'Schematic: the Sun and the Earth in latitude on the Moon, angles five times too large' },
+    s('line', { class: 'sch-axis', x1: 42, y1: 6, x2: 42, y2: 78 }),
+    s('line', { class: 'sch-eq', x1: 8, y1: 42, x2: 76, y2: 42 }),
+    s('circle', { class: 'sch-moon', cx: 42, cy: 42, r: 20 }),
+    s('text', { class: 'sch-s', x: 42, y: 83, 'text-anchor': 'middle' }, 'S'),
+    sun, earth,
+    s('text', { class: 'sch-x', x: 82, y: 9, 'text-anchor': 'end' }, 'angles ×5'));
+  const place = (g, lat, side, r) => {
+    const a = Math.max(-80, Math.min(80, lat * X)) * RAD, x = 42 + side * r * Math.cos(a), y = 42 - r * Math.sin(a);
+    const [line, dot] = g.children;
+    line.setAttribute('x1', 42 + side * 20 * Math.cos(a)); line.setAttribute('y1', 42 - 20 * Math.sin(a)); line.setAttribute('x2', x); line.setAttribute('y2', y);
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+  };
+  return { el, update(sunLat, earthLat) { place(sun, sunLat, -1, 36); place(earth, earthLat, 1, 36); } };
 }
 
 function seg(labelId, items, onPick) {
@@ -137,6 +163,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     onReadout: (text, fromKeys) => { readout.textContent = text; readout.hidden = !text; if (fromKeys) status.textContent = text; syncStatus(); },
     avoid: () => avoidRects(),
     onScale: (k) => { drawScale(k); cb.onMove?.(); },
+    onTerrain: (info) => setTerrainInfo(info),
   });
   // the frame's corners: the phase 3 layout uses all of them; the big layout keeps the tools and the zoom
   // there and moves the rest into the dock (fix L11)
@@ -197,6 +224,94 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const swBest = switchRow('best', 'Best cells', null, flipPref('best'));
   const swLabels = switchRow('labels', 'Site labels', null, flipPref('labels'));
   const swGrat = switchRow('graticule', 'Graticule', null, flipPref('graticule'));
+  // ---------- terrain style, contour lines and the Sun / Earth readout (map/terrain-style.js, mapframe.js) ----------
+  // One frosted chip in the map's bottom-left floats row (main.js adds terrainEl to it): the terrain style, a
+  // contour switch, and under them the height scale of Topo and the contour interval. The Sun and Earth
+  // readout stacks above it; closed, its handle sits in the chip's row. All of it is remembered in this browser.
+  const tp = { style: 'data', contours: false, arrows: true, sun: window.innerWidth >= 1101, ...(readLocal(TERRAIN_KEY) ?? {}) };   // open by default only where the map has room
+  if (!TERRAIN_STYLES.some(([v]) => v === tp.style)) tp.style = 'data';
+  let light = null;                  // { tMs, sun, earth, earthRangeKm } from main.js
+  const saveTerrain = () => writeLocal(TERRAIN_KEY, { ...tp });
+  const swContours = switchRow('contours', 'Contour lines', 'Heights from the terrain under the map; the interval follows the zoom', (on) => setTerrainPref({ contours: on }));
+  const swArrows = switchRow('sunarrows', 'Sun and Earth directions', 'Arrows at the view centre, with their elevations', (on) => setTerrainPref({ arrows: on }));
+  const REAL_TIP = 'The terrain lit by the real Sun at the timeline time, with the shadows that terrain up to 40 km away casts. Earthshine is not modelled, so ground in shadow is nearly black.';
+  const STYLE_TIPS = { data: 'The analysis look: dark, low-contrast relief under the heat colours.', topo: 'Topographic map: full-contrast hillshade with height colours; the heat colours sit translucent on top.', real: REAL_TIP };
+  const styleBtns = TERRAIN_STYLES.map(([v, label]) => h('button', { type: 'button', class: 'tc-btn', 'aria-pressed': 'false', 'data-value': v, title: STYLE_TIPS[v], onclick: () => setTerrainPref({ style: v }) }, label));
+  const contourBtn = h('button', { type: 'button', class: 'tc-btn tc-contours', 'aria-pressed': 'false', title: 'Contour lines, every fifth one labelled with its height in metres', onclick: () => setTerrainPref({ contours: !tp.contours }) }, 'Contours');
+  const sunHandle = h('button', { type: 'button', class: 'tc-btn tc-sunhandle', 'aria-expanded': 'false', title: 'Show the Sun and Earth readout', onclick: () => setTerrainPref({ sun: true }) }, 'Sun & Earth');
+  const tcBar = h('span', { class: 'tc-bar', 'aria-hidden': 'true' });
+  const tcLo = h('span', { class: 'tc-lo num' }), tcHi = h('span', { class: 'tc-hi num' });
+  const tcTopo = h('span', { class: 'tc-topo', hidden: true }, h('span', { class: 'tc-key' }, 'Height'), tcLo, tcBar, tcHi);
+  const tcInterval = h('span', { class: 'tc-interval num', hidden: true });
+  const tcLegend = h('div', { class: 'tc-legend', hidden: true, role: 'status' }, tcTopo, tcInterval);
+  tcBar.style.background = `linear-gradient(90deg, ${TINT.map(([t, c]) => `rgb(${c.join(',')}) ${t * 100}%`).join(', ')})`;
+  const terrainChip = h('div', { class: 'terrain-chip', role: 'group', 'aria-label': 'Terrain style' },
+    h('div', { class: 'tc-row' }, h('span', { class: 'tc-title' }, 'Terrain'), h('span', { class: 'tc-seg' }, ...styleBtns), h('span', { class: 'tc-div', 'aria-hidden': 'true' }), contourBtn, sunHandle),
+    tcLegend);
+
+  // the Sun and Earth readout: for the selected point and the playhead
+  const sunClose = h('button', { type: 'button', class: 'sun-close', 'aria-label': 'Hide the Sun and Earth readout', title: 'Hide (reopen with Sun & Earth)', onclick: () => setTerrainPref({ sun: false }) }, 'Hide');
+  const sunWhere = h('p', { class: 'sun-where' });
+  const sunRows = h('dl', { class: 'sun-rows' });
+  const sunWhy = h('p', { class: 'sun-why' });
+  const sunDraw = moonSchematic();
+  const sunPanel = h('section', { class: 'sun-panel', 'aria-label': 'Sun and Earth geometry' },
+    h('div', { class: 'sun-head' }, h('h3', { class: 'sun-title' }, 'Sun & Earth'), sunClose),
+    sunWhere,
+    h('div', { class: 'sun-body' }, sunDraw.el, sunRows),
+    sunWhy);
+  const terrainEl = h('div', { class: 'terrain-dock' }, sunPanel, terrainChip);
+  function setTerrainPref(o) {
+    Object.assign(tp, o);
+    saveTerrain();
+    applyTerrain();
+  }
+  function applyTerrain() {
+    for (const b of styleBtns) b.setAttribute('aria-pressed', String(b.dataset.value === tp.style));
+    contourBtn.setAttribute('aria-pressed', String(tp.contours));
+    swContours.set(tp.contours); swArrows.set(tp.arrows);
+    sunPanel.hidden = !tp.sun;
+    sunHandle.hidden = tp.sun;
+    sunHandle.setAttribute('aria-expanded', String(tp.sun));
+    frame.setTerrain({ style: tp.style, contours: tp.contours, arrows: tp.arrows });
+    renderSun();
+  }
+  const fmtDeg = (v, plus = true) => `${v < 0 ? MINUS : plus ? '+' : ''}${Math.abs(v).toFixed(1)}°`;
+  const fmtAz = (v) => (v === null || v === undefined ? DASH : `${Math.round(v) % 360}°`);
+  const latText = (v) => `${Math.abs(v).toFixed(1)}°${v < 0 ? 'S' : 'N'}`;
+  const lonText = (v) => { const w = ((v + 540) % 360) - 180; return `${Math.abs(w).toFixed(1)}°${w < 0 ? 'W' : 'E'}`; };
+  const utcText = (ms) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+  function sunRow(label, value, note) { return [h('dt', null, label), h('dd', { class: 'num' }, value, note ? h('span', { class: 'sun-note' }, note) : null)]; }
+  function renderSun() {
+    const site = last.selected;
+    clear(sunRows);
+    if (!tp.sun) return;
+    if (!light || !site) {
+      sunWhere.textContent = 'Outside the ephemeris (1 Nov 2026 to 1 Jan 2029).';
+      sunWhy.textContent = '';
+      return;
+    }
+    const sun = azEl(light.sun, Infinity, site.lonDeg, site.latDeg), earth = azEl(light.earth, light.earthRangeKm, site.lonDeg, site.latDeg);
+    const sunLat = Math.asin(light.sun[2]) / RAD, earthLat = Math.asin(light.earth[2]) / RAD, earthLon = Math.atan2(light.earth[1], light.earth[0]) / RAD;
+    sunWhere.textContent = `${site.name} · ${utcText(light.tMs)}`;
+    sunRows.append(
+      ...sunRow('Sun', `az ${fmtAz(sun.azDeg)} · el ${fmtDeg(sun.elDeg)}`, sun.elDeg < 0 ? 'below the horizon' : null),
+      ...sunRow('Earth', `az ${fmtAz(earth.azDeg)} · el ${fmtDeg(earth.elDeg)}`, earth.elDeg < 0 ? 'below the horizon' : null),
+      ...sunRow('Subsolar lat.', latText(sunLat)),
+      ...sunRow('Sub-Earth point', `${latText(earthLat)} ${lonText(earthLon)}`, 'libration'),
+      ...sunRow('Earth range', `${heightFmt.format(Math.round(light.earthRangeKm))} km`));
+    sunWhy.textContent = 'The Moon’s spin axis is tilted 1.54° to the ecliptic, so the subsolar latitude swings about ±1.5° over a year and at the pole the Sun circles the horizon a degree or so up or down.';
+    sunDraw.update(sunLat, earthLat);
+  }
+  function setTerrainInfo(info) {
+    const { range, interval } = info;
+    tcTopo.hidden = !range;
+    if (range) { tcLo.textContent = fmtHeight(range.lo); tcHi.textContent = fmtHeight(range.hi); }
+    tcInterval.hidden = !interval;
+    if (interval) tcInterval.textContent = `Contours every ${heightFmt.format(interval)} m, labels every ${heightFmt.format(interval * 5)} m`;
+    tcLegend.hidden = !range && !interval;
+    terrainChip.dataset.working = info.working ? 'on' : 'off';
+  }
   function applyPrefs() {
     swBest.set(layerPrefs.best); swLabels.set(layerPrefs.labels); swGrat.set(layerPrefs.graticule); swLive.set(layerPrefs.live);
     const fr = frame?.el;
@@ -211,7 +326,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const layersPop = h('div', { class: 'layers-pop', id: ids('layers'), role: 'dialog', 'aria-label': 'Layers', hidden: true },
     h('div', { class: 'layers-top' }, h('h2', null, 'Layers'), layersClose),
     h('section', { class: 'layers-sec' }, h('h3', { class: 'layers-head' }, 'Filters'), filtersEl),
-    h('section', { class: 'layers-sec' }, h('h3', { class: 'layers-head' }, 'Overlays'), swLive.row, swPsr.row, swDial.row, swBest.row, swLabels.row, swGrat.row),
+    h('section', { class: 'layers-sec' }, h('h3', { class: 'layers-head' }, 'Overlays'), swLive.row, swPsr.row, swDial.row, swBest.row, swLabels.row, swGrat.row, swContours.row, swArrows.row),
     weightsSec);
   const layersBtn = h('button', { type: 'button', class: 'layers-btn', title: 'Filters, overlays and weights', 'aria-expanded': 'false', 'aria-controls': ids('layers'), 'aria-haspopup': 'dialog', onclick: () => setLayersOpen(layersPop.hidden) },
     layersIcon(), h('span', null, 'Layers'), h('span', { class: 'layers-count num', hidden: true }));
@@ -271,6 +386,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   routeCard.querySelector('h2')?.setAttribute('id', 'lsn-route-head');
 
   let last = { drawing: false };
+  applyTerrain();
 
   function syncTools() {
     tools.update({ tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!last.regions?.A, hasB: !!last.regions?.B, hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi });
@@ -422,6 +538,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     renderBest(params.best ?? []);
     const ranked = params.mode !== 'now' && params.mode !== 'change';
     filters.update({ ...params.filters, disabled: !ranked });
+    renderSun();
     swPsr.set(params.showPsr);
     swDial.set(params.dialOn);
     weightsSec.hidden = params.mode !== 'score';
@@ -633,6 +750,9 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       if (regionBest !== undefined) frame.redrawShapes({ regionBest });
       if (f) filters.update({ ...f, disabled: last.mode === 'now' || last.mode === 'change' });
     },
+    // the playhead's Sun and Earth, for the readout and the arrows on the map
+    setLight(l) { light = l; frame.setLight(l); renderSun(); },
+    terrainEl,
     setProfileAt(profileAt) { frame.redrawShapes({ profileAt }); },
     openFilters,
     // phase 4: the workflow cards in the folds

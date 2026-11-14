@@ -439,7 +439,7 @@ function start() {
   // the 3D preview window and the slope legend float over the map's bottom left
   const floats = mapView ? createMapFloats(document) : null;
   const slopeLegend = createSlopeLegend();
-  if (floats) floats.append(slopeLegend.el);
+  if (floats) floats.append(slopeLegend.el, mapView.terrainEl);
   const inset3d = createInset3d({ host: floats ?? document.body, beforeOpen: () => !!writeRoute3d(), onFull: () => openFull3d() });
   // while it is open, the globe gets the new payload when the route, its drive, links or havens change
   let insetTimer = 0;
@@ -1103,6 +1103,7 @@ function start() {
       },
     });
     mapView.frame.setLive(now.states, liveOn());
+    pushLight();
     const text = mapFindingText();
     if (text !== null) shell.regions.mapFinding.textContent = text;
     refreshFolds();
@@ -1156,6 +1157,7 @@ function start() {
   const cardsThrottle = createThrottle(() => refreshFolds(), 480);
   function renderLive() {
     if (!mapView || !derived) return;
+    pushLight();
     if (liveStates()) {
       if (state.mapMode === 'now') {
         mapView.frameUpdate(frameParams(!plan.allDone()));
@@ -1193,6 +1195,12 @@ function start() {
   // scheduled after the answer, never chained from it (review 2 F1; the page freeze at a rise or set)
   const countdown = createCountdown({ run: (name, input) => core.run(name, input), endMs: eph.endMs, onUpdate: () => renderLiveRows() });
   function countdownText() { return countdown.text(state.site, state.cursorMs); }
+  // the playhead's Sun and Earth for the terrain styles, the arrows and the Sun & Earth readout on the map
+  function pushLight() {
+    if (!mapView) return;
+    const d = eph.at(state.cursorMs);
+    mapView.setLight(d ? { tMs: state.cursorMs, sun: d.sun, earth: d.earth, earthRangeKm: d.earthRangeKm } : null);
+  }
   function renderLiveRows() {
     if (!mapView || !derived) return;
     mapView.setLive({ now: nowOverSkyline(), countdown: countdownText(), dialOn: settings.get('skyDial') });

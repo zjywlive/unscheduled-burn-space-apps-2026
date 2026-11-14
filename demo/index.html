@@ -2495,6 +2495,75 @@ html[data-agent-open="true"] .is-bigmap :is(.point-panel, .right-reopen) { displ
 }
 html[data-reduce-motion="true"] :is(.story-card, .app[data-story="on"] *) { transition: none !important; }
 
+/* styles/phase8-terrain.css */
+/* ---------- terrain styles, contour lines, the Sun and Earth readout (ui/mapview.js, ui/mapframe.js) ----------
+   The terrain chip and the readout share the floats row's frosted glass; sizes follow the slope legend. */
+.terrain-dock { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: min(440px, calc(100vw - 24px)); }
+.terrain-chip, .sun-panel {
+  color: var(--muted); font-size: 11px; line-height: 14px;
+  background: var(--glass-panel, rgba(20, 20, 22, 0.94)); -webkit-backdrop-filter: var(--glass-fx, none); backdrop-filter: var(--glass-fx, none);
+  border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); box-shadow: var(--glass-shadow, none);
+}
+.terrain-chip { display: flex; flex-direction: column; gap: 6px; padding: 5px 6px 5px 10px; border-radius: 18px; }
+.terrain-chip[data-working="on"] .tc-title::after { content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 6px; border-radius: 50%; background: var(--text); opacity: 0.6; animation: tc-pulse 1s ease-in-out infinite; }
+@keyframes tc-pulse { 50% { opacity: 0.15; } }
+@media (prefers-reduced-motion: reduce) { .terrain-chip[data-working="on"] .tc-title::after { animation: none; } }
+.tc-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tc-title { color: var(--text); font-weight: 500; margin-right: 2px; }
+.tc-seg { display: inline-flex; gap: 2px; }
+.tc-div { width: 1px; height: 14px; background: var(--hair, rgba(255, 255, 255, 0.14)); margin: 0 2px; }
+.tc-btn {
+  height: 24px; padding: 0 8px; border: 0; border-radius: 12px; background: none; color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap;
+}
+.tc-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.tc-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.tc-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.tc-sunhandle { color: var(--text); }
+.tc-sunhandle[hidden], .sun-panel[hidden], .tc-legend[hidden], .tc-topo[hidden], .tc-interval[hidden] { display: none; }
+.tc-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding: 0 4px 2px 0; }
+.tc-topo { display: inline-flex; align-items: center; gap: 6px; }
+.tc-key { color: var(--text); }
+.tc-bar { display: inline-block; width: 72px; height: 6px; border-radius: 3px; }
+.tc-lo, .tc-hi, .tc-interval { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.sun-panel { width: 304px; padding: 8px 10px 10px; border-radius: var(--r1, 12px); }
+.sun-head { display: flex; align-items: center; justify-content: space-between; }
+.sun-title { margin: 0; color: var(--text); font-size: 12px; font-weight: 500; line-height: 16px; }
+.sun-close { height: 22px; padding: 0 8px; border: 0; border-radius: 11px; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.sun-close:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.sun-close:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.sun-where { margin: 0 0 6px; color: var(--muted); }
+.sun-body { display: flex; gap: 10px; align-items: flex-start; }
+.sun-sch { flex: none; width: 72px; height: 72px; }
+.sch-moon { fill: rgba(255, 255, 255, 0.06); stroke: var(--muted); stroke-width: 1; }
+.sch-axis { stroke: var(--muted); stroke-width: 1; }
+.sch-eq { stroke: var(--muted); stroke-width: 0.8; stroke-dasharray: 2 2; opacity: 0.7; }
+.sch-sun line { stroke: var(--sun, #ffd23d); stroke-width: 1; opacity: 0.6; }
+.sch-sun circle { fill: var(--sun, #ffd23d); }
+.sch-earth line { stroke: var(--earth, #5aa9ff); stroke-width: 1; opacity: 0.6; }
+.sch-earth circle { fill: var(--earth, #5aa9ff); }
+.sch-s, .sch-x { fill: var(--muted); font-size: 7px; }
+.sun-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; min-width: 0; }
+.sun-rows dt { color: var(--muted); }
+.sun-rows dd { margin: 0; color: var(--text); text-align: right; white-space: nowrap; }
+.sun-note { display: block; color: var(--muted); font-size: 10px; line-height: 12px; }
+.sun-why { margin: 8px 0 0; color: var(--muted); font-size: 10.5px; line-height: 14px; }
+
+/* the Sun and Earth directions at the view centre */
+.map-sky { position: absolute; z-index: 3; width: 260px; height: 260px; overflow: visible; pointer-events: none; }
+.sky-line { stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.sky-head { stroke: none; }
+.sky-sun { stroke: var(--sun, #ffd23d); fill: var(--sun, #ffd23d); }
+.sky-earth { stroke: var(--earth, #5aa9ff); fill: var(--earth, #5aa9ff); }
+.sky-shadow { stroke: #fff; fill: #fff; stroke-dasharray: 3 3; }
+.sky-dot { fill: none; stroke: #fff; stroke-width: 1.2; }
+.sky-text, .sky-note { font: 500 12px/14px var(--font, system-ui, sans-serif); stroke: none; paint-order: stroke; }
+.sky-text { stroke: rgba(0, 0, 0, 0.8); stroke-width: 3px; stroke-dasharray: none; stroke-linejoin: round; }
+.sky-text.sky-sun { fill: var(--sun, #ffd23d); }
+.sky-text.sky-earth { fill: var(--earth, #5aa9ff); }
+.sky-text.sky-shadow { fill: #fff; }
+.sky-note { fill: rgba(255, 255, 255, 0.7); font-size: 10px; font-weight: 400; stroke: rgba(0, 0, 0, 0.8); stroke-width: 3px; stroke-linejoin: round; }
+
 </style>
 </head>
 <body>
@@ -10174,6 +10243,342 @@ function findSnap(targets, px, py, radiusPx = SNAP_RADIUS_PX) {
 
 return { SNAP_RADIUS_PX, findSnap };
 })();
+__m['map/terrain-style.js'] = (() => {
+// Terrain styles of the 2D map (pure, no DOM): the topographic colours and hillshade, the Sun-lit relief with
+// cast shadows, contour lines, and the Sun / Earth directions on the map plane. The map draws these from a
+// height field: one height in metres per pixel (NaN where no terrain), row by row.
+//
+// Map plane in km: pole at the origin, 0°E up (+y), 90°E right (+x), as in terrain.js. Pixel (col, row) of a
+// frame { width, height, kmPerPx, cx, cy } is at x = cx − w/2 + (col + 0.5)·k, y = cy + h/2 − (row + 0.5)·k.
+const { fromXY } = __m['terrain.js'];
+
+const R_KM = 1737.4;
+const RAD = Math.PI / 180;
+
+const TERRAIN_STYLES = [['data', 'Data'], ['topo', 'Topo'], ['real', 'Real light']];
+
+// ---------- height field ----------
+
+// Heights of rows r0 … r0 + rows − 1 of the frame into out (width × height floats): from the finest level of
+// the DEM chain that has the point, else a coarser one. `dem` is a createDem level or a pyramid composite.
+function heightBand(dem, out, g, r0, rows) {
+  const { width, height, kmPerPx: k, cx, cy } = g;
+  const chain = dem.chain ?? [dem];
+  const halfW = (width * k) / 2, halfH = (height * k) / 2;
+  const xs = new Float64Array(width), ys = new Float64Array(rows);
+  for (let c = 0; c < width; c++) xs[c] = cx - halfW + (c + 0.5) * k;
+  for (let j = 0; j < rows; j++) ys[j] = cy + halfH - (r0 + j + 0.5) * k;
+  out.fill(NaN, r0 * width, (r0 + rows) * width);
+  for (const level of chain) {
+    const at = level.grid ? level.grid(xs, ys) : (i, j) => level.sample(xs[i], ys[j]);
+    for (let j = 0; j < rows; j++) {
+      const o = (r0 + j) * width;
+      for (let c = 0; c < width; c++) {
+        if (out[o + c] === out[o + c]) continue;
+        const v = at(c, j);
+        if (v === v) out[o + c] = v;
+      }
+    }
+  }
+}
+
+// The 2 % and 98 % heights (a few outliers must not flatten the colours); null when nothing has a height.
+function heightRange(hf, lo = 0.02, hi = 0.98) {
+  const pick = [];
+  const stride = Math.max(1, Math.floor(hf.length / 40000));
+  for (let i = 0; i < hf.length; i += stride) if (hf[i] === hf[i]) pick.push(hf[i]);
+  if (!pick.length) return null;
+  pick.sort((a, b) => a - b);
+  const a = pick[Math.floor(lo * (pick.length - 1))], b = pick[Math.ceil(hi * (pick.length - 1))];
+  return b > a ? { lo: a, hi: b } : { lo: a - 1, hi: a + 1 };
+}
+
+// Median ground gradient of the view, metres of height per pixel (flat pixels left out); 0 for none.
+function typicalGradient(hf, w, h) {
+  const g = [];
+  for (let r = 1; r < h - 1; r += 5) {
+    for (let c = 1 + (r % 7); c < w - 1; c += 7) {
+      const i = r * w + c;
+      const gx = (hf[i + 1] - hf[i - 1]) / 2, gy = (hf[i + w] - hf[i - w]) / 2;
+      const m = Math.hypot(gx, gy);
+      if (m > 0) g.push(m);
+    }
+  }
+  if (!g.length) return 0;
+  g.sort((a, b) => a - b);
+  return g[g.length >> 1];
+}
+
+// ---------- topographic colours ----------
+// A muted palette like the globe's minimap: dark blue-grey low, grey, sand high.
+const TINT = [[0, [46, 58, 82]], [0.3, [86, 98, 112]], [0.6, [150, 146, 136]], [1, [222, 205, 165]]];
+function tintAt(t) {
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  let i = 0;
+  while (i < TINT.length - 2 && x > TINT[i + 1][0]) i++;
+  const [t0, a] = TINT[i], [t1, b] = TINT[i + 1], f = (x - t0) / (t1 - t0);
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+
+// Multi-directional hillshade: four lights from 225° to 360° at 35° up, averaged; 0.5 on flat ground.
+const TOPO_LIGHTS = [225, 270, 315, 360].map((az) => [Math.sin(az * RAD) * Math.cos(35 * RAD), Math.cos(az * RAD) * Math.cos(35 * RAD)]);
+const TOPO_LZ = Math.sin(35 * RAD);
+const TOPO_CONTRAST = 1.9;
+
+// Colour of one pixel from its hillshade (0–1) and its position in the height range (0–1): [r, g, b] 0–255.
+function topoColour(shade, t) {
+  const c = tintAt(t);
+  const k = 0.3 + 1.0 * Math.min(1, Math.max(0, shade));   // 0.3 in the darkest shade, 1.3 in the brightest
+  return [Math.min(255, c[0] * k), Math.min(255, c[1] * k), Math.min(255, c[2] * k)];
+}
+
+// Hillshade × tint into RGBA rows r0 … r0 + rows − 1 of img (width × height × 4).
+function topoBand(hf, w, h, kmPerPx, range, img, r0, rows) {
+  const inv = 1 / (range.hi - range.lo);
+  const d = 2 * kmPerPx * 1000;   // metres between the two samples of a central difference
+  for (let r = r0; r < r0 + rows; r++) {
+    for (let c = 0; c < w; c++) {
+      const i = r * w + c, o = 4 * i, z = hf[i];
+      if (z !== z) { img[o] = img[o + 1] = img[o + 2] = 8; img[o + 3] = 255; continue; }
+      const xl = c > 0 ? hf[i - 1] : z, xr = c < w - 1 ? hf[i + 1] : z;
+      const yu = r > 0 ? hf[i - w] : z, yd = r < h - 1 ? hf[i + w] : z;
+      let gx = (xr - xl) / (d * (c > 0 && c < w - 1 ? 1 : 0.5)), gy = (yu - yd) / (d * (r > 0 && r < h - 1 ? 1 : 0.5));   // up is +y on the map
+      if (gx !== gx) gx = 0;
+      if (gy !== gy) gy = 0;
+      const n = Math.sqrt(gx * gx + gy * gy + 1);
+      let lit = 0;
+      for (let q = 0; q < 4; q++) lit += Math.max(0, (-gx * TOPO_LIGHTS[q][0] - gy * TOPO_LIGHTS[q][1] + TOPO_LZ) / n);
+      lit /= 4;
+      const col = topoColour(0.5 + (lit - TOPO_LZ) * TOPO_CONTRAST, (z - range.lo) * inv);
+      img[o] = col[0]; img[o + 1] = col[1]; img[o + 2] = col[2]; img[o + 3] = 255;
+    }
+  }
+}
+
+// ---------- the Sun and the Earth on the map plane ----------
+
+// A direction in the Moon-fixed frame (unit vector `dir`; `rangeKm` for a body that is not at infinity) seen
+// from the point (xKm, yKm) of the map: its elevation, and the unit vector (dx, dy) of its horizontal
+// direction on the map (the projection is conformal, so angles hold). (dx, dy) is (0, 0) at the zenith.
+function bodyDirection(dir, xKm, yKm, rangeKm = Infinity) {
+  const { latDeg, lonDeg } = fromXY(xKm, yKm);
+  return bodyDirectionAt(dir, latDeg * RAD, lonDeg * RAD, rangeKm);
+}
+function bodyDirectionAt(dir, phi, lam, rangeKm) {
+  const sp = Math.sin(phi), cp = Math.cos(phi), sl = Math.sin(lam), cl = Math.cos(lam);
+  let vx = dir[0], vy = dir[1], vz = dir[2];
+  if (Number.isFinite(rangeKm)) { vx = vx * rangeKm - R_KM * cp * cl; vy = vy * rangeKm - R_KM * cp * sl; vz = vz * rangeKm - R_KM * sp; }
+  const len = Math.hypot(vx, vy, vz);
+  vx /= len; vy /= len; vz /= len;
+  const up = cp * cl * vx + cp * sl * vy + sp * vz;
+  const east = -sl * vx + cl * vy;
+  const north = -sp * cl * vx - sp * sl * vy + cp * vz;
+  const hm = Math.hypot(east, north);
+  const elDeg = Math.asin(Math.max(-1, Math.min(1, up))) / RAD;
+  if (hm < 1e-9) return { elDeg, dx: 0, dy: 0, up };
+  // east on the map is (cos λ, −sin λ), north (away from the pole) is (sin λ, cos λ)
+  return { elDeg, dx: (east * cl + north * sl) / hm, dy: (-east * sl + north * cl) / hm, up };
+}
+
+// ---------- cast shadows ----------
+
+// Is the ground at (x, y) km, height h0 m, in the shadow of terrain towards the Sun? The ray runs over the map
+// in the unit direction (dx, dy) and rises by tanEl; `sample(xKm, yKm)` gives heights in metres (NaN: no data).
+// Steps start at step0 km and grow by 10 % of the distance (at least step0) out to maxKm. The ground curves
+// away by d²/2R, so a point d km out sits that much lower than the local plane.
+function shadowed(sample, x, y, h0, dx, dy, tanEl, { maxKm = 40, step0 = 0.02 } = {}) {
+  let d = step0;
+  while (d <= maxKm) {
+    const z = sample(x + dx * d, y + dy * d);
+    if (z === z && z - (d * d * 1000) / (2 * R_KM) > h0 + d * 1000 * tanEl) return true;
+    d += Math.max(step0, 0.1 * d);
+  }
+  return false;
+}
+
+// Brightness 0–255 of the Sun-lit relief into out (width × height bytes), for rows r0 … r0 + rows − 1.
+// `sun` is the Sun's unit vector in the Moon-fixed frame; `sample` as in shadowed(). Each pixel takes its own
+// local up from its latitude and longitude, so the Sun's elevation and bearing change over a wide view.
+// Lambert shading from the slope of hf, zero where the ground is in shadow or the Sun is below the horizon;
+// `gain` is the exposure (see exposureFor). `stride` > 1 computes one pixel in a stride × stride block and
+// repeats it (the quick first pass). Where the ground is dark, a little (AMBIENT) stays so that the
+// relief can still be told apart from missing data; Earthshine is not modelled.
+const AMBIENT = 8;
+function lightBand(hf, w, h, g, sun, sample, gain, out, r0, rows, stride = 1, opts = {}) {
+  const k = g.kmPerPx, halfW = (w * k) / 2, halfH = (h * k) / 2, d = 2 * k * 1000;
+  const maxKm = opts.maxKm ?? 40, step0 = Math.max(opts.step0 ?? 0, k, 0.005);
+  const rEnd = Math.min(h, r0 + rows);
+  for (let r = r0; r < rEnd; r += stride) {
+    const y = g.cy + halfH - (r + 0.5) * k;
+    for (let c = 0; c < w; c += stride) {
+      const i = r * w + c;
+      let v = AMBIENT;
+      const z = hf[i];
+      if (z === z) {
+        const x = g.cx - halfW + (c + 0.5) * k;
+        const { latDeg, lonDeg } = fromXY(x, y);
+        const sd = bodyDirectionAt(sun, latDeg * RAD, lonDeg * RAD, Infinity);
+        if (sd.up > 0) {
+          const xl = c > 0 ? hf[i - 1] : z, xr = c < w - 1 ? hf[i + 1] : z, yu = r > 0 ? hf[i - w] : z, yd = r < h - 1 ? hf[i + w] : z;
+          let gx = (xr - xl) / (d * (c > 0 && c < w - 1 ? 1 : 0.5)), gy = (yu - yd) / (d * (r > 0 && r < h - 1 ? 1 : 0.5));
+          if (gx !== gx) gx = 0;
+          if (gy !== gy) gy = 0;
+          const ce = Math.sqrt(Math.max(0, 1 - sd.up * sd.up));
+          const lit = (-gx * ce * sd.dx - gy * ce * sd.dy + sd.up) / Math.sqrt(gx * gx + gy * gy + 1);
+          if (lit > 0 && !shadowed(sample, x, y, z, sd.dx, sd.dy, sd.up / ce, { maxKm, step0 })) {
+            v = AMBIENT + (255 - AMBIENT) * Math.pow(Math.min(1, lit * gain), 0.75);
+          }
+        }
+      }
+      if (stride === 1) { out[i] = v; continue; }
+      for (let rr = r; rr < Math.min(rEnd, r + stride); rr++) for (let cc = c; cc < Math.min(w, c + stride); cc++) out[rr * w + cc] = v;
+    }
+  }
+}
+
+// Exposure for the view: flat ground in full Sun reads mid-grey; with the Sun lower than 15° the gain stops
+// growing, so a Sun a degree above the horizon gives dark ground and bright slopes facing it.
+function exposureFor(sunElDeg) {
+  return 0.6 / Math.max(Math.sin(sunElDeg * RAD), Math.sin(15 * RAD));
+}
+
+// ---------- contour lines ----------
+
+// 1, 2 or 5 × 10ⁿ metres: the interval whose lines fall about targetPx apart where the ground changes by
+// gradMPerPx metres per pixel (the view's typical slope).
+function contourInterval(gradMPerPx, targetPx = 16) {
+  if (!(gradMPerPx > 0)) return 1;
+  const want = gradMPerPx * targetPx;
+  const p = Math.pow(10, Math.floor(Math.log10(want)));
+  let best = p, bestErr = Infinity;
+  for (const m of [1, 2, 5, 10]) {
+    const e = Math.abs(Math.log(m * p / want));
+    if (e < bestErr) { bestErr = e; best = m * p; }
+  }
+  return Math.max(1, best);
+}
+
+// Marching squares over the nodes of hf every `step` pixels. → { segs: Float32Array [x0, y0, x1, y1, …] in hf
+// pixel coordinates (node k at k·step + 0.5), level: Int32Array (the segment's line number: its height is
+// level × interval) }. Cells with a missing corner are skipped.
+const CASES = [[], [[3, 0]], [[0, 1]], [[3, 1]], [[1, 2]], [[3, 0], [1, 2]], [[0, 2]], [[3, 2]], [[2, 3]], [[0, 2]], [[0, 1], [2, 3]], [[1, 2]], [[3, 1]], [[0, 1]], [[3, 0]], []];
+// edges: 0 top (v0–v1), 1 right (v1–v2), 2 bottom (v3–v2), 3 left (v0–v3); case bits: v0 = 1, v1 = 2, v2 = 4, v3 = 8
+function contourSegments(hf, w, h, step, interval) {
+  const nx = Math.floor((w - 1) / step), ny = Math.floor((h - 1) / step);
+  const segs = [], levels = [];
+  const v = new Float64Array(4);
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const x0 = i * step, y0 = j * step, x1 = x0 + step, y1 = y0 + step;
+      v[0] = hf[y0 * w + x0]; v[1] = hf[y0 * w + x1]; v[2] = hf[y1 * w + x1]; v[3] = hf[y1 * w + x0];
+      if (v[0] !== v[0] || v[1] !== v[1] || v[2] !== v[2] || v[3] !== v[3]) continue;
+      const lo = Math.min(v[0], v[1], v[2], v[3]), hi = Math.max(v[0], v[1], v[2], v[3]);
+      if (lo === hi) continue;
+      const mean = (v[0] + v[1] + v[2] + v[3]) / 4;
+      for (let k = Math.floor(lo / interval) + 1; k * interval <= hi; k++) {
+        const L = k * interval;
+        let cs = (v[0] >= L ? 1 : 0) | (v[1] >= L ? 2 : 0) | (v[2] >= L ? 4 : 0) | (v[3] >= L ? 8 : 0);
+        if (cs === 0 || cs === 15) continue;
+        let pairs = CASES[cs];
+        // a saddle: the centre decides which two corners stay joined
+        if (cs === 5) pairs = mean >= L ? [[3, 2], [0, 1]] : [[3, 0], [1, 2]];
+        else if (cs === 10) pairs = mean >= L ? [[3, 0], [1, 2]] : [[0, 1], [3, 2]];
+        for (const [a, b] of pairs) {
+          const pa = edgePoint(a, v, L, x0, y0, x1, y1), pb = edgePoint(b, v, L, x0, y0, x1, y1);
+          segs.push(pa[0] + 0.5, pa[1] + 0.5, pb[0] + 0.5, pb[1] + 0.5);
+          levels.push(k);
+        }
+      }
+    }
+  }
+  return { segs: Float32Array.from(segs), level: Int32Array.from(levels) };
+}
+function edgePoint(e, v, L, x0, y0, x1, y1) {
+  const f = (a, b) => (b === a ? 0.5 : (L - a) / (b - a));
+  if (e === 0) return [x0 + (x1 - x0) * f(v[0], v[1]), y0];
+  if (e === 1) return [x1, y0 + (y1 - y0) * f(v[1], v[2])];
+  if (e === 2) return [x0 + (x1 - x0) * f(v[3], v[2]), y1];
+  return [x0, y0 + (y1 - y0) * f(v[0], v[3])];
+}
+
+// Joins the segments into polylines (neighbouring cells compute the same point on their shared edge, so the
+// ends match exactly): { pts: Float32Array [x, y, …], start: Int32Array (line k is points start[k] … start[k+1] − 1),
+// level: Int32Array }. A long polyline costs far less to stroke than the same line as thousands of short pieces.
+function contourLines({ segs, level }) {
+  const n = level.length;
+  const key = (x, y) => Math.round(x * 256) * 4194304 + Math.round(y * 256);
+  const at = new Map();   // point → the segments that end there (at most two)
+  for (let s = 0; s < n; s++) {
+    for (const e of [0, 2]) {
+      const k = key(segs[4 * s + e], segs[4 * s + e + 1]);
+      const l = at.get(k);
+      if (l) l.push(s); else at.set(k, [s]);
+    }
+  }
+  const used = new Uint8Array(n);
+  const pts = [], start = [0], lv = [];
+  const other = (s, k) => (key(segs[4 * s], segs[4 * s + 1]) === k ? 2 : 0);   // the offset of the end of s that is not at k
+  const next = (s, k) => { const l = at.get(k); if (!l) return -1; for (const t of l) if (t !== s && !used[t] && level[t] === level[s]) return t; return -1; };
+  for (let s0 = 0; s0 < n; s0++) {
+    if (used[s0]) continue;
+    // walk back to one end of the chain (or all the way round a loop), then forward
+    let s = s0, k = key(segs[4 * s], segs[4 * s + 1]);
+    for (let guard = 0; guard < n; guard++) {
+      const t = next(s, k);
+      if (t < 0 || t === s0) break;
+      const o = other(t, k);   // the far end of t from the shared point is where we go on from
+      k = key(segs[4 * t + o], segs[4 * t + o + 1]);
+      s = t;
+      if (s === s0) break;
+    }
+    // k is the point at the free end; s the segment there. Now walk from it.
+    let cur = s, from = k;
+    let e0 = other(cur, from) === 2 ? 0 : 2;   // offset of the end at `from`
+    pts.push(segs[4 * cur + e0], segs[4 * cur + e0 + 1]);
+    for (let guard = 0; guard <= n; guard++) {
+      used[cur] = 1;
+      const far = other(cur, from);
+      pts.push(segs[4 * cur + far], segs[4 * cur + far + 1]);
+      from = key(segs[4 * cur + far], segs[4 * cur + far + 1]);
+      const t = next(cur, from);
+      if (t < 0) break;
+      cur = t;
+    }
+    start.push(pts.length / 2);
+    lv.push(level[s0]);
+  }
+  return { pts: Float32Array.from(pts), start: Int32Array.from(start), level: Int32Array.from(lv) };
+}
+
+// Label spots on every fifth line: at most one per gapPx × gapPx neighbourhood, away from the edges, turned
+// along the line (from the gradient of hf, so it does not jitter with the short segments). In hf pixels.
+function contourLabels(contours, hf, w, h, interval, { gapPx = 120, margin = 24, max = 60 } = {}) {
+  const { segs, level } = contours;
+  const out = [];
+  const taken = [];
+  for (let s = 0; s < level.length && out.length < max; s++) {
+    if (level[s] % 5 !== 0) continue;
+    const x = (segs[4 * s] + segs[4 * s + 2]) / 2, y = (segs[4 * s + 1] + segs[4 * s + 3]) / 2;
+    if (x < margin || y < margin || x > w - margin || y > h - margin) continue;
+    if (taken.some((t) => Math.abs(t[0] - x) < gapPx && Math.abs(t[1] - y) < gapPx)) continue;
+    const ci = Math.min(w - 2, Math.max(1, Math.round(x - 0.5))), ri = Math.min(h - 2, Math.max(1, Math.round(y - 0.5)));
+    const i = ri * w + ci;
+    const gx = hf[i + 1] - hf[i - 1], gy = hf[i + w] - hf[i - w];
+    if (!(Math.hypot(gx, gy) > 0)) continue;
+    let angle = Math.atan2(gx, -gy);   // along the line in canvas coordinates (y down)
+    if (Math.cos(angle) < 0) angle += Math.PI;
+    taken.push([x, y]);
+    out.push({ x, y, angle, text: heightLabel(level[s] * interval) });
+  }
+  return out;
+}
+function heightLabel(m) {
+  const v = Math.round(m);
+  return `${v < 0 ? '−' : ''}${Math.abs(v)}`;
+}
+
+return { TERRAIN_STYLES, heightBand, heightRange, typicalGradient, TINT, tintAt, TOPO_CONTRAST, topoColour, topoBand, bodyDirection, shadowed, AMBIENT, lightBand, exposureFor, contourInterval, contourSegments, contourLines, contourLabels, heightLabel };
+})();
 __m['ui/mapframe.js'] = (() => {
 // The map frame (task book phase 3 §4.1, §4.5, §4.6): canvas (hillshade and heat), the annotation SVG,
 // the shapes SVG, the hover card and the loading line. Handles the viewport (wheel, drag, pinch, keys),
@@ -10194,6 +10599,7 @@ const { findSnap, SNAP_RADIUS_PX } = __m['map/snap.js'];
 const { initialDraw, drawReduce, closeTarget } = __m['map/draw.js'];
 const { clampView, viewHalfKm, MIN_ZOOM, MAX_ZOOM, toPx: toPxView } = __m['map/view.js'];
 const { toXY, fromXY, MAP_HALF_KM } = __m['terrain.js'];
+const { heightBand, heightRange, typicalGradient, topoBand, lightBand, exposureFor, bodyDirection, contourInterval, contourSegments, contourLines, contourLabels } = __m['map/terrain-style.js'];
 
 const R80 = 2 * 1737.4 * Math.tan((5 * Math.PI) / 180);   // radius of the 80°S circle, km
 const DRAG_PX = 4;              // a press that moves less than this is a click
@@ -10203,6 +10609,13 @@ const CROSSES = 'This outline crosses itself. Draw it again without crossing.';
 const round4 = (v) => Math.round(v * 1e4) / 1e4;
 const sameView = (a, b) => a && b && a.cx === b.cx && a.cy === b.cy && a.zoom === b.zoom;
 const isFull = (v) => v.zoom === 1 && v.cx === 0 && v.cy === 0;
+const HEAT_ON_TERRAIN = 0.35;    // the heat colours over Topo and Real light
+const CONTOUR_INK = {            // contour lines per terrain style: minor, index, label halo, label text
+  data: ['rgba(255,255,255,0.24)', 'rgba(255,255,255,0.6)', 'rgba(0,0,0,0.75)', '#ffffff'],
+  topo: ['rgba(74,46,24,0.5)', 'rgba(58,32,14,0.9)', 'rgba(236,224,196,0.9)', '#3a200c'],
+  real: ['rgba(255,196,130,0.38)', 'rgba(255,206,150,0.85)', 'rgba(0,0,0,0.8)', '#ffe2bd'],
+};
+const degText = (v) => `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}°`;
 
 function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
   const canvas = h('canvas', { class: 'map-canvas', 'aria-hidden': 'true' });
@@ -10226,10 +10639,12 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
   const ui = { tl: slot('tl'), tc: slot('tc'), bl: slot('bl'), br: slot('br') };
   ui.tc.append(loading);
   const uiLayer = h('div', { class: 'map-ui' }, ui.tl, ui.tc, ui.bl, ui.br, wheelHint);
+  // the Sun and Earth directions at the view centre (terrain-style.js bodyDirection), drawn in a box around it
+  const sky = s('svg', { class: 'map-sky', 'aria-hidden': 'true', width: 260, height: 260, viewBox: '-130 -130 260 260' });
   const el = h('div', {
     class: 'map-frame', tabindex: '0', role: 'group', 'aria-roledescription': 'map', 'data-tour': 'map',
     'aria-label': 'South pole map. Arrow keys move the crosshair, Shift with an arrow moves five cells, Enter picks the point or places a vertex. Plus and minus zoom, 0 resets.',
-  }, uiLayer, canvas, liveCanvas, overlay, shapesSvg, progress, empty);
+  }, uiLayer, canvas, liveCanvas, overlay, shapesSvg, sky, progress, empty);
   const hoverId = 'lsn-map-hover';
   const hover = createHoverCard(el, { id: hoverId });
   const shapes = createShapesLayer(shapesG, { onBest: (slot) => cb.onRegionBest(slot) });
@@ -10254,6 +10669,14 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
   let lowCanvas = null;            // big layout, during a gesture: the frame painted at 1× and scaled up
   let refine = null;               // big layout: the full-resolution hillshade being built in slices
   let gestureEndAt = 0;
+  // terrain styles (Topo, Real light, contours): the height field of the view and what is drawn from it
+  let ts = { style: 'data', contours: false, arrows: true };
+  let terr = null;                 // { key, view, sref, hs, w, h, g, hf, ready, range, interval, topo, real, contour }
+  let terrJob = null;              // the slices that build it, or the Sun's light on it
+  let lightJob = null;
+  let light = null;                // { tMs, sun, earth, earthRangeKm }: the playhead's Sun and Earth
+  let lightTimer = 0, lightAt = 0;
+  let shownPic = null, shownContour = null;   // the last pictures on screen, kept while the next ones are built
   let colours = null;
   let draw = initialDraw('select');
   let snap = null;                 // { target, px, py }
@@ -10350,8 +10773,8 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
   function drawLive() {
     const ctx = liveCanvas.getContext('2d');
     ctx.clearRect(0, 0, liveCanvas.width, liveCanvas.height);
-    el.dataset.live = live.on && live.states ? 'on' : 'off';
-    if (!live.on || !live.states || !p || p.emptyText) return;
+    el.dataset.live = live.on && live.states && ts.style !== 'real' ? 'on' : 'off';
+    if (!live.on || !live.states || !p || p.emptyText || ts.style === 'real') return;   // Real light shows the Sun itself
     const g = coarseGrid, k = kpp(view);
     ctx.save();
     const [cx, cy] = toPxR(view, 0, 0);
@@ -10446,6 +10869,226 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     job.raf = requestAnimationFrame(step);
   }
 
+  // ---------- terrain styles (map/terrain-style.js) ----------
+  // Topo, Real light and the contour lines are drawn from a height field of the view (heights per pixel), built
+  // in slices over the next frames so input never waits on it; until a picture is ready the plain hillshade
+  // shows. The picture is made after a gesture settles, never during one (the last one is moved and scaled
+  // like the base). Topo is full device resolution; Real light and contours use half of it.
+  function* sliced(n, perSlice, fn) {
+    for (let r = 0; r < n; r += perSlice) { fn(r, Math.min(perSlice, n - r)); yield; }
+  }
+  function runJob(job, onDone) {
+    const step = () => {
+      if (job.dead) return;
+      const until = performance.now() + 18;
+      for (;;) {
+        const r = job.gen.next();
+        if (r.done) { onDone?.(); return; }
+        if (performance.now() >= until) break;
+      }
+      job.raf = requestAnimationFrame(step);
+    };
+    job.raf = requestAnimationFrame(step);
+  }
+  function killJob(job) { if (job) { job.dead = true; cancelAnimationFrame(job.raf); } }
+
+  function reportTerrain() {
+    const t = terr;
+    cb.onTerrain?.({
+      style: ts.style, contours: ts.contours,
+      working: !!t && !t.ready,
+      range: t?.ready && ts.style === 'topo' ? t.range : null,
+      interval: t?.ready && ts.contours ? t.interval : null,
+    });
+  }
+
+  function stopTerrain() {
+    killJob(terrJob); killJob(lightJob); terrJob = lightJob = null;
+    clearTimeout(lightTimer);
+    terr = null; shownPic = null; shownContour = null;
+    reportTerrain();
+  }
+
+  function ensureTerrain() {
+    if (!p || !geo.W || !pyramid) return;
+    if (ts.style === 'data' && !ts.contours) { if (terr || terrJob) stopTerrain(); return; }
+    const hs = ts.style === 'topo' ? 1 : 0.5;
+    const dem = pyramid.pick(kpp(view) / (geo.dpr * hs), boundsR(view));
+    if (!dem) return;
+    const key = `${view.cx}|${view.cy}|${view.zoom}|${geo.W}x${geo.H}@${geo.dpr}|${geo.Sref}|${dem.kmPerPixel}|${pyramid.version ?? 0}|${hs}`;
+    if (terr?.key === key) { if (terr.ready && afterHeights(terr)) paint(); return; }
+    killJob(terrJob); killJob(lightJob); lightJob = null;
+    const w = Math.max(3, Math.round(geo.W * geo.dpr * hs)), hgt = Math.max(3, Math.round(geo.H * geo.dpr * hs));
+    const k0 = kpp(view);
+    const t = {
+      key, view: { ...view }, sref: geo.Sref, hs, w, h: hgt, dem, hf: new Float32Array(w * hgt), ready: false,
+      g: { width: w, height: hgt, kmPerPx: k0 / (geo.dpr * hs), cx: view.cx + (geo.W / 2 - geo.Cx) * k0, cy: view.cy - (geo.H / 2 - geo.Cy) * k0 },
+      range: null, interval: 1, topo: null, real: null, contour: null, t0: performance.now(),
+    };
+    terr = t;
+    const job = { dead: false, raf: 0 };
+    terrJob = job;
+    job.gen = (function* () {
+      yield* sliced(hgt, Math.max(8, Math.floor(70000 / w)), (r, n) => heightBand(dem, t.hf, t.g, r, n));
+      t.range = heightRange(t.hf);
+      t.interval = contourInterval(typicalGradient(t.hf, w, hgt) * geo.dpr * hs, 16);   // metres per CSS px × 16 px
+      yield;
+      if (ts.style === 'topo' && t.range) {
+        const img = new Uint8ClampedArray(w * hgt * 4);
+        yield* sliced(hgt, Math.max(8, Math.floor(120000 / w)), (r, n) => topoBand(t.hf, w, hgt, t.g.kmPerPx, t.range, img, r, n));
+        const c = new OffscreenCanvas(w, hgt);
+        c.getContext('2d').putImageData(new ImageData(img, w, hgt), 0, 0);
+        t.topo = { canvas: c };
+      }
+    })();
+    reportTerrain();
+    runJob(job, () => {
+      t.ready = true;
+      terrJob = null;
+      el.dataset.terrainMs = String(Math.round(performance.now() - t.t0));
+      afterHeights(t);
+      reportTerrain();
+      paint();
+    });
+  }
+
+  // the height field is ready: contours for it, and the Sun's light
+  function afterHeights(t) {
+    let changed = false;
+    if (ts.contours && (!t.contour || t.contour.style !== ts.style)) { buildContours(t); changed = true; }
+    if (ts.style === 'real') startLight();
+    return changed;
+  }
+
+  function buildContours(t) {
+    const { w, h: hgt, hs, hf, interval } = t;
+    if (!t.contour || t.contour.interval !== interval) {
+      const dpr = geo.dpr;
+      const segs = contourSegments(hf, w, hgt, hs >= 1 ? 2 : 1, interval);
+      const labels = contourLabels(segs, hf, w, hgt, interval, { gapPx: 170 * dpr * hs, margin: 28 * dpr * hs });
+      t.contour = { segs, labels, interval, style: null, canvas: null };
+    }
+    const c = t.contour, { segs, labels } = c;
+    const dpr = geo.dpr, sc = 1 / hs;
+    const cv = new OffscreenCanvas(Math.round(geo.W * dpr), Math.round(geo.H * dpr));
+    const cx = cv.getContext('2d');
+    const [minor, index, halo, ink] = CONTOUR_INK[ts.style];
+    const lines = c.lines ??= contourLines(segs);
+    cx.lineJoin = 'round';
+    for (const isIndex of [false, true]) {
+      cx.beginPath();
+      for (let i = 0; i < lines.level.length; i++) {
+        if ((lines.level[i] % 5 === 0) !== isIndex) continue;
+        const a = lines.start[i], b = lines.start[i + 1];
+        cx.moveTo(lines.pts[2 * a] * sc, lines.pts[2 * a + 1] * sc);
+        for (let q = a + 1; q < b; q++) cx.lineTo(lines.pts[2 * q] * sc, lines.pts[2 * q + 1] * sc);
+      }
+      cx.lineWidth = (isIndex ? 1.6 : 0.9) * dpr;
+      cx.strokeStyle = isIndex ? index : minor;
+      cx.stroke();
+    }
+    cx.font = `500 ${Math.round(11 * dpr)}px system-ui, sans-serif`;
+    cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.lineJoin = 'round';
+    for (const l of labels) {
+      cx.save();
+      cx.translate(l.x * sc, l.y * sc);
+      cx.rotate(l.angle);
+      cx.lineWidth = 3.5 * dpr; cx.strokeStyle = halo; cx.strokeText(l.text, 0, 0);
+      cx.fillStyle = ink; cx.fillText(l.text, 0, 0);
+      cx.restore();
+    }
+    cx.getImageData(0, 0, 1, 1);   // the browser draws lazily; do it now, not in the middle of a pan
+    c.canvas = cv; c.style = ts.style;
+  }
+
+  // Real light: the Sun's light and cast shadows on the height field, a quick pass at a quarter of its
+  // resolution first, then the full one
+  function startLight() {
+    const t = terr;
+    if (ts.style !== 'real' || !t?.ready || !light) return;
+    const sunKey = light.sun.map((v) => v.toFixed(5)).join(',');
+    if (t.real?.sunKey === sunKey && t.real.done) return;
+    killJob(lightJob);
+    const { w, h: hgt, hf, g, dem } = t;
+    const real = t.real ??= { out: new Uint8ClampedArray(w * hgt), rgba: new Uint8ClampedArray(w * hgt * 4), canvas: new OffscreenCanvas(w, hgt), sunKey: '', done: false };
+    real.done = false;
+    const sample = dem.sample ?? ((x, y) => { const v = dem.heightAtXY(x, y); return v === null ? NaN : v; });
+    const sun = light.sun;
+    const gain = exposureFor(bodyDirection(sun, view.cx, view.cy).elDeg);
+    const job = { dead: false, raf: 0 };
+    lightJob = job;
+    const show = () => {
+      const o = real.out, d = real.rgba;
+      for (let i = 0, j = 0; i < o.length; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = o[i]; d[j + 3] = 255; }
+      real.canvas.getContext('2d').putImageData(new ImageData(d, w, hgt), 0, 0);
+    };
+    const t0 = performance.now();
+    job.gen = (function* () {
+      let rows = 8;
+      for (const stride of [4, 1]) {
+        for (let r = 0; r < hgt;) {
+          const t1 = performance.now();
+          const n = Math.min(rows, hgt - r);
+          lightBand(hf, w, hgt, g, sun, sample, gain, real.out, r, n, stride);
+          r += n;
+          const dt = performance.now() - t1;
+          rows = Math.max(4, Math.min(160, Math.round((rows * 16) / Math.max(1, dt) / 4) * 4));
+          yield;
+        }
+        show();
+        if (stride === 4) { real.sunKey = sunKey; paint(); }
+      }
+    })();
+    runJob(job, () => {
+      lightJob = null;
+      real.done = true; real.sunKey = sunKey;
+      el.dataset.lightMs = String(Math.round(performance.now() - t0));
+      paint();
+    });
+  }
+
+  function styledPicture() {
+    if (ts.style === 'data') return null;
+    const t = terr;
+    const c = t && (ts.style === 'topo' ? t.topo : t.real);
+    if (c?.canvas && (ts.style === 'topo' || t.real.sunKey)) shownPic = { canvas: c.canvas, view: t.view, sref: t.sref, kind: ts.style };
+    return shownPic?.kind === ts.style ? shownPic : null;
+  }
+  function contourPicture() {
+    const c = terr?.contour;
+    if (c?.canvas && c.style === ts.style) shownContour = { canvas: c.canvas, view: terr.view, sref: terr.sref };
+    return shownContour;
+  }
+
+  // ---------- the Sun and Earth at the view centre ----------
+  function drawSky() {
+    clear(sky);
+    const on = ts.arrows && light && p && !p.emptyText && geo.W;
+    sky.style.display = on ? '' : 'none';
+    if (!on) return;
+    sky.style.left = `${geo.Cx - 130}px`; sky.style.top = `${geo.Cy - 130}px`;
+    const arrow = (cls, d, len, label, drop = 0) => {
+      if (!(Math.abs(d.dx) + Math.abs(d.dy) > 0)) return;
+      const x = d.dx * len, y = -d.dy * len, a = Math.atan2(y, x), hd = 8;
+      const side = x >= 0 ? 1 : -1;
+      sky.append(
+        s('line', { class: `sky-line ${cls}`, x1: 0, y1: 0, x2: x - Math.cos(a) * hd * 0.6, y2: y - Math.sin(a) * hd * 0.6 }),
+        s('path', { class: `sky-head ${cls}`, d: `M${x} ${y}L${x - Math.cos(a - 0.4) * hd} ${y - Math.sin(a - 0.4) * hd}L${x - Math.cos(a + 0.4) * hd} ${y - Math.sin(a + 0.4) * hd}Z` }),
+        s('text', { class: `sky-text ${cls}`, x: x + side * 8, y: y + 4 + drop, 'text-anchor': side > 0 ? 'start' : 'end' }, label));
+    };
+    const sd = bodyDirection(light.sun, view.cx, view.cy), ed = bodyDirection(light.earth, view.cx, view.cy, light.earthRangeKm);
+    sky.append(s('circle', { class: 'sky-dot', r: 3 }));
+    if (ts.style === 'real' && sd.elDeg > 0) {
+      const sh = { dx: -sd.dx, dy: -sd.dy };
+      const x = sh.dx * 44, y = -sh.dy * 44;
+      sky.append(s('line', { class: 'sky-line sky-shadow', x1: 0, y1: 0, x2: x, y2: y }), s('text', { class: 'sky-text sky-shadow', x: x + (x >= 0 ? 6 : -6), y: y + 4, 'text-anchor': x >= 0 ? 'start' : 'end' }, 'Shadows'));
+    }
+    arrow('sky-sun', sd, 78, `Sun el ${degText(sd.elDeg)}`);
+    // the Earth's label drops below its tip when the two tips are close, so the labels do not overlap
+    arrow('sky-earth', ed, 62, `Earth el ${degText(ed.elDeg)}`, Math.hypot(sd.dx * 78 - ed.dx * 62, sd.dy * 78 - ed.dy * 62) < 40 ? 15 : 0);
+    sky.append(s('text', { class: 'sky-note', x: 0, y: 20, 'text-anchor': 'middle' }, 'view centre'));
+  }
+
   // ---------- painting ----------
   // All painting is in device px of the canvas being drawn: rs per CSS px.
   function clipToMap(ctx) {
@@ -10457,17 +11100,22 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
 
   function drawBase(ctx) {
     if (!base) return;
-    if (sameView(baseView, view) && baseGeo?.Sref === geo.Sref) {
-      if (base.width === Math.round(geo.W * rs)) ctx.drawImage(base, 0, 0);
-      else { ctx.imageSmoothingEnabled = true; ctx.drawImage(base, 0, 0, geo.W * rs, geo.H * rs); }
+    drawLayerImage(ctx, base, baseView, baseGeo?.Sref);
+  }
+
+  // A picture made for the view `iv` (frame side `sref`), drawn for the live view.
+  function drawLayerImage(ctx, img, iv, sref) {
+    if (sameView(iv, view) && sref === geo.Sref) {
+      if (img.width === Math.round(geo.W * rs)) ctx.drawImage(img, 0, 0);
+      else { ctx.imageSmoothingEnabled = true; ctx.drawImage(img, 0, 0, geo.W * rs, geo.H * rs); }
       return;
     }
-    // during a gesture: the last hillshade, scaled and moved to the live viewport (CSS px, then × rs)
-    const kb = kpp(baseView), k = kpp(view), sc = kb / k;
-    const dx = geo.Cx + (baseView.cx - view.cx) / k - geo.Cx * sc;
-    const dy = geo.Cy - (baseView.cy - view.cy) / k - geo.Cy * sc;
+    // during a gesture: the last picture, scaled and moved to the live viewport (CSS px, then × rs)
+    const kb = kpp(iv), k = kpp(view), sc = kb / k;
+    const dx = geo.Cx + (iv.cx - view.cx) / k - geo.Cx * sc;
+    const dy = geo.Cy - (iv.cy - view.cy) / k - geo.Cy * sc;
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(base, dx * rs, dy * rs, geo.W * sc * rs, geo.H * sc * rs);
+    ctx.drawImage(img, dx * rs, dy * rs, geo.W * sc * rs, geo.H * sc * rs);
   }
 
   function layerArgs(l, mode) {
@@ -10625,21 +11273,28 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     ctx.save();
     clipToMap(ctx);
     drawBase(ctx);
+    // Topo and Real light: the styled terrain over the plain hillshade (which stays under it while the picture
+    // is built), the heat colours translucent on top
+    const pic = styledPicture();
+    if (pic) drawLayerImage(ctx, pic.canvas, pic.view, pic.sref);
     if (!p.emptyText) {
       const t = reliefAmount();
-      if (t === 0) paintLayers(ctx);
+      if (t === 0 && !pic) paintLayers(ctx);
       else {
         if (!heatAll || heatAll.width !== wd || heatAll.height !== hd) heatAll = new OffscreenCanvas(wd, hd);
         const hctx = heatAll.getContext('2d', { willReadFrequently: true });
         hctx.clearRect(0, 0, wd, hd);
         paintLayers(hctx);
         const style = globalThis.__lsnHeatStyle;   // 'alpha' and 'flat' exist only for the comparison shots in G.md
-        if (style === 'alpha') ctx.globalAlpha = 1 - 0.4 * t;
+        if (pic) ctx.globalAlpha = HEAT_ON_TERRAIN;
+        else if (style === 'alpha') ctx.globalAlpha = 1 - 0.4 * t;
         else if (style !== 'flat') shadeHeat(hctx, t);
         ctx.drawImage(heatAll, 0, 0);
         ctx.globalAlpha = 1;
       }
     }
+    const cpic = ts.contours ? contourPicture() : null;
+    if (cpic) drawLayerImage(ctx, cpic.canvas, cpic.view, cpic.sref);
     if (p.psrLayer) drawPsr(ctx);
     el.dataset.psr = p.psrLayer ? 'on' : 'off';
     ctx.restore();
@@ -10688,6 +11343,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
       cursorCell: null, onSite: (site) => { if (p.tool === 'select') cb.onPick({ site }); },
       view: narrowFull ? undefined : sqView(view), avoid,
     }));
+    drawSky();
     cb.onScale?.(kpp(view));
     // zoomed in, graticule lines and circles reach far past the frame; at zoom 1 nothing does
     overlay.style.overflow = narrowFull ? '' : 'hidden';
@@ -10773,6 +11429,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     // dpr > 1 this is the draft; data-sharp says when the full resolution is in)
     if (ensureBase()) paint();
     else paint();
+    ensureTerrain();
     el.dataset.redrawMs = String(Math.round(performance.now() - t0));
   }
 
@@ -11093,7 +11750,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     loading.hidden = !params.loading;
     loading.textContent = params.loading ?? '';
     measure();
-    if (!gesture) ensureBase();
+    if (!gesture) { ensureBase(); ensureTerrain(); }
     frameUpdate(params);
     drawLive();
     drawOverlay();
@@ -11119,7 +11776,25 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     frameUpdate,
     redrawShapes(params) { p = { ...p, ...params }; drawShapes(); },
     redrawOverlay(params) { p = { ...p, ...params }; drawOverlay(); },
-    resize() { if (measure()) { ensureBase(); paint(); drawLive(); drawOverlay(); } },
+    resize() { if (measure()) { ensureBase(); ensureTerrain(); paint(); drawLive(); drawOverlay(); } },
+    // terrain style ('data' | 'topo' | 'real'), contour lines, and the Sun / Earth arrows at the view centre
+    setTerrain(o) {
+      const was = ts;
+      ts = { ...ts, ...o };
+      el.dataset.terrain = ts.style;
+      el.dataset.contours = ts.contours ? 'on' : 'off';
+      if (ts.style !== was.style || ts.contours !== was.contours) { if (geo.W) ensureTerrain(); reportTerrain(); }
+      drawLive(); paint(); drawSky();
+    },
+    // the playhead's Sun and Earth (unit vectors in the Moon-fixed frame, Earth range in km); null when outside the ephemeris
+    setLight(l) {
+      light = l;
+      drawSky();
+      if (ts.style !== 'real' || !terr?.ready || !l) return;
+      clearTimeout(lightTimer);
+      lightTimer = setTimeout(() => { lightAt = performance.now(); startLight(); }, Math.max(0, lightAt + 160 - performance.now()));
+    },
+    get terrain() { return { ...ts }; },
     setLive,
     // T's hand-off 2.2: the canvas caches the palette; a palette change repaints with the new colours
     refreshColours() { colours = null; psrCache = null; paint(); drawOverlay(); },
@@ -11760,6 +12435,8 @@ const { createRouteCard } = __m['ui/routecard.js'];
 const { scaleBarFor } = __m['map/overlay.js'];
 const { DASH } = __m['format.js'];
 const { MAX_ZOOM } = __m['map/view.js'];
+const { TERRAIN_STYLES, TINT } = __m['map/terrain-style.js'];
+const { azEl } = __m['geometry.js'];
 
 // phase 5: 'now' is the Live view (the playhead's light, no window needed); the others add up a mission window
 const MODES = [['now', 'Live'], ['both', 'Both in view'], ['sun', 'Sunlit'], ['earth', 'Earth in view'], ['change', 'Change'], ['score', 'Suitability']];
@@ -11774,6 +12451,8 @@ const SCALE_TIP = 'Polar stereographic map, true to scale at the pole. Near 80°
 // fix L10b: the side panels' open or folded state, for this browser session (default open)
 const PANELS_KEY = 'lsn-panels-v4';
 const BEST_KEY = 'lsn-best-v4';
+const TERRAIN_KEY = 'lsn-terrain-v1';   // terrain style, contours, Sun and Earth readout (this browser, localStorage)
+const RAD = Math.PI / 180;
 const LAYERS_KEY = 'lsn-layers-v5';   // Best cells, site labels, graticule (this browser, localStorage)
 function readStore(key) { try { return sessionStorage.getItem(key); } catch { return null; } }
 function writeStore(key, v) { try { sessionStorage.setItem(key, v); } catch { /* storage off: in memory only */ } }
@@ -11790,6 +12469,28 @@ function fmtHeight(m) {
   if (m === null || m === undefined || !Number.isFinite(m)) return DASH;
   const v = Math.round(m);
   return `${v < 0 ? MINUS : '+'}${heightFmt.format(Math.abs(v))} m`;
+}
+
+// A small schematic of the Moon: its spin axis (vertical, south pole down), the equator, and where the Sun
+// and the Earth stand in latitude, angles drawn five times too large (1.5° would not show).
+function moonSchematic() {
+  const X = 5;
+  const sun = s('g', { class: 'sch-sun' }, s('line', { x1: 0, y1: 0, x2: 0, y2: 0 }), s('circle', { r: 4 }));
+  const earth = s('g', { class: 'sch-earth' }, s('line', { x1: 0, y1: 0, x2: 0, y2: 0 }), s('circle', { r: 3 }));
+  const el = s('svg', { class: 'sun-sch', viewBox: '0 0 84 84', width: 84, height: 84, role: 'img', 'aria-label': 'Schematic: the Sun and the Earth in latitude on the Moon, angles five times too large' },
+    s('line', { class: 'sch-axis', x1: 42, y1: 6, x2: 42, y2: 78 }),
+    s('line', { class: 'sch-eq', x1: 8, y1: 42, x2: 76, y2: 42 }),
+    s('circle', { class: 'sch-moon', cx: 42, cy: 42, r: 20 }),
+    s('text', { class: 'sch-s', x: 42, y: 83, 'text-anchor': 'middle' }, 'S'),
+    sun, earth,
+    s('text', { class: 'sch-x', x: 82, y: 9, 'text-anchor': 'end' }, 'angles ×5'));
+  const place = (g, lat, side, r) => {
+    const a = Math.max(-80, Math.min(80, lat * X)) * RAD, x = 42 + side * r * Math.cos(a), y = 42 - r * Math.sin(a);
+    const [line, dot] = g.children;
+    line.setAttribute('x1', 42 + side * 20 * Math.cos(a)); line.setAttribute('y1', 42 - 20 * Math.sin(a)); line.setAttribute('x2', x); line.setAttribute('y2', y);
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+  };
+  return { el, update(sunLat, earthLat) { place(sun, sunLat, -1, 36); place(earth, earthLat, 1, 36); } };
 }
 
 function seg(labelId, items, onPick) {
@@ -11881,6 +12582,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
     onReadout: (text, fromKeys) => { readout.textContent = text; readout.hidden = !text; if (fromKeys) status.textContent = text; syncStatus(); },
     avoid: () => avoidRects(),
     onScale: (k) => { drawScale(k); cb.onMove?.(); },
+    onTerrain: (info) => setTerrainInfo(info),
   });
   // the frame's corners: the phase 3 layout uses all of them; the big layout keeps the tools and the zoom
   // there and moves the rest into the dock (fix L11)
@@ -11941,6 +12643,94 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const swBest = switchRow('best', 'Best cells', null, flipPref('best'));
   const swLabels = switchRow('labels', 'Site labels', null, flipPref('labels'));
   const swGrat = switchRow('graticule', 'Graticule', null, flipPref('graticule'));
+  // ---------- terrain style, contour lines and the Sun / Earth readout (map/terrain-style.js, mapframe.js) ----------
+  // One frosted chip in the map's bottom-left floats row (main.js adds terrainEl to it): the terrain style, a
+  // contour switch, and under them the height scale of Topo and the contour interval. The Sun and Earth
+  // readout stacks above it; closed, its handle sits in the chip's row. All of it is remembered in this browser.
+  const tp = { style: 'data', contours: false, arrows: true, sun: window.innerWidth >= 1101, ...(readLocal(TERRAIN_KEY) ?? {}) };   // open by default only where the map has room
+  if (!TERRAIN_STYLES.some(([v]) => v === tp.style)) tp.style = 'data';
+  let light = null;                  // { tMs, sun, earth, earthRangeKm } from main.js
+  const saveTerrain = () => writeLocal(TERRAIN_KEY, { ...tp });
+  const swContours = switchRow('contours', 'Contour lines', 'Heights from the terrain under the map; the interval follows the zoom', (on) => setTerrainPref({ contours: on }));
+  const swArrows = switchRow('sunarrows', 'Sun and Earth directions', 'Arrows at the view centre, with their elevations', (on) => setTerrainPref({ arrows: on }));
+  const REAL_TIP = 'The terrain lit by the real Sun at the timeline time, with the shadows that terrain up to 40 km away casts. Earthshine is not modelled, so ground in shadow is nearly black.';
+  const STYLE_TIPS = { data: 'The analysis look: dark, low-contrast relief under the heat colours.', topo: 'Topographic map: full-contrast hillshade with height colours; the heat colours sit translucent on top.', real: REAL_TIP };
+  const styleBtns = TERRAIN_STYLES.map(([v, label]) => h('button', { type: 'button', class: 'tc-btn', 'aria-pressed': 'false', 'data-value': v, title: STYLE_TIPS[v], onclick: () => setTerrainPref({ style: v }) }, label));
+  const contourBtn = h('button', { type: 'button', class: 'tc-btn tc-contours', 'aria-pressed': 'false', title: 'Contour lines, every fifth one labelled with its height in metres', onclick: () => setTerrainPref({ contours: !tp.contours }) }, 'Contours');
+  const sunHandle = h('button', { type: 'button', class: 'tc-btn tc-sunhandle', 'aria-expanded': 'false', title: 'Show the Sun and Earth readout', onclick: () => setTerrainPref({ sun: true }) }, 'Sun & Earth');
+  const tcBar = h('span', { class: 'tc-bar', 'aria-hidden': 'true' });
+  const tcLo = h('span', { class: 'tc-lo num' }), tcHi = h('span', { class: 'tc-hi num' });
+  const tcTopo = h('span', { class: 'tc-topo', hidden: true }, h('span', { class: 'tc-key' }, 'Height'), tcLo, tcBar, tcHi);
+  const tcInterval = h('span', { class: 'tc-interval num', hidden: true });
+  const tcLegend = h('div', { class: 'tc-legend', hidden: true, role: 'status' }, tcTopo, tcInterval);
+  tcBar.style.background = `linear-gradient(90deg, ${TINT.map(([t, c]) => `rgb(${c.join(',')}) ${t * 100}%`).join(', ')})`;
+  const terrainChip = h('div', { class: 'terrain-chip', role: 'group', 'aria-label': 'Terrain style' },
+    h('div', { class: 'tc-row' }, h('span', { class: 'tc-title' }, 'Terrain'), h('span', { class: 'tc-seg' }, ...styleBtns), h('span', { class: 'tc-div', 'aria-hidden': 'true' }), contourBtn, sunHandle),
+    tcLegend);
+
+  // the Sun and Earth readout: for the selected point and the playhead
+  const sunClose = h('button', { type: 'button', class: 'sun-close', 'aria-label': 'Hide the Sun and Earth readout', title: 'Hide (reopen with Sun & Earth)', onclick: () => setTerrainPref({ sun: false }) }, 'Hide');
+  const sunWhere = h('p', { class: 'sun-where' });
+  const sunRows = h('dl', { class: 'sun-rows' });
+  const sunWhy = h('p', { class: 'sun-why' });
+  const sunDraw = moonSchematic();
+  const sunPanel = h('section', { class: 'sun-panel', 'aria-label': 'Sun and Earth geometry' },
+    h('div', { class: 'sun-head' }, h('h3', { class: 'sun-title' }, 'Sun & Earth'), sunClose),
+    sunWhere,
+    h('div', { class: 'sun-body' }, sunDraw.el, sunRows),
+    sunWhy);
+  const terrainEl = h('div', { class: 'terrain-dock' }, sunPanel, terrainChip);
+  function setTerrainPref(o) {
+    Object.assign(tp, o);
+    saveTerrain();
+    applyTerrain();
+  }
+  function applyTerrain() {
+    for (const b of styleBtns) b.setAttribute('aria-pressed', String(b.dataset.value === tp.style));
+    contourBtn.setAttribute('aria-pressed', String(tp.contours));
+    swContours.set(tp.contours); swArrows.set(tp.arrows);
+    sunPanel.hidden = !tp.sun;
+    sunHandle.hidden = tp.sun;
+    sunHandle.setAttribute('aria-expanded', String(tp.sun));
+    frame.setTerrain({ style: tp.style, contours: tp.contours, arrows: tp.arrows });
+    renderSun();
+  }
+  const fmtDeg = (v, plus = true) => `${v < 0 ? MINUS : plus ? '+' : ''}${Math.abs(v).toFixed(1)}°`;
+  const fmtAz = (v) => (v === null || v === undefined ? DASH : `${Math.round(v) % 360}°`);
+  const latText = (v) => `${Math.abs(v).toFixed(1)}°${v < 0 ? 'S' : 'N'}`;
+  const lonText = (v) => { const w = ((v + 540) % 360) - 180; return `${Math.abs(w).toFixed(1)}°${w < 0 ? 'W' : 'E'}`; };
+  const utcText = (ms) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+  function sunRow(label, value, note) { return [h('dt', null, label), h('dd', { class: 'num' }, value, note ? h('span', { class: 'sun-note' }, note) : null)]; }
+  function renderSun() {
+    const site = last.selected;
+    clear(sunRows);
+    if (!tp.sun) return;
+    if (!light || !site) {
+      sunWhere.textContent = 'Outside the ephemeris (1 Nov 2026 to 1 Jan 2029).';
+      sunWhy.textContent = '';
+      return;
+    }
+    const sun = azEl(light.sun, Infinity, site.lonDeg, site.latDeg), earth = azEl(light.earth, light.earthRangeKm, site.lonDeg, site.latDeg);
+    const sunLat = Math.asin(light.sun[2]) / RAD, earthLat = Math.asin(light.earth[2]) / RAD, earthLon = Math.atan2(light.earth[1], light.earth[0]) / RAD;
+    sunWhere.textContent = `${site.name} · ${utcText(light.tMs)}`;
+    sunRows.append(
+      ...sunRow('Sun', `az ${fmtAz(sun.azDeg)} · el ${fmtDeg(sun.elDeg)}`, sun.elDeg < 0 ? 'below the horizon' : null),
+      ...sunRow('Earth', `az ${fmtAz(earth.azDeg)} · el ${fmtDeg(earth.elDeg)}`, earth.elDeg < 0 ? 'below the horizon' : null),
+      ...sunRow('Subsolar lat.', latText(sunLat)),
+      ...sunRow('Sub-Earth point', `${latText(earthLat)} ${lonText(earthLon)}`, 'libration'),
+      ...sunRow('Earth range', `${heightFmt.format(Math.round(light.earthRangeKm))} km`));
+    sunWhy.textContent = 'The Moon’s spin axis is tilted 1.54° to the ecliptic, so the subsolar latitude swings about ±1.5° over a year and at the pole the Sun circles the horizon a degree or so up or down.';
+    sunDraw.update(sunLat, earthLat);
+  }
+  function setTerrainInfo(info) {
+    const { range, interval } = info;
+    tcTopo.hidden = !range;
+    if (range) { tcLo.textContent = fmtHeight(range.lo); tcHi.textContent = fmtHeight(range.hi); }
+    tcInterval.hidden = !interval;
+    if (interval) tcInterval.textContent = `Contours every ${heightFmt.format(interval)} m, labels every ${heightFmt.format(interval * 5)} m`;
+    tcLegend.hidden = !range && !interval;
+    terrainChip.dataset.working = info.working ? 'on' : 'off';
+  }
   function applyPrefs() {
     swBest.set(layerPrefs.best); swLabels.set(layerPrefs.labels); swGrat.set(layerPrefs.graticule); swLive.set(layerPrefs.live);
     const fr = frame?.el;
@@ -11955,7 +12745,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const layersPop = h('div', { class: 'layers-pop', id: ids('layers'), role: 'dialog', 'aria-label': 'Layers', hidden: true },
     h('div', { class: 'layers-top' }, h('h2', null, 'Layers'), layersClose),
     h('section', { class: 'layers-sec' }, h('h3', { class: 'layers-head' }, 'Filters'), filtersEl),
-    h('section', { class: 'layers-sec' }, h('h3', { class: 'layers-head' }, 'Overlays'), swLive.row, swPsr.row, swDial.row, swBest.row, swLabels.row, swGrat.row),
+    h('section', { class: 'layers-sec' }, h('h3', { class: 'layers-head' }, 'Overlays'), swLive.row, swPsr.row, swDial.row, swBest.row, swLabels.row, swGrat.row, swContours.row, swArrows.row),
     weightsSec);
   const layersBtn = h('button', { type: 'button', class: 'layers-btn', title: 'Filters, overlays and weights', 'aria-expanded': 'false', 'aria-controls': ids('layers'), 'aria-haspopup': 'dialog', onclick: () => setLayersOpen(layersPop.hidden) },
     layersIcon(), h('span', null, 'Layers'), h('span', { class: 'layers-count num', hidden: true }));
@@ -12015,6 +12805,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   routeCard.querySelector('h2')?.setAttribute('id', 'lsn-route-head');
 
   let last = { drawing: false };
+  applyTerrain();
 
   function syncTools() {
     tools.update({ tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!last.regions?.A, hasB: !!last.regions?.B, hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi });
@@ -12166,6 +12957,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
     renderBest(params.best ?? []);
     const ranked = params.mode !== 'now' && params.mode !== 'change';
     filters.update({ ...params.filters, disabled: !ranked });
+    renderSun();
     swPsr.set(params.showPsr);
     swDial.set(params.dialOn);
     weightsSec.hidden = params.mode !== 'score';
@@ -12377,6 +13169,9 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
       if (regionBest !== undefined) frame.redrawShapes({ regionBest });
       if (f) filters.update({ ...f, disabled: last.mode === 'now' || last.mode === 'change' });
     },
+    // the playhead's Sun and Earth, for the readout and the arrows on the map
+    setLight(l) { light = l; frame.setLight(l); renderSun(); },
+    terrainEl,
     setProfileAt(profileAt) { frame.redrawShapes({ profileAt }); },
     openFilters,
     // phase 4: the workflow cards in the folds
@@ -20838,7 +21633,7 @@ function start() {
   // the 3D preview window and the slope legend float over the map's bottom left
   const floats = mapView ? createMapFloats(document) : null;
   const slopeLegend = createSlopeLegend();
-  if (floats) floats.append(slopeLegend.el);
+  if (floats) floats.append(slopeLegend.el, mapView.terrainEl);
   const inset3d = createInset3d({ host: floats ?? document.body, beforeOpen: () => !!writeRoute3d(), onFull: () => openFull3d() });
   // while it is open, the globe gets the new payload when the route, its drive, links or havens change
   let insetTimer = 0;
@@ -21502,6 +22297,7 @@ function start() {
       },
     });
     mapView.frame.setLive(now.states, liveOn());
+    pushLight();
     const text = mapFindingText();
     if (text !== null) shell.regions.mapFinding.textContent = text;
     refreshFolds();
@@ -21555,6 +22351,7 @@ function start() {
   const cardsThrottle = createThrottle(() => refreshFolds(), 480);
   function renderLive() {
     if (!mapView || !derived) return;
+    pushLight();
     if (liveStates()) {
       if (state.mapMode === 'now') {
         mapView.frameUpdate(frameParams(!plan.allDone()));
@@ -21592,6 +22389,12 @@ function start() {
   // scheduled after the answer, never chained from it (review 2 F1; the page freeze at a rise or set)
   const countdown = createCountdown({ run: (name, input) => core.run(name, input), endMs: eph.endMs, onUpdate: () => renderLiveRows() });
   function countdownText() { return countdown.text(state.site, state.cursorMs); }
+  // the playhead's Sun and Earth for the terrain styles, the arrows and the Sun & Earth readout on the map
+  function pushLight() {
+    if (!mapView) return;
+    const d = eph.at(state.cursorMs);
+    mapView.setLight(d ? { tMs: state.cursorMs, sun: d.sun, earth: d.earth, earthRangeKm: d.earthRangeKm } : null);
+  }
   function renderLiveRows() {
     if (!mapView || !derived) return;
     mapView.setLive({ now: nowOverSkyline(), countdown: countdownText(), dialOn: settings.get('skyDial') });
