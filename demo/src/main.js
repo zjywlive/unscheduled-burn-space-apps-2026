@@ -400,7 +400,7 @@ function start() {
     onFly3d: () => {
       const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
       if (!r?.profile) return;
-      const payload = buildPayload({ route: r, drive: rp.energy?.routeId === r.id ? rp.energy.drive : null, links: rp.comms?.routeId === r.id ? rp.comms.links : null, havens: rp.havens?.routeId === r.id ? rp.havens.result : null, power: { batteryWh: 4000, reserve: 0.2, ...(rp.power ?? {}) } });
+      const payload = buildPayload({ route: r, drive: rp.energy?.routeId === r.id ? rp.energy.drive : null, links: rp.comms?.routeId === r.id ? rp.comms.links : null, havens: rp.havens?.routeId === r.id ? rp.havens.result : null, power: { batteryWh: 4000, reserve: 0.2, ...(rp.power ?? {}) }, mobility: rp.plan.mobility });
       try { localStorage.setItem(ROUTE3D_KEY, JSON.stringify(payload)); } catch { return; }
       window.open('globe.html#route=1', '_blank');
     },

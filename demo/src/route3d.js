@@ -15,7 +15,7 @@ export const FLAGS = Object.freeze({ lit: 1, earth: 2, station: 4, oneWay: 8 });
 
 // The payload from a planned route (route-plan.js), its drive (route-energy.js), station links (comms.js),
 // havens (contingency.js). Keeps at most maxPts points (every k-th sample, plus the last one reached).
-export function buildPayload({ route, drive = null, links = null, havens = null, power = null, maxPts = 400 }) {
+export function buildPayload({ route, drive = null, links = null, havens = null, power = null, mobility = null, maxPts = 400 }) {
   const p = route.profile, n = p.km.length, per = drive?.perSample ?? null;
   const cap = power?.batteryWh ?? null;
   const onWay = new Uint8Array(n);
@@ -48,6 +48,7 @@ export function buildPayload({ route, drive = null, links = null, havens = null,
   }
   return {
     v: 1, label: route.label, routeId: route.id, lengthKm: route.lengthKm,
+    limits: mobility ? { climbDeg: mobility.climbDeg, descentDeg: mobility.descentDeg, crossDeg: mobility.crossDeg } : null,
     departMs: drive?.departMs ?? null, arriveMs: drive?.ok ? drive.arriveMs : null, reserve: power?.reserve ?? null,
     pts,
     stops: (drive?.stops ?? []).map((st) => ({ ...ll(st.x, st.y), km: st.km, fromMs: st.fromMs, toMs: st.toMs })),

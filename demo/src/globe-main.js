@@ -5,6 +5,8 @@ import { createGlobeTerrain } from './globe-terrain.js';
 import { createGlobeView, cameraFromHash, cameraToHash } from './globe-view.js';
 import { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } from './route3d.js';
 import { createRouteLayer } from './globe-route.js';
+import { createAttitudePanel, createMinimap } from './globe-route-hud.js';
+import { attitudeAt, bearingDeg } from './rover-attitude.js';
 import { createHiresSet } from './hires.js';
 import { stageBar, readMission, landedFor } from './mission-flow.js';
 import { bootScreen } from './boot.js';
@@ -211,6 +213,14 @@ function startRoute(view, camFromHash) {
   if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
   document.body.classList.add('route-mode');
   const layer = createRouteLayer(view, payload);
+  // the rover's live panels on the left: attitude (pitch, roll, yaw) and a minimap of the area around it
+  const left = $('route-left');
+  const terrain = window.__globe.terrain;
+  const heightAt = (lat, lon) => terrain.heightAt(lat, lon);
+  const attitude = createAttitudePanel(left);
+  const minimap = createMinimap(left, payload, heightAt, { landed: landedFor(readMission()) });
+  const ribbonColour = (q) => (q[5] & FLAGS.oneWay ? '#ff9f43' : q[4] !== null && q[4] < (payload.reserve ?? 0.2) ? '#ff5252' : !Number.isFinite(q[3]) && payload.pts.some((p) => Number.isFinite(p[3])) ? '#5a5a5a' : q[5] & FLAGS.lit ? '#f5f5f5' : '#5c73a8');
+  let lastHeading = 0;
   window.__globe.route = { payload, layer };
   if (camFromHash.lat === undefined) view.flyTo({ ...frameRoute(payload), ms: 1500 });
   const span = timeSpan(payload);
@@ -224,6 +234,12 @@ function startRoute(view, camFromHash) {
   function show() {
     const r = span ? roverAt(payload, t) : roverAt(payload, -Infinity);
     layer.setRover(r, colour[r.state]);
+    // heading of travel: towards the next point (kept while parked or at the end)
+    const cur = payload.pts[r.i], nxt = payload.pts[Math.min(payload.pts.length - 1, r.i + 1)];
+    if (nxt !== cur) lastHeading = bearingDeg(r.latDeg, r.lonDeg, nxt[0], nxt[1]);
+    const kpp = terrain.sample(r.latDeg, r.lonDeg)[2] ?? 0.24, baseKm = Math.max(0.01, 2 * kpp);
+    attitude.update({ att: attitudeAt(heightAt, r.latDeg, r.lonDeg, lastHeading, baseKm), limits: payload.limits, baselineM: baseKm * 1000, stateText: label[r.state] });
+    minimap.draw({ latDeg: r.latDeg, lonDeg: r.lonDeg, headingDeg: lastHeading, headingUp: follow.checked, colourOf: ribbonColour });
     if (span) { slider.value = String(Math.round(((t - span[0]) / (span[1] - span[0])) * 1000)); $('rh-when').textContent = fmt(t); }
     const chip = (text, on, bad = false) => `<span class="${bad ? 'bad' : on ? 'on' : ''}">${text}</span>`;
     const f = r.flags ?? 0;

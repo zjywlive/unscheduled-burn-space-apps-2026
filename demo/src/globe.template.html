@@ -66,6 +66,37 @@
   .route-hud .key { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 11px; }
   .route-hud .key i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
   @media (max-width: 1100px) { .route-hud { width: calc(100vw - 32px); min-width: 0; bottom: 120px; } }
+  /* the rover's live panels on the left (globe-route-hud.js) */
+  #route-left { position: fixed; left: 16px; top: 140px; display: none; flex-direction: column; gap: 10px; width: 300px; }
+  body.route-mode #route-left { display: flex; }
+  #route-left .glass { position: static; }
+  .att-panel { padding: 10px 12px; }
+  .att-head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; margin-bottom: 6px; }
+  .att-state { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .att-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .att-gauge { display: grid; justify-items: center; gap: 1px; padding: 6px 2px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid transparent; }
+  .att-gauge[data-level="near"] { border-color: rgba(255,210,61,0.5); }
+  .att-gauge[data-level="over"] { border-color: rgba(255,82,82,0.7); background: rgba(255,82,82,0.08); }
+  .att-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .att-svg { width: 84px; height: 62px; overflow: visible; }
+  .att-level { stroke: rgba(255,255,255,0.18); stroke-width: 1; stroke-dasharray: 2 3; }
+  .att-ground { stroke: #c9b48a; stroke-width: 2.5; }
+  .att-body rect, .att-body circle { fill: #ffd23d; stroke: #1a1a1a; stroke-width: 1.2; }
+  .att-dir { fill: #fff; stroke: none !important; }
+  .att-ring { fill: none; stroke: rgba(255,255,255,0.25); stroke-width: 1.5; }
+  .att-c { fill: var(--muted); font-size: 9px; }
+  .att-n { fill: #fff; font-size: 10px; font-weight: 700; }
+  .att-needle { fill: #ffd23d; stroke: #1a1a1a; stroke-width: 1; }
+  .att-val { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .att-sub { color: var(--muted); font-size: 10.5px; text-align: center; line-height: 1.25; min-height: 26px; }
+  .att-note { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.35; }
+  .mm-panel { padding: 10px; display: grid; justify-items: center; gap: 6px; width: fit-content; }
+  .mm-wrap { position: relative; }
+  .mm-btns { position: absolute; right: -2px; bottom: 6px; display: grid; gap: 4px; }
+  .mm-btn { font: 600 14px/1 Inter, system-ui, sans-serif; width: 26px; height: 26px; border-radius: 50%; color: var(--text); background: rgba(0,0,0,0.6); border: 1px solid var(--line); cursor: pointer; }
+  .mm-scale { color: var(--muted); font-size: 11px; }
+  body.route-mode .readout { display: none; }
+  @media (max-height: 760px) { #route-left { top: 130px; } .att-note { display: none; } }
 </style>
 </head>
 <body>
@@ -100,6 +131,7 @@
   <div id="readout-src"></div>
   <div class="scale"><div id="scale-bar"></div><span id="scale-text"></span></div>
 </footer>
+<div id="route-left" aria-label="The rover now"></div>
 <section class="glass route-hud" aria-label="Route playback">
   <div class="top"><span class="name" id="rh-name">Route</span><span class="when" id="rh-when"></span></div>
   <div class="ctl">
