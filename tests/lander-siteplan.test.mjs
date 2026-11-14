@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, searchGrid, suitability, bestPoints } from '../demo/src/lander/siteplan.js';
+import { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, searchGrid, suitability, bestPoints, landableClass } from '../demo/src/lander/siteplan.js';
 import { parseLatLon } from '../demo/src/lander/planner.js';
 import { scoreCells } from '../demo/src/score.js';
 import { VEHICLE_DEFAULTS, cleanVehicle } from '../demo/src/lander/vehicle.js';
@@ -118,4 +118,19 @@ test('siteplan: real sky at Shackleton (ephemeris + LOLA skyline): the ridge is 
   const r = skyStats(dirs, ridge, skylineFor(dem, ridge), 1), f = skyStats(dirs, floor, skylineFor(dem, floor), 1);
   assert.ok(r.sun > 0.8 && r.longestDarkH < 12, `ridge ${JSON.stringify(r)}`);
   assert.ok(f.sun < 0.05, `crater floor ${JSON.stringify(f)}`);
+});
+
+test('siteplan: where landing is possible — landable, possible (near a limit), or not', () => {
+  const lim = { limitDeg: 10, battH: 10.9 };
+  const good = { sun: 0.9, earth: 0.8, darkH: 4, slopeDeg: 3, shadowKm: 12, marginMs: 240 };
+  assert.equal(landableClass(good, lim), 2);
+  assert.equal(landableClass({ ...good, sun: 0.5 }, lim), 1, 'Sun 50 %: near');
+  assert.equal(landableClass({ ...good, earth: 0.3 }, lim), 1, 'Earth 30 %: near');
+  assert.equal(landableClass({ ...good, darkH: 14 }, lim), 1, 'dark 14 h of a 10.9 h battery: near');
+  assert.equal(landableClass({ ...good, darkH: 20 }, lim), 0, 'dark 20 h: not');
+  assert.equal(landableClass({ ...good, sun: 0.2 }, lim), 0);
+  assert.equal(landableClass({ ...good, slopeDeg: 12 }, lim), 0, 'too steep');
+  assert.equal(landableClass({ ...good, shadowKm: 0 }, lim), 0, 'permanent shadow in the cell');
+  assert.equal(landableClass({ ...good, marginMs: -5 }, lim), 0, 'not reachable');
+  assert.equal(landableClass({ ...good, slopeDeg: NaN }, lim), 0, 'no data is not landable');
 });

@@ -310,6 +310,7 @@ export function boot() {
     getDem: () => S.dem, getVehicle: () => S.plan?.vehicle ?? S.vehicle,
     getFromMs: () => (Number.isFinite(S.landingMs) ? S.landingMs - 2 * 86400e3 : DEFAULT_FROM),
     getStayDays: () => readMission()?.stayDays ?? 7,
+    getStayStartMs: () => S.plan?.times.landingMs ?? S.landingMs ?? DEFAULT_FROM,
     getCurrent: () => S.site,
     onLand: ({ site, landingMs }) => {
       const listed = sites.find((s) => s.id === site.id);

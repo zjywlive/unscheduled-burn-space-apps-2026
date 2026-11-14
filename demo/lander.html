@@ -205,6 +205,12 @@
   .pl-k-sw.ell { border: 1.5px solid #fff; border-radius: 50%; background: none; margin-left: 8px; }
   .pl-k-src { color: var(--faint); margin-top: 3px; }
   .pl-k-short { display: none; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .pl-k-sw.land { background: rgba(127, 209, 139, 0.6); }
+  .pl-k-sw.poss { background: rgba(229, 179, 77, 0.55); margin-left: 6px; }
+  .pl-k-dot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #000; flex: none; }
+  .pl-k-dot.pass { background: #7fd18b; } .pl-k-dot.near { background: #e5b34d; } .pl-k-dot.fail { background: #ff7b7f; }
+  .pl-k-row b { color: #fff; font-weight: 600; }
+  .pl-sites { width: 100%; justify-content: center; margin-top: 6px; }
   .pl-k-short .pl-k-bar { width: 36px; }
   .pl-toast { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); padding: 7px 14px; border-radius: 999px; background: rgba(20, 22, 26, 0.92); border: 1px solid var(--line); color: #fff; font-size: 12px; max-width: 90%; }
   .pl-side { position: relative; inset: auto; border-radius: 0; border-width: 0 0 0 1px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
@@ -5589,6 +5595,19 @@ function verdict(figs) {
   return { grade: 'pass', text: 'Good landing site: every figure passes its limit.' };
 }
 
+// Where a landing is possible, cell by cell (for the shading): 2 = landable (every check passes), 1 = possible
+// (passes with something near its limit), 0 = not. The same limits as the figures: slope over the DEM baseline
+// within the lander limit, no permanent shadow in the cell or nearer than 1 km, Sun ≥ 70 % (≥ 40 %), Earth ≥ 50 %
+// (≥ 25 %) over the stay, longest dark spell ≤ battery (≤ 1.5 ×), and reachable (Δv margin ≥ 0) where given.
+const LANDABLE = Object.freeze({ sun: [0.7, 0.4], earth: [0.5, 0.25], dark: [1, 1.5] });
+function landableClass({ sun, earth, darkH, slopeDeg, shadowKm, marginMs = 0 }, { limitDeg, battH }) {
+  if (!(slopeDeg <= limitDeg) || !(shadowKm >= 1) || !(marginMs >= 0)) return 0;
+  if (!(Number.isFinite(sun) && Number.isFinite(earth) && Number.isFinite(darkH))) return 0;
+  if (sun >= LANDABLE.sun[0] && earth >= LANDABLE.earth[0] && darkH <= LANDABLE.dark[0] * battH) return 2;
+  if (sun >= LANDABLE.sun[1] && earth >= LANDABLE.earth[1] && darkH <= LANDABLE.dark[1] * battH) return 1;
+  return 0;
+}
+
 // Search grid around a map point: centres every stepKm within radiusKm (a square), with lat/lon.
 function searchGrid(xKm, yKm, { radiusKm = 15, stepKm = 1 } = {}) {
   const out = [];
@@ -5623,7 +5642,205 @@ function bestPoints(pts, { count = 5, minKm = 2, avoid = [] } = {}) {
 
 const mapXY = (latDeg, lonDeg) => toXY(latDeg, lonDeg);
 
-return { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, searchGrid, suitability, bestPoints, mapXY };
+return { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, LANDABLE, landableClass, searchGrid, suitability, bestPoints, mapXY };
+})();
+__m['../heat.js'] = (() => {
+// Heat-map arithmetic over the precomputed terrain-skyline grid (spec phase 2 §2.4, §3.1–§3.2).
+// Cells are indexed j × size + i, i to the right (+x), j downwards (−y).
+const { fromXY } = __m['../terrain.js'];
+
+const R = 1737.4;
+const RAD = Math.PI / 180;
+const DEG = 180 / Math.PI;
+const DAY_MS = 86400e3;
+
+function createHeatGrid({ horizon, size, cellKm, halfKm, azimuths, offsetDeg, stepDeg }) {
+  const count = size * size;
+  const nx = new Float64Array(count), ny = new Float64Array(count), nz = new Float64Array(count);
+  const exs = new Float64Array(count), eys = new Float64Array(count);
+  const nnx = new Float64Array(count), nny = new Float64Array(count), nnz = new Float64Array(count);
+  const xs = new Float32Array(count), ys = new Float32Array(count);
+  const lats = new Float32Array(count), lons = new Float32Array(count);
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const k = j * size + i;
+      const x = -halfKm + (i + 0.5) * cellKm, y = halfKm - (j + 0.5) * cellKm;
+      const { latDeg, lonDeg } = fromXY(x, y);
+      const phi = latDeg * RAD, lam = lonDeg * RAD;
+      const cp = Math.cos(phi), sp = Math.sin(phi), cl = Math.cos(lam), sl = Math.sin(lam);
+      nx[k] = cp * cl; ny[k] = cp * sl; nz[k] = sp;
+      exs[k] = -sl; eys[k] = cl;
+      nnx[k] = -sp * cl; nny[k] = -sp * sl; nnz[k] = cp;
+      xs[k] = x; ys[k] = y; lats[k] = latDeg; lons[k] = lonDeg;
+    }
+  }
+  // Skyline bytes stay as they are (one row of `azimuths` Uint8 values per cell) and are decoded
+  // through a 256-entry table. The table holds the same Float32-rounded degrees the old per-sample
+  // copy held, so clearance() is bit-for-bit unchanged while a 640² × 72 grid needs no 118 MB copy.
+  const lut = new Float32Array(256);
+  for (let v = 0; v < 256; v++) lut[v] = v * stepDeg + offsetDeg;
+  const sky = horizon;
+  const binsPerRad = azimuths / (2 * Math.PI);
+
+  // Elevation (deg) of direction v minus the skyline in its azimuth, at cell k.
+  function clearance(k, vx, vy, vz) {
+    const up = vx * nx[k] + vy * ny[k] + vz * nz[k];
+    const east = vx * exs[k] + vy * eys[k];
+    const north = vx * nnx[k] + vy * nny[k] + vz * nnz[k];
+    let a = Math.atan2(east, north);
+    if (a < 0) a += 2 * Math.PI;
+    const b = a * binsPerRad;
+    const b0 = Math.floor(b) % azimuths;
+    const f = b - Math.floor(b);
+    const base = k * azimuths;
+    const h0 = lut[sky[base + b0]];
+    const h = h0 + (lut[sky[base + ((b0 + 1) % azimuths)]] - h0) * f;
+    return Math.asin(Math.max(-1, Math.min(1, up))) * DEG - h;
+  }
+
+  function visibility(k, dirs) {
+    const s = dirs.sun;
+    let bits = clearance(k, s[0], s[1], s[2]) > 0 ? 1 : 0;
+    const e = dirs.earth, rng = dirs.earthRangeKm;
+    // Earth with parallax: the direction from the site, not from the Moon's centre.
+    const ex = e[0] * rng - R * nx[k], ey = e[1] * rng - R * ny[k], ez = e[2] * rng - R * nz[k];
+    const len = Math.hypot(ex, ey, ez);
+    if (clearance(k, ex / len, ey / len, ez / len) > 0) bits |= 2;
+    return bits;
+  }
+
+  // The same two clearances as visibility (deg above the skyline: out[0] the Sun, out[1] the Earth);
+  // visibility's bits are exactly (out[0] > 0) | (out[1] > 0) << 1.
+  function clearances(k, dirs, out) {
+    const s = dirs.sun;
+    out[0] = clearance(k, s[0], s[1], s[2]);
+    const e = dirs.earth, rng = dirs.earthRangeKm;
+    const ex = e[0] * rng - R * nx[k], ey = e[1] * rng - R * ny[k], ez = e[2] * rng - R * nz[k];
+    const len = Math.hypot(ex, ey, ez);
+    out[1] = clearance(k, ex / len, ey / len, ez / len);
+    return out;
+  }
+
+  return {
+    size, count, cellKm, halfKm,
+    cellCenter: (k) => ({ latDeg: lats[k], lonDeg: lons[k], xKm: xs[k], yKm: ys[k] }),
+    cellAt(xKm, yKm) {
+      const i = Math.floor((xKm + halfKm) / cellKm), j = Math.floor((halfKm - yKm) / cellKm);
+      return i >= 0 && j >= 0 && i < size && j < size ? j * size + i : null;
+    },
+    visibility, clearances,
+  };
+}
+
+// Sun, Earth and both-in-view fractions per cell over [startMs, endMs], sampled at the middle of
+// each step, plus `dark`: the longest run of consecutive samples without the Sun, in hours (capped at
+// the stay length). run(budgetMs) works one grid row at a time until the budget is spent or all rows
+// are done. `opts` is either a number (the old stepMs argument) or { stepMs, rect, mask }:
+// rect = { i0, j0, i1, j1 } (inclusive) limits the cells computed, mask (Uint8, one per cell, 0 = skip)
+// limits them further. Cells not computed keep 0 in every output.
+function fractionJob(grid, eph, startMs, endMs, opts) {
+  const o = typeof opts === 'number' ? { stepMs: opts } : (opts ?? {});
+  const stepMs = o.stepMs ?? 2 * 3600e3;
+  const mask = o.mask ?? null;
+  const last = grid.size - 1;
+  const clampIndex = (v, d) => Math.max(0, Math.min(last, Math.floor(v ?? d)));
+  const r = o.rect ?? {};
+  const rect = { i0: clampIndex(r.i0, 0), j0: clampIndex(r.j0, 0), i1: clampIndex(r.i1, last), j1: clampIndex(r.j1, last) };
+  const total = rect.i1 >= rect.i0 && rect.j1 >= rect.j0 ? rect.j1 - rect.j0 + 1 : 0;
+
+  const n = Math.max(1, Math.ceil((endMs - startMs) / stepMs));
+  const dirs = [];
+  for (let k = 0; k < n; k++) {
+    const d = eph.at(Math.min(endMs, startMs + (k + 0.5) * stepMs));
+    if (d) dirs.push(d);
+  }
+  const stepH = stepMs / 3600e3, stayH = Math.max(0, (endMs - startMs) / 3600e3);
+  const sun = new Float32Array(grid.count), earth = new Float32Array(grid.count), both = new Float32Array(grid.count);
+  const dark = new Float32Array(grid.count);
+  const job = { sun, earth, both, dark, rect, mask, total, stepMs, done: total === 0, progress: total === 0 ? 1 : 0, rows: 0 };
+  job.run = (budgetMs) => {
+    const until = performance.now() + budgetMs;
+    do {
+      if (job.rows >= total) break;
+      const j = rect.j0 + job.rows;
+      for (let k = j * grid.size + rect.i0; k <= j * grid.size + rect.i1; k++) {
+        if (mask && !mask[k]) continue;
+        let s = 0, e = 0, b = 0, run = 0, longest = 0;
+        for (const d of dirs) {
+          const v = grid.visibility(k, d);
+          if (v & 1) { s++; run = 0; } else if (++run > longest) longest = run;
+          if (v & 2) e++;
+          if (v === 3) b++;
+        }
+        const m = dirs.length || 1;
+        sun[k] = s / m; earth[k] = e / m; both[k] = b / m;
+        dark[k] = Math.min(stayH, longest * stepH);
+      }
+      job.rows++;
+    } while (performance.now() < until);
+    job.progress = total ? job.rows / total : 1;
+    job.done = job.rows >= total;
+    return job.done;
+  };
+  return job;
+}
+
+// Visibility bits per cell at tMs (1 Sun, 2 Earth). Fix H: the array also carries sunDeg and earthDeg
+// (Float32Array, deg above the skyline) for the smoothed display, and { rect, mask } (as fractionJob)
+// limits the cells computed; others stay 0 with margins NaN.
+function nowStates(grid, eph, tMs, { rect = null, mask = null } = {}) {
+  const out = new Uint8Array(grid.count);
+  const d = eph.at(tMs);
+  const keep = !!grid.clearances;
+  if (keep) { out.sunDeg = new Float32Array(grid.count).fill(NaN); out.earthDeg = new Float32Array(grid.count).fill(NaN); }
+  if (!d) return out;
+  const last = grid.size - 1, cl = (v, def) => Math.max(0, Math.min(last, v ?? def));
+  const i0 = cl(rect?.i0, 0), i1 = cl(rect?.i1, last), j0 = cl(rect?.j0, 0), j1 = cl(rect?.j1, last);
+  const c = [0, 0];
+  for (let j = j0; j <= j1; j++) {
+    for (let k = j * grid.size + i0; k <= j * grid.size + i1; k++) {
+      if (mask && !mask[k]) continue;
+      if (!keep) { out[k] = grid.visibility(k, d); continue; }
+      grid.clearances(k, d, c);
+      out[k] = (c[0] > 0 ? 1 : 0) | (c[1] > 0 ? 2 : 0);
+      out.sunDeg[k] = c[0]; out.earthDeg[k] = c[1];
+    }
+  }
+  return out;
+}
+
+// Greedy best cells: highest value first (ties by `tiebreak`), each at least minKm from those already taken.
+function topCells(values, tiebreak, grid, { count = 5, minKm = 20 } = {}) {
+  const order = [];
+  for (let k = 0; k < values.length; k++) if (values[k] > 0) order.push(k);
+  order.sort((a, b) => values[b] - values[a] || tiebreak[b] - tiebreak[a] || a - b);
+  const picked = [];
+  for (const k of order) {
+    const c = grid.cellCenter(k);
+    if (picked.every((p) => Math.hypot(p.xKm - c.xKm, p.yKm - c.yKm) >= minKm)) picked.push({ k, xKm: c.xKm, yKm: c.yKm });
+    if (picked.length === count) break;
+  }
+  return picked.map((p) => p.k);
+}
+
+function shareAtLeast(values, threshold) {
+  let n = 0;
+  for (let k = 0; k < values.length; k++) if (values[k] >= threshold) n++;
+  return n / values.length;
+}
+
+// Cells whose both-in-view time changes by more than a day between the two landing dates.
+function changeShares(planned, alt, stayMs) {
+  let loses = 0, gains = 0;
+  for (let k = 0; k < planned.length; k++) {
+    const d = (alt[k] - planned[k]) * stayMs;
+    if (d < -DAY_MS) loses++;
+    else if (d > DAY_MS) gains++;
+  }
+  return { loses: loses / planned.length, gains: gains / planned.length };
+}
+
+return { createHeatGrid, fractionJob, nowStates, topCells, shareAtLeast, changeShares };
 })();
 __m['planner.js'] = (() => {
 // "Choose where to land" (step 1 of the mission): a full-screen map of the south polar region (relief from the
@@ -5638,7 +5855,8 @@ const { decodePack, G0, sampleG0 } = __m['../globe-terrain.js'];
 const { loadSiteTerrain } = __m['terrain-local.js'];
 const { pickLandingTime, skyAt } = __m['landing.js'];
 const { planMission } = __m['mission.js'];
-const { ELLIPSE, ellipsePoints, terrainStats, skyDirections, skyStats, batteryHours, figures, verdict, searchGrid, suitability, bestPoints } = __m['siteplan.js'];
+const { ELLIPSE, ellipsePoints, terrainStats, skyDirections, skyStats, batteryHours, figures, verdict, searchGrid, suitability, bestPoints, landableClass, LANDABLE } = __m['siteplan.js'];
+const { createHeatGrid, fractionJob } = __m['../heat.js'];
 
 const RAD = Math.PI / 180;
 const EDGE_KM = Math.hypot(...toXY(TERRAIN_MAX_LAT, 0));   // 80°S on the polar map
@@ -5660,7 +5878,7 @@ function parseLatLon(text) {
   return { latDeg: lat, lonDeg: L };
 }
 
-function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, getVehicle, getFromMs, getStayDays, getCurrent, onLand }) {
+function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, getVehicle, getFromMs, getStayDays, getStayStartMs, getCurrent, onLand }) {
   root.innerHTML = `
     <div class="pl-map">
       <canvas aria-label="Map of the lunar south pole: click to propose a landing point"></canvas>
@@ -5681,15 +5899,23 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
   const canvas = root.querySelector('canvas'), ctx = canvas.getContext('2d');
   const body = root.querySelector('.pl-body'), keyBox = root.querySelector('.pl-key'), toast = root.querySelector('.pl-toast');
   const S = { view: 'polar', cx: 0, cy: 0, kmPerPx: 0.8, w: 0, h: 0, pick: null, sel: 0, grid: null, results: null, token: 0, base: null, baseKey: '', g0: null, moonImg: null };
-  const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null };
+  const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null, slope2: null, shadow2: null };
+  // where landing is possible over the whole region (2 km cells): navigator sky grid + its slope and shadow grids
+  const R = { grid: null, job: null, cls: null, img: null, startMs: 0, endMs: 0, progress: 0, token: 0 };
+  // the listed sites scored like a pick: id → { verdict, figs, landingMs, pending }
+  const siteRes = new Map();
   let opened = false;
 
   // ---------- data ----------
   async function loadLayers() {
     const get = (n) => loadData(n, { timeoutMs: 90000 }).catch(() => null);
-    const [sl, sh, psr] = await Promise.all([get('slope_1km'), get('shadow_1km'), get(PSR_PACK)]);
+    const [sl, sh, psr, sl2, sh2] = await Promise.all([get('slope_1km'), get('shadow_1km'), get(PSR_PACK), get('slope_2km'), get('shadow_2km')]);
     if (sl) L.slope = { bytes: sl, ...meta.slope?.find((x) => x.name === 'slope_1km') };
     if (sh) L.shadow = { bytes: sh, ...meta.shadow?.find((x) => x.name === 'shadow_1km') };
+    if (sl2) L.slope2 = { bytes: sl2, ...meta.slope?.find((x) => x.name === 'slope_2km') };
+    if (sh2) L.shadow2 = { bytes: sh2, ...meta.shadow?.find((x) => x.name === 'shadow_2km') };
+    startRegion();
+    scoreSites();
     try { if (psr) L.psr = createPsr(psr, meta.psr); } catch { L.psr = null; }
     const lv = meta.levels?.find((l) => l.name === 'dem_120m');
     if (lv) {
@@ -5706,6 +5932,60 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
   };
   const slopeAt = (x, y) => { if (!L.slope) return NaN; const k = cellOf(L.slope, x, y); return k < 0 ? NaN : L.slope.bytes[k] * (L.slope.scale ?? 0.25); };
   const shadowAt = (x, y) => { if (!L.shadow) return NaN; const k = cellOf(L.shadow, x, y); return k < 0 ? NaN : L.shadow.bytes[k]; };
+
+  async function startRegion() {
+    const hb = await loadData('horizon_grid', { timeoutMs: 120000 }).catch(() => null);
+    if (!hb || !meta.horizon) return;
+    const grid = createHeatGrid({ horizon: hb, ...meta.horizon });
+    const n = grid.size, mask = new Uint8Array(grid.count);
+    for (let k = 0; k < grid.count; k++) { const c = grid.cellCenter(k); mask[k] = Math.hypot(c.xKm, c.yKm) <= EDGE_KM ? 1 : 0; }
+    R.grid = grid; R.cls = new Uint8Array(grid.count); R.img = new ImageData(n, n);
+    R.startMs = getStayStartMs(); R.endMs = R.startMs + getStayDays() * 86400e3;
+    R.job = fractionJob(grid, eph, R.startMs, R.endMs, { stepMs: 2 * 3600e3, mask });
+    const token = ++R.token;
+    let row = 0;
+    while (!R.job.done) {
+      R.job.run(14);
+      if (token !== R.token) return;
+      classifyRows(row, R.job.rows, mask); row = R.job.rows;
+      R.progress = R.job.progress;
+      draw();
+      await tick();
+    }
+  }
+  // landable class per region cell, and its pixel in the overlay image (one pixel per 2 km cell)
+  function classifyRows(j0, j1, mask) {
+    const g = R.grid, n = g.size, v = getVehicle(), battH = batteryHours(v), limit = v.touchdown.maxSlopeDeg;
+    const margin = siteMargins().min;
+    const d = R.img.data;
+    for (let j = j0; j < j1; j++) for (let i = 0; i < n; i++) {
+      const k = j * n + i;
+      if (!mask[k]) continue;
+      const c = landableClass({ sun: R.job.sun[k], earth: R.job.earth[k], darkH: R.job.dark[k], slopeDeg: L.slope2 ? L.slope2.bytes[k] * (L.slope2.scale ?? 0.25) : NaN, shadowKm: L.shadow2 ? L.shadow2.bytes[k] : NaN, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH });
+      R.cls[k] = c;
+      const o = k * 4;
+      if (c === 2) { d[o] = 127; d[o + 1] = 209; d[o + 2] = 139; d[o + 3] = 120; } else if (c === 1) { d[o] = 229; d[o + 1] = 179; d[o + 2] = 77; d[o + 3] = 105; } else d[o + 3] = 0;
+    }
+    R.canvas = null;
+  }
+  async function scoreSites() {
+    const v = getVehicle(), opts = { vehicle: v, limit: v.touchdown.maxSlopeDeg, battH: batteryHours(v), stayDays: getStayDays(), fromMs: getFromMs() };
+    for (const s of sites) siteRes.set(s.id, { pending: true });
+    if (!S.pick) renderSites();
+    for (const s of sites) {
+      const [x, y] = toXY(s.latDeg, s.lonDeg);
+      try { siteRes.set(s.id, await detail({ latDeg: s.latDeg, lonDeg: s.lonDeg, xKm: x, yKm: y, name: s.name }, opts)); } catch { siteRes.set(s.id, { failed: true }); }
+      if (!S.pick) renderSites();
+      draw();
+      await tick();
+    }
+    // the reachability used by the shading: the Δv margins at the listed sites
+    if (R.job) { classifyRows(0, R.job.rows, R.job.mask ?? new Uint8Array(R.grid.count).fill(1)); draw(); }
+  }
+  function siteMargins() {
+    const m = [...siteRes.values()].map((r) => r.figs?.find((f) => f.id === 'dv')?.value).filter(Number.isFinite);
+    return m.length ? { min: Math.min(...m), max: Math.max(...m), n: m.length } : { min: NaN, max: NaN, n: 0 };
+  }
 
   // ---------- map ----------
   const toScreen = (x, y) => [S.w / 2 + (x - S.cx) / S.kmPerPx, S.h / 2 - (y - S.cy) / S.kmPerPx];
@@ -5778,17 +6058,29 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     if (S.view === 'moon') return paintMoon();
     // permanent shadow (LOLA PSR) over the relief
     if (L.psr && S.kmPerPx < 1.2) { try { paintPsr(ctx, L.psr, { width: S.w, height: S.h, kmPerPx: S.kmPerPx, cx: S.cx, cy: S.cy }, { colour: [120, 160, 255], hatchAlpha: 0.18, outlineAlpha: 0.55 }); } catch { /* no OffscreenCanvas */ } }
-    // suitability around the pick (1 km cells)
+    // where a landing is possible: 2 km cells over the region (green landable, amber possible)
+    if (R.img) {
+      if (!R.canvas) { R.canvas = new OffscreenCanvas(R.grid.size, R.grid.size); R.canvas.getContext('2d').putImageData(R.img, 0, 0); }
+      const half = R.grid.halfKm, [x0, y0] = toScreen(-half, half), [x1, y1] = toScreen(half, -half);
+      ctx.imageSmoothingEnabled = false;
+      // inside the search square the 1 km cells replace the 2 km ones
+      if (S.grid) { ctx.save(); const b = S.grid.box; ctx.beginPath(); ctx.rect(0, 0, S.w, S.h); const [a0, b0] = toScreen(b.x0, b.y1), [a1, b1] = toScreen(b.x1, b.y0); ctx.rect(a1, b0, a0 - a1, b1 - b0); ctx.clip('evenodd'); }
+      ctx.drawImage(R.canvas, x0, y0, x1 - x0, y1 - y0);
+      if (S.grid) ctx.restore();
+      ctx.imageSmoothingEnabled = true;
+    }
+    // around the pick: the same classes on the 1 km search grid, with its edge
     if (S.grid) {
       const half = 0.5 / S.kmPerPx;
       for (const p of S.grid) {
-        if (!p.done) continue;
+        if (!p.done || !p.cls) continue;
         const [sx, sy] = toScreen(p.xKm, p.yKm);
         if (sx < -half || sy < -half || sx > S.w + half || sy > S.h + half) continue;
-        ctx.fillStyle = p.ok ? rampCss(p.score, 0.42) : 'rgba(229,72,77,0.28)';
+        ctx.fillStyle = p.cls === 2 ? 'rgba(127,209,139,0.5)' : 'rgba(229,179,77,0.45)';
         ctx.fillRect(sx - half, sy - half, half * 2 + 0.5, half * 2 + 0.5);
-        if (!p.ok && half > 3) { ctx.strokeStyle = 'rgba(229,72,77,0.55)'; ctx.beginPath(); ctx.moveTo(sx - half, sy + half); ctx.lineTo(sx + half, sy - half); ctx.stroke(); }
       }
+      const b = S.grid.box, [a0, b0] = toScreen(b.x0, b.y1), [a1, b1] = toScreen(b.x1, b.y0);
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.setLineDash([4, 4]); ctx.strokeRect(a0, b0, a1 - a0, b1 - b0); ctx.setLineDash([]);
     }
     // 80°S: the edge of the page's terrain, skyline and descent data
     ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 1;
@@ -5796,7 +6088,12 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     ctx.beginPath(); ctx.arc(ox, oy, EDGE_KM / S.kmPerPx, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     if (EDGE_KM / S.kmPerPx < Math.max(S.w, S.h) * 1.5) label(ox, oy - EDGE_KM / S.kmPerPx - 6, '80°S · edge of the terrain data', 'rgba(255,255,255,0.6)', 'center');
     // listed sites
-    for (const s of sites) { const [sx, sy] = toScreen(...toXY(s.latDeg, s.lonDeg)); dot(sx, sy, 3, '#f2b33d'); if (S.kmPerPx < 1.2) label(sx + 6, sy + 4, s.name, 'rgba(242,179,61,0.9)'); }
+    for (const s of sites) {
+      const [sx, sy] = toScreen(...toXY(s.latDeg, s.lonDeg)), r = siteRes.get(s.id), g = r?.verdict?.grade;
+      dot(sx, sy, 5.5, g === 'pass' ? '#7fd18b' : g === 'near' ? '#e5b34d' : g === 'fail' ? '#ff7b7f' : '#8a8a8a');
+      ring(sx, sy, 5.5, 'rgba(0,0,0,0.8)');
+      if (S.kmPerPx < 1.2) label(sx + 8, sy + 4, `${s.name}${s.verified === false ? ' (approx.)' : ''}`, 'rgba(255,236,200,0.95)');
+    }
     // the current mission's site
     const cur = getCurrent?.();
     if (cur) { const [sx, sy] = toScreen(...toXY(cur.latDeg, cur.lonDeg)); ring(sx, sy, 7, '#fff'); label(sx + 9, sy - 8, 'current plan', 'rgba(255,255,255,0.8)'); }
@@ -5837,11 +6134,31 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
   }
   function renderKey() {
     const res = S.kmPerPx < 0.06 && L.fine ? 'fine DEM near the pick' : S.kmPerPx < 0.4 && L.dem120 ? 'LOLA 120 m' : 'LOLA 480 m';
-    keyBox.innerHTML = `<div class="pl-k-row"><span class="pl-k-bar"></span><span>Landing suitability around the pick (navigator score: Sun 40 · Earth 30 · slope 20 · near shadow 10), 1 km cells</span></div>
-      <div class="pl-k-row"><span class="pl-k-sw fail"></span><span>fails a limit: slope over the lander limit, dark spell longer than the battery, or permanent shadow</span></div>
-      <div class="pl-k-row"><span class="pl-k-sw psr"></span><span>permanent shadow (LOLA PSR, 120 m)</span><span class="pl-k-sw ell"></span><span>3σ landing ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m (assumed)</span></div>
+    const v = getVehicle(), battH = batteryHours(v), m = siteMargins(), pct = (x) => `${Math.round(x * 100)} %`;
+    const when = R.startMs ? `${getStayDays()} days from ${new Date(R.startMs).toISOString().slice(0, 10)}` : `${getStayDays()} days`;
+    const prog = R.job && !R.job.done ? ` · computing ${Math.round(R.progress * 100)} %` : !R.job ? ' · loading the sky grid…' : '';
+    keyBox.innerHTML = `<div class="pl-k-row"><span class="pl-k-sw land"></span><b>Landable</b><span>every check passes</span><span class="pl-k-sw poss"></span><b>Possible</b><span>near a limit</span><span class="muted">${prog}</span></div>
+      <div class="pl-k-row"><span>Checks: slope ≤ ${v.touchdown.maxSlopeDeg}° (240 m baseline) · no permanent shadow within 1 km · Sun ≥ ${pct(LANDABLE.sun[0])} (≥ ${pct(LANDABLE.sun[1])}) and Earth ≥ ${pct(LANDABLE.earth[0])} (≥ ${pct(LANDABLE.earth[1])}) over ${when} · longest dark ≤ ${battH.toFixed(1)} h battery (≤ ${(battH * LANDABLE.dark[1]).toFixed(0)} h) · Δv margin ${m.n ? `${Math.round(m.min)}–${Math.round(m.max)} m/s at the listed sites` : 'being checked'}.</span></div>
+      <div class="pl-k-row"><span>2 km cells (navigator sky grid) over the region for the current plan's stay, 1 km inside the dashed square around your point. A point you pick is scored at its exact skyline over its own first lit landing window, with ellipse-scale slope and roughness, so it can differ: a narrow ridge (Shackleton's) is smaller than a 2 km cell. Assumed: 3σ ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m, battery and loads.</span></div>
+      <div class="pl-k-row"><span class="pl-k-dot pass"></span><span class="pl-k-dot near"></span><span class="pl-k-dot fail"></span><span>listed sites, graded like a pick (click one)</span><span class="pl-k-sw psr"></span><span>permanent shadow (LOLA PSR)</span></div>
       <div class="pl-k-src">Relief: ${res}, light from the upper left.</div>
-      <div class="pl-k-short"><span class="pl-k-bar"></span> suitability · <span class="pl-k-sw fail"></span> fails a limit · <span class="pl-k-sw psr"></span> permanent shadow · ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m (assumed)</div>`;
+      <div class="pl-k-short"><span class="pl-k-sw land"></span> landable · <span class="pl-k-sw poss"></span> possible · dots: listed sites graded · ${v.touchdown.maxSlopeDeg}°, ${getStayDays()} d stay, ${battH.toFixed(0)} h battery, ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m (assumed)${prog}</div>`;
+  }
+  // the side panel before a pick: the listed sites with their grades (click to propose)
+  function renderSites() {
+    const rows = sites.map((s) => {
+      const r = siteRes.get(s.id), g = r?.verdict?.grade;
+      const f = (id) => r?.figs?.find((x) => x.id === id);
+      const when = r?.landingMs ? ` · stay from ${new Date(r.landingMs).toISOString().slice(5, 10)}` : '';
+      return `<tr data-site="${esc(s.id)}"><td>${esc(s.name)}${s.verified === false ? ' <small class="muted">approx.</small>' : ''}<small>${esc(s.subtitle ?? '')}${when}</small></td>
+        <td class="r">${f('slope') ? `<span class="g-${f('slope').grade}">${esc(f('slope').text)}</span>` : '…'}</td>
+        <td class="r">${f('sun') ? `<span class="g-${f('sun').grade}">${Math.round(f('sun').value * 100)} %</span>` : '…'}</td>
+        <td class="r">${g ? `<span class="pl-g g-${g}">${g}</span>` : r?.failed ? '—' : '<span class="muted">scoring</span>'}</td></tr>`;
+    }).join('');
+    body.innerHTML = `<p class="note">Green ground on the map is where a landing ellipse would pass every check, amber where it would pass near a limit. Click it, a listed site, or type a latitude and longitude to score a point in detail.</p>
+      <h3>Known landing sites <small>flown missions and Artemis III candidate regions, scored like a pick: ellipse slope, Sun over a ${getStayDays()}-day stay from each site's first lit window, overall</small></h3>
+      <table class="tbl pl-cmp"><thead><tr><th>Site</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Grade</th></tr></thead><tbody>${rows}</tbody></table>`;
+    body.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => { const s = sites.find((q) => q.id === tr.dataset.site); S.cx = toXY(s.latDeg, s.lonDeg)[0]; S.cy = toXY(s.latDeg, s.lonDeg)[1]; S.kmPerPx = Math.min(S.kmPerPx, 0.08); setPick(s.latDeg, s.lonDeg); }));
   }
 
   // ---------- interaction ----------
@@ -5871,6 +6188,8 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
         // a numbered spot selects it; anywhere else proposes a new point
         const hit = S.results ? S.results.list.findIndex((c, n) => n > 0 && Math.hypot(...toScreen(c.xKm, c.yKm).map((v, i) => v - [px, py][i])) < 11) : -1;
         if (hit > 0) return select(hit);
+        const site = sites.find((q) => Math.hypot(...toScreen(...toXY(q.latDeg, q.lonDeg)).map((v, i) => v - [px, py][i])) < 9);
+        if (site) return setPick(site.latDeg, site.lonDeg);
         const [x, y] = toMap(px, py);
         const { latDeg, lonDeg } = fromXY(x, y);
         if (latDeg > TERRAIN_MAX_LAT) return say('Outside 80°S: no terrain, skyline or descent data there.');
@@ -5924,14 +6243,16 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     const land0 = pickLandingTime(eph, S.pick, mask0, fromMs) ?? fromMs;
     const dirs4 = skyDirections(eph, land0, stayDays, 4);
     const grid = searchGrid(x, y, { radiusKm: 15, stepKm: 1 }).filter((p) => p.latDeg <= TERRAIN_MAX_LAT);
+    grid.box = { x0: x - 15.5, x1: x + 15.5, y0: y - 15.5, y1: y + 15.5 };
     S.grid = grid;
+    const margin = siteMargins().min;
     for (let k = 0; k < grid.length; k++) {
       const p = grid[k];
       const sky = skyStats(dirs4, p, skylineFor(dem, p), 4);
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slopeAt(p.xKm, p.yKm), shadowKm: shadowAt(p.xKm, p.yKm) });
       if (k % 24 === 23 || k === grid.length - 1) {
         const done = grid.slice(0, k + 1), s = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, n) => { q.score = s[n].score; q.ok = s[n].ok; q.done = true; });
+        done.forEach((q, n) => { q.score = s[n].score; q.ok = s[n].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((k + 1) / grid.length) * 100)}%`;
         draw();
         await tick();
@@ -6002,9 +6323,11 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
       <table class="tbl pl-cmp"><thead><tr><th>#</th><th class="r">km</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Earth</th><th class="r">Dark</th><th class="r">Δv</th></tr></thead><tbody>
       ${R.list.map((x, n) => `<tr data-n="${n}" class="${n === S.sel ? 'on' : ''}"><td>${n === 0 ? 'You' : n}</td><td class="r">${x.distKm.toFixed(1)}</td>${cell(fig('slope', x))}${cell(fig('sun', x))}${cell(fig('earth', x))}${cell(fig('dark', x))}${cell(fig('dv', x))}</tr>`).join('')}
       </tbody></table>
-      <p class="note">Click a row or a numbered spot on the map to see its figures. Rocks smaller than the DEM are not modelled; Sun and Earth use the 480 m skyline; the Δv is from the planned polar orbit with this vehicle (assumed).</p>`;
+      <p class="note">Click a row or a numbered spot on the map to see its figures. Rocks smaller than the DEM are not modelled; Sun and Earth use the 480 m skyline; the Δv is from the planned polar orbit with this vehicle (assumed).</p>
+      <button class="btn ghost pl-sites">Known landing sites…</button>`;
     body.querySelectorAll('.pl-cmp tr[data-n]').forEach((tr) => tr.addEventListener('click', () => select(Number(tr.dataset.n))));
     body.querySelector('.pl-land').addEventListener('click', () => { onLand({ site: c.site, landingMs: c.landingMs }); close(); });
+    body.querySelector('.pl-sites').addEventListener('click', () => renderSites());
   }
   function select(n) { S.sel = n; renderResults(); const c = S.results.list[n]; S.cx = c.xKm; S.cy = c.yKm; draw(); }
 
@@ -6017,11 +6340,14 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     if (cur && !S.pick) { const [x, y] = toXY(cur.latDeg, cur.lonDeg); S.cx = x; S.cy = y; S.kmPerPx = 0.25; }
     requestAnimationFrame(resize);
     setTimeout(resize, 50);
+    if (!S.pick) renderSites();
     if (!L.slope) loadLayers();
+    else if (S.lastFrom !== getFromMs() || R.startMs !== getStayStartMs()) { siteRes.clear(); scoreSites(); startRegion(); }   // the mission moved: redo both
+    S.lastFrom = getFromMs();
   }
   function close() { root.hidden = true; opened = false; S.token++; }
   window.addEventListener('resize', () => { if (opened) resize(); });
-  return { open, close, get isOpen() { return opened; }, setPick, state: S };
+  return { open, close, get isOpen() { return opened; }, setPick, state: S, region: R, siteRes };
 }
 
 return { parseLatLon, createPlanner };
@@ -6462,6 +6788,7 @@ function boot() {
     getDem: () => S.dem, getVehicle: () => S.plan?.vehicle ?? S.vehicle,
     getFromMs: () => (Number.isFinite(S.landingMs) ? S.landingMs - 2 * 86400e3 : DEFAULT_FROM),
     getStayDays: () => readMission()?.stayDays ?? 7,
+    getStayStartMs: () => S.plan?.times.landingMs ?? S.landingMs ?? DEFAULT_FROM,
     getCurrent: () => S.site,
     onLand: ({ site, landingMs }) => {
       const listed = sites.find((s) => s.id === site.id);

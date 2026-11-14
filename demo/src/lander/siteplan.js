@@ -134,6 +134,19 @@ export function verdict(figs) {
   return { grade: 'pass', text: 'Good landing site: every figure passes its limit.' };
 }
 
+// Where a landing is possible, cell by cell (for the shading): 2 = landable (every check passes), 1 = possible
+// (passes with something near its limit), 0 = not. The same limits as the figures: slope over the DEM baseline
+// within the lander limit, no permanent shadow in the cell or nearer than 1 km, Sun ≥ 70 % (≥ 40 %), Earth ≥ 50 %
+// (≥ 25 %) over the stay, longest dark spell ≤ battery (≤ 1.5 ×), and reachable (Δv margin ≥ 0) where given.
+export const LANDABLE = Object.freeze({ sun: [0.7, 0.4], earth: [0.5, 0.25], dark: [1, 1.5] });
+export function landableClass({ sun, earth, darkH, slopeDeg, shadowKm, marginMs = 0 }, { limitDeg, battH }) {
+  if (!(slopeDeg <= limitDeg) || !(shadowKm >= 1) || !(marginMs >= 0)) return 0;
+  if (!(Number.isFinite(sun) && Number.isFinite(earth) && Number.isFinite(darkH))) return 0;
+  if (sun >= LANDABLE.sun[0] && earth >= LANDABLE.earth[0] && darkH <= LANDABLE.dark[0] * battH) return 2;
+  if (sun >= LANDABLE.sun[1] && earth >= LANDABLE.earth[1] && darkH <= LANDABLE.dark[1] * battH) return 1;
+  return 0;
+}
+
 // Search grid around a map point: centres every stepKm within radiusKm (a square), with lat/lon.
 export function searchGrid(xKm, yKm, { radiusKm = 15, stepKm = 1 } = {}) {
   const out = [];
