@@ -4,9 +4,13 @@
 //
 // Payload v1 = {
 //   v: 1, label, routeId, lengthKm, departMs, arriveMs | null, reserve (0–1),
-//   pts: [[latDeg, lonDeg, km, tMs | null, soc (0–1) | null, flags], …]   flags: 1 lit, 2 Earth in view,
-//        4 station link, 8 one-way stretch (going down more steeply than the climb limit)
+//   pts: [[latDeg, lonDeg, km, tMs | null, soc (0–1) | null, flags, gradeDeg | null, heightM | null], …]
+//        flags: 1 lit, 2 Earth in view, 4 station link, 8 one-way stretch (going down more steeply than the
+//        climb limit); gradeDeg: grade along the way (+ uphill), heightM: terrain height (both optional; older
+//        payloads stop at flags)
 //   stops: [{ latDeg, lonDeg, km, fromMs, toMs }], havens: [{ latDeg, lonDeg }], emptyAt: { latDeg, lonDeg, km, tMs } | null
+//   wps: [{ latDeg, lonDeg }]   the planned start, waypoints and end (optional)
+//   traps: { cellKm, cells: [[latDeg, lonDeg], …] } | null   ground the rover could drive into but not out of
 // }
 import { fromXY, toXY } from './terrain.js';
 
@@ -15,7 +19,9 @@ export const FLAGS = Object.freeze({ lit: 1, earth: 2, station: 4, oneWay: 8 });
 
 // The payload from a planned route (route-plan.js), its drive (route-energy.js), station links (comms.js),
 // havens (contingency.js). Keeps at most maxPts points (every k-th sample, plus the last one reached).
-export function buildPayload({ route, drive = null, links = null, havens = null, power = null, mobility = null, maxPts = 400 }) {
+// heightAtXY(xKm, yKm) → metres adds the terrain height per point; waypoints ([[x, y], …]) and traps (the plan's
+// { cellKm, cells: [[x, y], …] }, thinned to maxTrapCells) go along for the 3D view and saved missions.
+export function buildPayload({ route, drive = null, links = null, havens = null, power = null, mobility = null, heightAtXY = null, waypoints = null, traps = null, maxPts = 400, maxTrapCells = 2500 }) {
   const p = route.profile, n = p.km.length, per = drive?.perSample ?? null;
   const cap = power?.batteryWh ?? null;
   const onWay = new Uint8Array(n);
@@ -35,7 +41,9 @@ export function buildPayload({ route, drive = null, links = null, havens = null,
     if (i % step === 0 || i === n - 1 || (per && reached && !Number.isFinite(per.tMs[i + 1] ?? NaN))) {
       const { latDeg, lonDeg } = fromXY(p.x[i], p.y[i]);
       const flags = (per?.lit[i] ? FLAGS.lit : 0) | (per?.earth[i] ? FLAGS.earth : 0) | (links?.ok[i] ? FLAGS.station : 0) | (onWay[i] ? FLAGS.oneWay : 0);
-      pts.push([+latDeg.toFixed(6), +lonDeg.toFixed(6), +km.toFixed(4), reached && per ? Math.round(per.tMs[i]) : null, per && cap && reached ? +(per.socWh[i] / cap).toFixed(4) : null, flags]);
+      const grade = Number.isFinite(p.pitch?.[i]) ? +(Math.atan(p.pitch[i]) * 180 / Math.PI).toFixed(2) : null;
+      const h = heightAtXY ? heightAtXY(p.x[i], p.y[i]) : null;
+      pts.push([+latDeg.toFixed(6), +lonDeg.toFixed(6), +km.toFixed(4), reached && per ? Math.round(per.tMs[i]) : null, per && cap && reached ? +(per.socWh[i] / cap).toFixed(4) : null, flags, grade, Number.isFinite(h) ? Math.round(h * 10) / 10 : null]);
     }
     km += p.km[i];
   }
@@ -54,8 +62,13 @@ export function buildPayload({ route, drive = null, links = null, havens = null,
     stops: (drive?.stops ?? []).map((st) => ({ ...ll(st.x, st.y), km: st.km, fromMs: st.fromMs, toMs: st.toMs })),
     havens: hv,
     emptyAt: drive?.emptyAt ? { ...ll(drive.emptyAt.x, drive.emptyAt.y), km: drive.emptyAt.km, tMs: drive.emptyAt.tMs } : null,
+    wps: (waypoints ?? []).map(([x, y]) => ll(x, y)),
+    traps: traps?.cells?.length ? { cellKm: traps.cellKm, cells: thin(traps.cells, maxTrapCells).map(([x, y]) => { const q = ll(x, y); return [+q.latDeg.toFixed(5), +q.lonDeg.toFixed(5)]; }) } : null,
   };
 }
+
+// Every k-th item so that at most max remain.
+const thin = (a, max) => (a.length <= max ? a : a.filter((_, i) => i % Math.ceil(a.length / max) === 0));
 
 // A payload read back (from JSON); null when it is not one.
 export function parsePayload(text) {

@@ -73,3 +73,21 @@ test('frameRoute centres on the route and sizes the view to it', () => {
   assert.equal(timeSpan(p), null, 'no drive, no time span');
   assert.equal(roverAt(p, T0).state, 'ready');
 });
+
+test('payload: grade and height per point, the waypoints and thinned traps', () => {
+  const sloped = { ...profile, pitch: new Float32Array(100).fill(Math.tan((5 * Math.PI) / 180)) };
+  const cells = Array.from({ length: 50 }, (_, i) => [x0 + i * 0.24, y0 + 1]);
+  const p = buildPayload({ route: { ...route, profile: sloped }, heightAtXY: (x) => 1000 + (x - x0) * 87.5, waypoints: [[x0, y0], [x0 + 9.9, y0]], traps: { cellKm: 0.24, cells }, maxPts: 25, maxTrapCells: 20 });
+  assert.ok(p.pts.every((q) => Math.abs(q[6] - 5) < 0.01), 'grade 5° everywhere');
+  assert.equal(p.pts[0][7], 1000);
+  assert.ok(Math.abs(p.pts.at(-1)[7] - (1000 + 9.9 * 87.5)) < 0.2);
+  assert.equal(p.wps.length, 2);
+  assert.ok(Math.abs(p.wps[0].latDeg + 89) < 1e-4 && Math.abs(p.wps[0].lonDeg - 30) < 1e-4);
+  assert.ok(p.traps.cells.length <= 20 && p.traps.cells.length >= 10);
+  assert.equal(p.traps.cellKm, 0.24);
+  // without the extras the fields are empty, and old consumers still read pts[0..5]
+  const bare = buildPayload({ route, maxPts: 25 });
+  assert.deepEqual(bare.wps, []);
+  assert.equal(bare.traps, null);
+  assert.equal(bare.pts[0][7], null);
+});
