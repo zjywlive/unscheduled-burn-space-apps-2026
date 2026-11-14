@@ -1,5 +1,6 @@
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
+import { writeMission } from './mission-flow.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
 import { summarize, summarizePair, sampleSeries } from './windows.js';
 import { formatCoords } from './sites.js';
@@ -125,6 +126,8 @@ function start() {
     return skylines.get(key);
   }
 
+  // mission-flow.js: a link from the lander's "Plan the rover route" carries plan=1 (open the route card at the site)
+  const planOnLoad = /(^|[#&])plan=1(&|$)/.test(location.hash);
   let state = parseHash(location.hash, sites, eph);
   state.viewport = clampView(state.viewport);
   if (!state.windowOn) state.mapMode = 'now';   // no mission window: the Live view
@@ -406,6 +409,7 @@ function start() {
   }) : null;
   if (routePlanCard) mapView.mountFold('plan', routePlanCard.el);
   if (routePlanCard && rp.points) routePlanCard.update({ points: rp.points, ...(rp.maxSlopeDeg ? { maxSlopeDeg: rp.maxSlopeDeg } : {}) });
+
   function redrawRoutes() { mapView?.frame.redrawShapes({ routePlan: rp }); }
   function dem240() {
     const l = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
@@ -1123,7 +1127,18 @@ function start() {
   function bigLayout() { return Boolean(mapView) && wideScreen.matches; }
   wideScreen.addEventListener?.('change', () => render());
 
+  // mission-flow.js: the chosen site and landing date go with the user to the lander, rover and 3D steps
+  let missionKey = '';
+  function saveMission() {
+    const s = state.site;
+    if (!s) return;
+    const key = `${s.id ?? ''}:${s.latDeg}:${s.lonDeg}:${state.landingMs}:${state.stayDays}`;
+    if (key === missionKey) return;
+    missionKey = key;
+    writeMission({ siteId: s.id ?? null, siteName: s.name ?? null, latDeg: s.latDeg, lonDeg: s.lonDeg, landingMs: state.landingMs, stayDays: state.stayDays });
+  }
   function render() {
+    saveMission();
     derived = compute();
     if (mapView && !bigLayout()) mapView.setLayout(false);
     shell.sync(state, derived.figures);
@@ -1549,6 +1564,9 @@ function start() {
 
   window.addEventListener('hashchange', () => {
     if (location.hash === toHash(state)) return;
+    // the stage bar's "3 Rover" inside this page: a hash change with plan=1, no reload
+    const planNow = /(^|[#&])plan=1(&|$)/.test(location.hash);
+    if (planNow) setTimeout(() => openPlanAtSite(), 0);
     const next = parseHash(location.hash, sites, eph);
     const openTab = next.sheet;
     next.picking = state.picking;
@@ -1595,6 +1613,17 @@ function start() {
   });
 
   render();
+  // step 3 of the mission (mission-flow.js): arriving with plan=1 opens the Route tool with the landing site as
+  // the start; done after the first full render, once the timeline and the map exist
+  function openPlanAtSite() {
+    if (!routePlanCard || !state.site || !(state.site.latDeg <= TERRAIN_MAX_LAT)) return;
+    // the same path as pressing the Route tool (which card the panel shows follows `kind`)
+    kind = 'route';
+    update({ tool: 'route' });
+    entryFold('route');
+    if (!rp.points) routePlanCard.update({ points: [toXY(state.site.latDeg, state.site.lonDeg)] });
+  }
+  if (planOnLoad) openPlanAtSite();
   // an old #view=navigator link, or sheet= in the hash: the map with the detail sheet open
   if (state.sheet && mapView) openSheet(state.sheet);
 }

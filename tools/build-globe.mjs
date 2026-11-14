@@ -1,7 +1,7 @@
 // Builds demo/globe.html, the phase 1 3D globe page, the same way tools/build.mjs builds index.html:
 // the ES modules from demo/src/globe-main.js inlined, small JSON inlined, start-up data packs as classic
 // scripts. Run node tools/build-global.mjs first for the globe_* packs.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { bundle, LOADER_STUB } from './build.mjs';
@@ -17,6 +17,7 @@ export function buildGlobe(demo = join(dirname(fileURLToPath(import.meta.url)), 
   const data = [
     jsonScript('data-terrain', JSON.parse(read('data/terrain.json'))),
     jsonScript('data-sites', JSON.parse(read('data/sites.json'))),
+    ...(existsSync(join(demo, 'data/hires.json')) ? [jsonScript('data-hires', JSON.parse(read('data/hires.json')))] : []),
     ...GLOBE_STARTUP_PACKS.map((n) => `<script src="data/js/${n}.js"></script>`),
   ].join('\n');
   for (const mark of ['<!--STUB-->', '<!--DATA-->', '<!--JS-->']) if (!template.includes(mark)) throw new Error(`globe.template.html is missing ${mark}`);

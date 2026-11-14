@@ -97,7 +97,7 @@ function reliefM(n) {
 }
 
 // ---------- the view ----------
-export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {} } = {}) {
+export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {}, capDepth = () => MAX_DEPTH_CAP } = {}) {
   const THREE = window.THREE;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -308,7 +308,8 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
       const rad = n._radius + reliefM(n) * state.exaggeration / 1000;
       const d = Math.max(0.001, camera.position.distanceTo(n._centre) - rad);
       const err = (nodeSizeKm(n) / SEG) / d * K;
-      const max = n.kind === 'cap' ? MAX_DEPTH_CAP : MAX_DEPTH_CYL;
+      // caps refine past 20 m only where finer data exists (the high-resolution site patches)
+      const max = n.kind === 'cap' ? (n.pole === 'S' ? capDepth({ x0: n.x0, x1: n.x1, y0: n.y0, y1: n.y1 }) : MAX_DEPTH_CAP) : MAX_DEPTH_CYL;
       if (err > PX_ERROR && n.depth < max) {
         const kids = children(n).filter((c) => visible(c, camU, horizon));
         const missing = kids.filter((c) => !ready(c));

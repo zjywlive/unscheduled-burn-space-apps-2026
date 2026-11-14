@@ -1,10 +1,12 @@
 // Entry of demo/globe.html (phase 1): the whole Moon from the global terrain model, in 3D.
 import { loadData } from './data-loader.js';
 import { createDem, createPyramid, createTiledDem } from './terrain.js';
-import { createGlobeTerrain, southFrom } from './globe-terrain.js';
+import { createGlobeTerrain } from './globe-terrain.js';
 import { createGlobeView, cameraFromHash, cameraToHash } from './globe-view.js';
 import { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } from './route3d.js';
 import { createRouteLayer } from './globe-route.js';
+import { createHiresSet } from './hires.js';
+import { stageBar, readMission } from './mission-flow.js';
 
 function readJson(id) {
   const el = document.getElementById(id);
@@ -25,6 +27,11 @@ export function startGlobe() {
   const canvas = $('globe');
   const meta = readJson('data-terrain');
   const sites = readJson('data-sites') ?? [];
+  // high-resolution patches around the sites (5 / 10 / 20 m), loaded as the camera comes close
+  const hires = createHiresSet(readJson('data-hires'), (name) => load(name), { onLoad: () => invalidateSouth() });
+  // the mission's steps (mission-flow.js): this page is step 4
+  const stagesSlot = document.getElementById('stages');
+  if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, '3d'));
   let inflight = 0;
   const counted = (p) => { inflight++; showLoading(); return p.finally(() => { inflight--; showLoading(); }); };
   const load = (name) => counted(loadData(name, { timeoutMs: 60000 }));
@@ -39,6 +46,7 @@ export function startGlobe() {
     requestAnimationFrame(() => { invalidateSouthQueued = false; view?.invalidate({ pole: 'S' }); });
   };
   function requestSouth(spacingKm, bounds) {
+    if (spacingKm < 0.06) hires.ensure(bounds);
     if (!meta) return;
     for (const l of meta.levels ?? []) {
       if (spacingKm > l.kmPerPixel * 3 || southPending.has(l.name)) continue;
@@ -62,7 +70,7 @@ export function startGlobe() {
 
   const terrain = createGlobeTerrain({
     load,
-    south: southFrom(pyramid),
+    south: () => (hires.list.length ? [...pyramid.levels, ...hires.list] : pyramid.levels),
     onChange: ({ level, r, c }) => view?.invalidate({ latMin: 90 - (r + 1) * level.tileDeg, latMax: 90 - r * level.tileDeg, lonMin: c * level.tileDeg, lonMax: (c + 1) * level.tileDeg }),
   });
 
@@ -135,9 +143,15 @@ export function startGlobe() {
       let hashTimer = 0;
       const routeMode = /(^|[#&])route=1(&|$)/.test(location.hash);
       const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + (routeMode ? '&route=1' : '')), 300); };
-      view = createGlobeView(canvas, terrain, { requestSouth, initial: cameraFromHash(location.hash), onCamera });
+      // tiles over a high-resolution patch may refine to its pixel size (5 m: depth 12, 10 m: 11), elsewhere 20 m (10)
+      const capDepth = (b) => { const k = hires.finestKmAt(b); return k === null ? 10 : k <= 0.0051 ? 12 : k <= 0.0101 ? 11 : 10; };
+      const fromHash = cameraFromHash(location.hash);
+      // opened from the stage bar without a camera: start over the mission's site
+      const mission = readMission();
+      const startAt = fromHash.lat === undefined && mission && !/(^|[#&])route=1/.test(location.hash) ? { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 } : fromHash;
+      view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
       view.onFrame(frame);
-      window.__globe = { view, terrain, pyramid };   // for debugging from the console
+      window.__globe = { view, terrain, pyramid, hires };   // for debugging from the console
       window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
       if (routeMode) startRoute(view, cameraFromHash(location.hash));
       document.body.classList.add('ready');

@@ -4,6 +4,7 @@
 // Phase 5 (G, docs/phase4/mock/structure.html): in the big layout the modes and the Layers menu (filters,
 // overlays, weights) sit in the top bar; the right panel is an inspector that follows the selected object
 // (point / route / region); the status line, legend and scale bar go to the time dock (main.js mounts them).
+import { nextSteps } from '../mission-flow.js';
 import { h, s, clear } from './dom.js';
 import { panelIcon, closeX } from './shell.js';
 import { createMapFrame, keepFocus } from './mapframe.js';
@@ -301,7 +302,9 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const btnGroup = h('div', { class: 'insp-btns' });
   const pointHead = h('div', { class: 'insp-head-block' },
     h('div', { class: 'insp-title-row' }, h('div', { class: 'insp-title' }, pName, pSub), btnGroup),
-    h('div', { class: 'insp-actions' }, dialBtn, detailsBtn));
+    h('div', { class: 'insp-actions' }, dialBtn, detailsBtn),
+    // the mission's next steps for this site and date (mission-flow.js)
+    typeof document !== 'undefined' ? nextSteps(document, 'site', { className: 'insp-next' }) : null);
   const pointTable = h('div', { class: 'insp-table' });
   // phase 6 A (mock personas.html?s=verdict): the verdict and the way out above the hours table, the live
   // rows under it, then the official products. setVerdict fills them without a re-render (the way out

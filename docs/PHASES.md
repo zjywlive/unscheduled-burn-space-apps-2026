@@ -171,3 +171,24 @@ a GRAIL gravity layer.
   points, 27 havens), framed over the terrain; scrubbed to 20 Jan 04:14 with Follow on: km 23.7, battery 66 %.
 - Not done: the GRAIL gravity layer (optional); a live position feed (the playback uses the simulated times);
   the surface station is not drawn on the globe.
+
+## Phase 7: one mission flow and high-resolution landing terrain (14 Nov, 21:30 GMT)
+
+Asked by the team after the six phases: "stitch between all of the views in one so after we have decided where
+to land we can just plan further", and "high resolution 3D depth map so we would know the surface when it gets
+down".
+
+- **One mission across the pages** (`demo/src/mission-flow.js`): the chosen site, landing time and stay are kept
+  in localStorage and carried in the links; every page has the same stage bar, 1 Site (navigator) → 2 Landing
+  (lander) → 3 Rover (navigator, route card opened with the landing site as the start) → 4 3D (globe, at the site,
+  or the planned route). The navigator also shows "Plan the landing / Plan the rover route / See it in 3D" under the
+  site inspector.
+- **High-resolution patches** (`tools/fetch-hires.mjs`, `demo/src/hires.js`, `demo/data/hires.json`): 10 × 10 km
+  around every listed south-pole site from the finest LOLA polar product that covers it, 5 m (Shackleton ridge,
+  de Gerlache rim 2), 10 m (Haworth, Malapert massif, Mons Mouton, Nobile rim 1) or 20 m (IM-2, Peak near Cabeus B,
+  Mons Mouton plateau, Nobile rim 2); IM-1 is outside them. Only the byte ranges of the patch rows were downloaded
+  (25 MB in all; 6.9 MB of packs). Single-pixel spikes over 10 m (5 m data; 20 m and 40 m for 10 m and 20 m data)
+  are replaced by the median of their 8 neighbours: 0–76 pixels per site, counted in the manifest.
+- **Globe**: tiles over a patch refine to its pixel size (depth 12 at 5 m); "Data at centre" reads "LOLA 5 m" at
+  Shackleton ridge. **Lander**: the descent scene uses the site's patch (lander session).
+- Tests: the window arithmetic, the sampler, despiking, agreement with the 20 m and 120 m levels, the mission links.

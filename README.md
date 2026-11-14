@@ -59,8 +59,12 @@ sunniest), then for the chosen one:
 - *Contingency:* the nearest safe haven (sunlit for a day, Earth in view, reachable with the battery left) from
   every 2 km of the route, and a comms-denied heading using the Sun and Earth.
 
+**One mission, four steps.** Every page carries the same stage bar: 1 Site → 2 Landing → 3 Rover → 4 3D. The site and
+landing date chosen in the navigator go with you to the lander, then back to the route card with the landing site as
+the start, then to the 3D globe.
+
 **3D (`demo/globe.html`).** A globe of the whole Moon from LOLA elevation at several levels of detail, down to
-20 m at the south pole. "Fly along in 3D" puts the planned route on it and plays the simulated rover along it.
+20 m at the south pole and 5–20 m around the landing sites. "Fly along in 3D" puts the planned route on it and plays the simulated rover along it.
 
 **Lander (`demo/lander.html`).** A generic robotic lander from Earth parking orbit through lunar orbit to a
 powered descent at a south-pole site: Δv and propellant budget, J2/C22 and third-body dynamics, power and
@@ -79,6 +83,7 @@ as the submission rules require.
 |---|---|---|
 | LRO LOLA GDR global DEMs `LDEM_4`, `LDEM_16`, `LDEM_64` (4 / 16 / 64 px per degree) | NASA PDS Geosciences Node, https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ | Global terrain model: whole-Moon levels of detail at 7.6 km, 1.9 km and 474 m (`tools/build-global.mjs`) |
 | LRO LOLA GDR polar DEMs `LDEM_75S_240M`, `_75S_120M`, `_80S_40M`, `_875S_20M`, `LDEM_75N_240M` | NASA PDS Geosciences Node, https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ | South-pole terrain down to 20 m; north-pole cap at 480 m |
+| LRO LOLA GDR polar DEMs `LDEM_875S_5M`, `LDEM_85S_10M`, `LDEM_80S_20M` (byte ranges only) | same | 10 × 10 km patches at 5 / 10 / 20 m around each landing site (`tools/fetch-hires.mjs`), for the descent view and the globe |
 | Mazarico et al. PSR and average-visibility rasters (`LPSR_75S_120M_201608`, `AVGVISIB_75S_120M_201608`, `_EARTH`) | http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG | Permanently shadowed regions and long-term Sun/Earth visibility |
 | JPL Horizons ephemeris | https://ssd.jpl.nasa.gov/api/horizons.api | Sun and Earth directions from the Moon, 2026-11 to 2029-01 |
 | three.js 0.187.0 (MIT) | https://registry.npmjs.org/three/-/three-0.187.0.tgz | 3D globe rendering (`demo/vendor/three.classic.js`, see `demo/vendor/VENDOR.md`) |

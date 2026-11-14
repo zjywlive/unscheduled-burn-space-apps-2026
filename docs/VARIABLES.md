@@ -18,7 +18,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 
 | Variable | Unit | Source | Status | Code | Notes |
 |---|---|---|---|---|---|
-| Elevation (DEM) | m | data: LOLA global DEMs (7.6 km / 1.9 km / 474 m) + polar DEMs (south 20–480 m, north 480 m) | ✅ | `globe-terrain.js` `heightAt`, `terrain.js` | One height for any lat/lon from the finest level loaded; see PHASES.md phase 1 |
+| Elevation (DEM) | m | data: LOLA global DEMs (7.6 km / 1.9 km / 474 m) + polar DEMs (south 20–480 m, north 480 m) + site patches (5 / 10 / 20 m, 10 × 10 km) | ✅ | `globe-terrain.js` `heightAt`, `terrain.js`, `hires.js` | One height for any lat/lon from the finest level loaded; see PHASES.md phases 1 and 7 |
 | Slope magnitude | deg | derived from DEM | ✅ | `route-plan.js`, `data/slope_*` | per node, plus a 3 × 3 mean for the "flat" cost |
 | Rover max climb slope | deg | assumed (default 15°) | ✅ | `route-plan.js` `DEFAULT_MAX_SLOPE`, `edgeTest` | the card's Climb limit; checked against the grade along each move |
 | **Directional (non-reversible) slope** | deg | derived: gradient projected on each move | ✅ | `route-plan.js` `edgeTest`, `legStats` | Directed graph; per route `oneWayKm` / `oneWay` (descending steeper than the climb limit) and per plan `returnable`. Switchbacks limited to 16 directions (conservative) |
