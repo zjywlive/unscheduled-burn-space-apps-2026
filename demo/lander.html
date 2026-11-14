@@ -181,7 +181,17 @@
   .cam:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   .cam.follow.on { background: #fff; color: #000; border-color: #fff; }
   .cam.zoom { margin-left: 6px; }
-  .cam-gap { width: 32px; }
+  /* close-up of the lander (top of the Vehicle tab) */
+  .closeup { margin: 0 0 6px; }
+  .closeup-view { position: relative; height: 240px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: radial-gradient(ellipse at 50% 35%, #1a1d22 0%, #08090b 75%); }
+  .closeup-view canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .closeup-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .closeup-labels .part { position: absolute; left: 0; top: 0; margin: -8px 0 0 6px; padding-left: 8px; font-size: 11px; color: #e6e6e6; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+  .closeup-labels .part::before { content: ""; position: absolute; left: 0; top: 6px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+  .closeup-labels .part.sun { color: var(--sun); } .closeup-labels .part.earth { color: var(--earth); }
+  .closeup-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .closeup-bar .check { margin: 6px 0; }
+  .closeup-hint { color: var(--faint); font-size: 11px; }
 
   @media (max-width: 1360px) {
     .field > span { display: none; }
@@ -217,10 +227,10 @@
     .next, .side:not(.closed) ~ .next { left: 16px; right: 16px; transform: none; top: calc(var(--top) + 44px); bottom: auto; justify-content: space-between; }
     .side:not(.closed) ~ .next { display: none; }   /* the Landing tab has the same link */
     /* phone: zoom and follow only (drag rotates, two fingers pinch), in a row left of the Details button */
-    .camctl, .next:not([hidden]) ~ .camctl { left: auto; right: 108px; bottom: auto; top: calc(var(--top) + 1px); grid-template-columns: repeat(3, 32px); }
-    .camctl .cam:not(.zoom):not(.follow), .cam-gap { display: none; }
+    .camctl, .next:not([hidden]) ~ .camctl { left: auto; right: 108px; bottom: auto; top: calc(var(--top) + 1px); grid-template-columns: repeat(4, 32px); }
+    .camctl .cam:not(.zoom):not(.follow) { display: none; }
     .cam.zoom { margin-left: 0; }
-    .cam[data-cam="zoom-out"] { order: 0; } .cam.follow { order: 1; } .cam[data-cam="zoom-in"] { order: 2; }
+    .cam[data-cam="zoom-out"] { order: 0; } .cam.follow { order: 1; } .cam[data-cam="zoom-in"] { order: 2; } .cam.look { order: 3; }
     .hud dl { font-size: 12px; }
     .timeline { height: 68px; padding: 0 10px; }
     .seg-ph span { display: none; }
@@ -272,7 +282,7 @@
 <a id="next" class="glass next" href="index.html" hidden><span class="next-t">Touchdown<small id="next-where"></small></span><span class="btn primary">Plan the rover route →</span></a>
 <div id="camctl" class="camctl" role="group" aria-label="Camera">
   <button type="button" class="cam" data-cam="rotate-left" title="Rotate left (Q)" aria-label="Rotate left (Q)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.6 8.6A4.5 4.5 0 1 0 5 4.6M3 2.6v3h3"/></svg></button><button type="button" class="cam" data-cam="pan-up" title="Pan up (W)" aria-label="Pan up (W)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button><button type="button" class="cam" data-cam="rotate-right" title="Rotate right (E)" aria-label="Rotate right (E)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M12.4 8.6A4.5 4.5 0 1 1 11 4.6M13 2.6v3h-3"/></svg></button><button type="button" class="cam zoom" data-cam="zoom-in" title="Zoom in (+)" aria-label="Zoom in (+)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
-  <button type="button" class="cam" data-cam="pan-left" title="Pan left (A)" aria-label="Pan left (A)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M10 4l-4 4 4 4"/></svg></button><button type="button" id="cam-follow" class="cam follow on" title="Follow the craft again (0)" aria-label="Follow craft"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6zM8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg></button><button type="button" class="cam" data-cam="pan-right" title="Pan right (D)" aria-label="Pan right (D)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button><span class="cam-gap" aria-hidden="true"></span>
+  <button type="button" class="cam" data-cam="pan-left" title="Pan left (A)" aria-label="Pan left (A)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M10 4l-4 4 4 4"/></svg></button><button type="button" id="cam-follow" class="cam follow on" title="Follow the craft again (0)" aria-label="Follow craft"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6zM8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg></button><button type="button" class="cam" data-cam="pan-right" title="Pan right (D)" aria-label="Pan right (D)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button><button type="button" id="cam-look" class="cam look zoom" title="Look at the lander: close-up with its parts (L)" aria-label="Look at the lander"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 3.5h6l1 4H4zM8 7.5v3M4.5 7.5L2.5 12.5M11.5 7.5l2 5M1.5 12.5h2M12.5 12.5h2M7 10.5h2"/></svg></button>
   <button type="button" class="cam tilt" data-cam="lower" title="Lower the camera (F)" aria-label="Lower the camera (F)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 4.5h10M5 8l3 3 3-3"/></svg></button><button type="button" class="cam" data-cam="pan-down" title="Pan down (S)" aria-label="Pan down (S)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button><button type="button" class="cam tilt" data-cam="raise" title="Raise the camera (R)" aria-label="Raise the camera (R)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 11.5h10M5 8l3-3 3 3"/></svg></button><button type="button" class="cam zoom" data-cam="zoom-out" title="Zoom out (−)" aria-label="Zoom out (−)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 8h9"/></svg></button>
 </div>
 
@@ -3589,11 +3599,230 @@ function createLabels(layer) {
 
 return { three, v3, enu3, makeLine, setLinePoints, starField, createControls, CAMERA_ACTIONS, cameraStep, CAMERA_KEYS, CAMERA_CHARS, cameraKey, bindControls, createLabels };
 })();
+__m['model.js'] = (() => {
+// The lander as a 3D model (generic robotic lander, metres, body frame: +Y up through the top deck, the main
+// engine fires along −Y so thrust is +Y), and its attitude from the mission state, as the power model assumes:
+//   burn / descent  body +Y along the thrust; the array turns about +Y to face the Sun (output = sin of the Sun's
+//                   angle from the thrust axis, power.arrayFactor)
+//   sun-point/safe  body +Y perpendicular to the Sun (along-track), array normal on the Sun (output 1)
+//   surface         upright on local up; the array tracks the Sun's azimuth about up (one-axis: cos elevation)
+// The roll about +Y puts the antenna side (+Z) toward the Earth; the high-gain dish is gimballed onto the Earth.
+// Pure vector maths at the top (tested without three.js); the mesh builder needs window.THREE.
+const { three } = __m['view-common.js'];
+const { attitudeForPhase } = __m['power.js'];
+const { add, sub, scale, dot, cross, norm, unit } = __m['vec.js'];
+
+const PHASE_MAP = { 'approach-moon': 'coast', 'descent-coast': 'llo' };   // as power-timeline.js
+const attitudeMode = (phaseId) => attitudeForPhase(PHASE_MAP[phaseId] ?? phaseId);
+
+// outer edges of opposite footpads, top of the high-gain dish, body flat to flat, array wing tip from the axis
+const LANDER_DIMS = Object.freeze({ footprintM: 4.9, heightM: 3.3, bodyM: 2.4, arraySpanM: 3.8 });
+
+const perp = (v, ref) => { const p = sub(v, scale(ref, dot(v, ref))); return norm(p) > 1e-9 ? unit(p) : null; };
+const anyPerp = (y) => unit(Math.abs(y[0]) < 0.9 ? cross(y, [1, 0, 0]) : cross(y, [0, 1, 0]));
+
+// Body axes (unit vectors in the caller's frame) for an attitude mode. thrustDir: unit thrust direction while
+// firing (null otherwise); vel: velocity relative to the central body; up: local vertical (surface).
+function bodyAxes({ mode, thrustDir = null, vel = null, sunDir = null, earthDir = null, up = null }) {
+  let y = null;
+  if ((mode === 'burn' || mode === 'descent') && thrustDir) y = unit(thrustDir);
+  else if (mode === 'surface' && up) y = unit(up);
+  else if (vel && sunDir) y = perp(vel, sunDir);           // along-track, square to the Sun
+  if (!y && vel && norm(vel) > 1e-12) y = unit(vel);
+  if (!y && up) y = unit(up);
+  if (!y) y = [0, 0, 1];
+  const z = (earthDir && perp(earthDir, y)) || (sunDir && perp(sunDir, y)) || anyPerp(y);
+  return { x: cross(y, z), y, z };
+}
+
+const toBody = (axes, d) => (d ? [dot(d, axes.x), dot(d, axes.y), dot(d, axes.z)] : null);
+const fromBody = (axes, b) => add(add(scale(axes.x, b[0]), scale(axes.y, b[1])), scale(axes.z, b[2]));
+// array drive angle about body +Y that turns the panel normal (+Z at 0) toward the Sun, and the resulting
+// incidence factor (cos of the angle between the panel normal and the Sun)
+const arrayAngle = (sunBody) => (sunBody ? Math.atan2(sunBody[0], sunBody[2]) : 0);
+const arrayIncidence = (sunBody) => (sunBody ? Math.hypot(sunBody[0], sunBody[2]) : 0);
+
+// The lander's attitude from a plan state (MCI vectors): mode, body axes, Sun and Earth directions, throttle,
+// and whether the trans-lunar stage is attached and firing.
+function attitudeState(st, plan) {
+  const mode = attitudeMode(st.phase);
+  const ev = st.body === 'earth' ? plan.bodies?.earthVelMci?.(st.tMs) : null;
+  const vel = ev ? sub(st.vel, ev) : st.vel;
+  const earthDir = st.earth ? unit(sub(st.earth, st.pos)) : null;
+  const up = unit(st.pos);
+  const axes = bodyAxes({ mode, thrustDir: st.throttle > 0 ? st.thrustDir : null, vel, sunDir: st.sunDir, earthDir, up });
+  const sunBody = toBody(axes, st.sunDir), earthBody = toBody(axes, earthDir);
+  return {
+    mode, axes, sunDir: st.sunDir, earthDir, sunBody, earthBody,
+    throttle: st.throttle ?? 0, stage: !!st.tliStageAttached, stageFiring: st.phase === 'tli',
+    arrayAngle: arrayAngle(sunBody), arrayIncidence: arrayIncidence(sunBody),
+  };
+}
+
+// Scale for drawing: real size when close, enlarged to about `frac` of the camera distance across when far.
+// unitsPerM: scene units per metre. → { s (scene units per model metre), times (enlargement, 1 = real size) }
+function drawScale(camDist, unitsPerM, frac = 0.05) {
+  const real = unitsPerM, want = (camDist * frac) / LANDER_DIMS.footprintM;
+  const s = Math.max(real, want);
+  return { s, times: s / real };
+}
+const sizeNote = (times) => (times < 1.5 ? '' : `drawn ${times >= 100 ? Math.round(times).toLocaleString('en-GB', { maximumSignificantDigits: 2 }) : times.toFixed(times < 10 ? 1 : 0)}× real size`);
+
+// ---------- mesh ----------
+
+function buildLanderModel() {
+  const T = three();
+  const root = new T.Group();
+  const M = (o) => new T.MeshStandardMaterial(o);
+  const foil = M({ color: 0xc9a24a, metalness: 0.65, roughness: 0.35 });
+  const foilDark = M({ color: 0x8f6f2e, metalness: 0.6, roughness: 0.45 });
+  const white = M({ color: 0xdedede, metalness: 0.1, roughness: 0.6 });
+  const grey = M({ color: 0xb8bcc2, metalness: 0.4, roughness: 0.45 });
+  const dark = M({ color: 0x262626, metalness: 0.55, roughness: 0.45, side: T.DoubleSide });
+  const cell = M({ color: 0x1b2a4f, metalness: 0.35, roughness: 0.3, emissive: 0x050a18 });
+  const mesh = (g, m, x = 0, y = 0, z = 0) => { const o = new T.Mesh(g, m); o.position.set(x, y, z); return o; };
+  // a rod between two points
+  const rod = (a, b, r, m) => {
+    const A = new T.Vector3(...a), B = new T.Vector3(...b), d = B.clone().sub(A);
+    const o = new T.Mesh(new T.CylinderGeometry(r, r, d.length(), 8), m);
+    o.position.copy(A).add(B).multiplyScalar(0.5);
+    o.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), d.normalize());
+    return o;
+  };
+
+  // descent stage: octagonal body, skirt, top deck, avionics, four propellant tanks bulging between the legs
+  const body = new T.Group();
+  body.add(mesh(new T.CylinderGeometry(1.2, 1.2, 1.0, 8), foil, 0, 1.75, 0));
+  body.add(mesh(new T.CylinderGeometry(1.2, 0.85, 0.35, 8), foilDark, 0, 1.075, 0));
+  body.add(mesh(new T.CylinderGeometry(1.05, 1.2, 0.18, 8), white, 0, 2.34, 0));
+  body.add(mesh(new T.BoxGeometry(0.7, 0.32, 0.5), white, 0.35, 2.59, -0.35));
+  const tanks = [];
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2;
+    const t = mesh(new T.SphereGeometry(0.42, 20, 12), grey, Math.cos(a) * 1.02, 1.72, Math.sin(a) * 1.02);
+    body.add(t); tanks.push(t);
+  }
+  root.add(body);
+
+  // main engine and plume (exhaust along −Y)
+  const engine = new T.Group();
+  engine.add(mesh(new T.CylinderGeometry(0.22, 0.22, 0.2, 16), dark, 0, 1.0, 0));
+  engine.add(mesh(new T.CylinderGeometry(0.16, 0.45, 0.7, 24, 1, true), dark, 0, 0.6, 0));
+  root.add(engine);
+  const plumeMat = new T.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.55, blending: T.AdditiveBlending, depthWrite: false });
+  const plume = new T.Mesh(new T.ConeGeometry(0.5, 1, 20, 1, true), plumeMat);
+  plume.rotation.x = Math.PI;
+  root.add(plume);
+
+  // four landing legs (primary and secondary struts) with footpads, at 45° between the tanks
+  const legs = [];
+  for (let k = 0; k < 4; k++) {
+    const a = Math.PI / 4 + (k * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a);
+    const pad = [2.1 * c, 0.06, 2.1 * s];
+    const g = new T.Group();
+    g.add(rod([1.02 * c, 1.95, 1.02 * s], pad, 0.055, white));
+    g.add(rod([1.05 * c, 0.95, 1.05 * s], [1.8 * c, 0.42, 1.8 * s], 0.04, white));
+    g.add(mesh(new T.CylinderGeometry(0.3, 0.34, 0.08, 16), white, pad[0], 0.04, pad[2]));
+    root.add(g); legs.push(pad);
+  }
+
+  // reaction-control thruster quads on the body corners (four small nozzles each)
+  const rcs = [];
+  for (let k = 0; k < 4; k++) {
+    const a = Math.PI / 8 + (k * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a);
+    const q = new T.Group();
+    q.position.set(1.22 * c, 2.1, 1.22 * s);
+    q.rotation.y = -a;
+    q.add(mesh(new T.BoxGeometry(0.16, 0.16, 0.16), white));
+    // nozzles up, down and both ways along the body's circumference (local Z), mouths outward
+    for (const d of [[0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const n = new T.Mesh(new T.ConeGeometry(0.045, 0.13, 10, 1, true), dark);
+      n.quaternion.setFromUnitVectors(new T.Vector3(0, -1, 0), new T.Vector3(...d));
+      n.position.set(d[0] * 0.14, d[1] * 0.14, d[2] * 0.14);
+      q.add(n);
+    }
+    root.add(q); rcs.push(q);
+  }
+
+  // solar array: one wing on a boom from a drive that turns about body +Y (panel normal +Z at angle 0)
+  const arrayDrive = new T.Group();
+  arrayDrive.add(mesh(new T.CylinderGeometry(1.24, 1.24, 0.08, 8), grey, 0, 2.02, 0));
+  arrayDrive.add(rod([1.15, 1.95, 0], [1.65, 1.95, 0], 0.035, grey));
+  const panel = new T.Group();
+  panel.position.set(2.75, 1.95, 0);
+  panel.add(mesh(new T.BoxGeometry(2.2, 1.2, 0.04), cell));
+  for (const x of [-0.55, 0, 0.55]) panel.add(mesh(new T.BoxGeometry(0.02, 1.2, 0.05), grey, x, 0, 0));
+  panel.add(mesh(new T.BoxGeometry(2.2, 0.02, 0.05), grey, 0, 0, 0));
+  arrayDrive.add(panel);
+  root.add(arrayDrive);
+
+  // high-gain antenna: mast, two-axis gimbal, dish (opening along the gimbal's +Y) with its feed
+  root.add(rod([-0.55, 2.43, 0.35], [-0.55, 2.95, 0.35], 0.04, grey));
+  const dish = new T.Group();
+  dish.position.set(-0.55, 2.98, 0.35);
+  const bowl = new T.Mesh(new T.SphereGeometry(0.62, 28, 8, 0, Math.PI * 2, 0, 0.75), white);
+  bowl.material = white.clone(); bowl.material.side = T.DoubleSide;
+  bowl.rotation.x = Math.PI;
+  bowl.position.y = 0.62;
+  dish.add(bowl);
+  dish.add(mesh(new T.CylinderGeometry(0.02, 0.02, 0.36, 6), grey, 0, 0.18, 0));
+  dish.add(mesh(new T.SphereGeometry(0.05, 10, 8), dark, 0, 0.37, 0));
+  root.add(dish);
+
+  // trans-lunar injection stage under the lander until it separates (generic cryogenic upper stage)
+  const stage = new T.Group();
+  stage.add(mesh(new T.CylinderGeometry(1.0, 1.5, 0.6, 24), grey, 0, -0.3, 0));
+  stage.add(mesh(new T.CylinderGeometry(1.5, 1.5, 6.0, 32), white, 0, -3.6, 0));
+  stage.add(mesh(new T.CylinderGeometry(0.3, 0.9, 1.4, 24, 1, true), dark, 0, -7.3, 0));
+  const stagePlume = new T.Mesh(new T.ConeGeometry(1.0, 1, 24, 1, true), plumeMat.clone());
+  stagePlume.rotation.x = Math.PI;
+  stage.add(stagePlume);
+  stage.visible = false;
+  root.add(stage);
+
+  root.traverse((o) => { if (o.isMesh && o !== plume && o !== stagePlume) { o.castShadow = true; o.receiveShadow = true; } });
+  const up = new T.Vector3(0, 1, 0), tmp = new T.Vector3();
+
+  // articulation: array drive, dish on the Earth, plumes; sunBody/earthBody are body-frame unit vectors
+  function articulate({ sunBody = null, earthBody = null, throttle = 0, stageAttached = false, stageFiring = false } = {}) {
+    if (sunBody) arrayDrive.rotation.y = arrayAngle(sunBody);
+    if (earthBody) dish.quaternion.setFromUnitVectors(up, tmp.set(...earthBody).normalize());
+    stage.visible = stageAttached;
+    const th = stageFiring ? 0 : Math.max(0, Math.min(1, throttle));
+    plume.visible = th > 0.01;
+    plume.scale.set(1, 2 + th * 9, 1);
+    plume.position.y = 0.25 - (1 + th * 9) / 2;
+    stagePlume.visible = stageAttached && stageFiring;
+    stagePlume.scale.set(1, 8, 1);
+    stagePlume.position.y = -8.0 - 4;
+  }
+  // part anchors in the model's own frame (for labels), current with the articulation
+  function parts() {
+    root.updateMatrixWorld(true);
+    const inv = root.matrixWorld.clone().invert();
+    const local = (o, x = 0, y = 0, z = 0) => o.localToWorld(new T.Vector3(x, y, z)).applyMatrix4(inv);
+    const out = [
+      { id: 'engine', label: 'Main engine', pos: new T.Vector3(0, 0.3, 0) },
+      { id: 'legs', label: 'Landing leg', pos: new T.Vector3(...legs[1]) },
+      { id: 'array', label: 'Solar array', pos: local(panel, 0.6, 0.35, 0) },
+      { id: 'antenna', label: 'High-gain antenna', pos: local(dish, 0, 0.45, 0) },
+      { id: 'tanks', label: 'Propellant tank', pos: tanks[0].position.clone().add(new T.Vector3(0.38, 0, 0)) },
+      { id: 'rcs', label: 'RCS thrusters', pos: rcs[2].position.clone() },
+    ];
+    if (stage.visible) out.push({ id: 'stage', label: 'Trans-lunar stage', pos: new T.Vector3(1.5, -3.6, 0) });
+    return out;
+  }
+  return { group: root, plume, articulate, parts };
+}
+
+return { attitudeMode, LANDER_DIMS, bodyAxes, toBody, fromBody, arrayAngle, arrayIncidence, attitudeState, drawScale, sizeNote, buildLanderModel };
+})();
 __m['view-earth.js'] = (() => {
 // Scene 1: Earth–Moon transfer, geocentric and non-rotating (axes of the MCI frame), 1 unit = 1000 km, true scale.
 const { three, v3, makeLine, starField, createControls } = __m['view-common.js'];
 const { sub, norm } = __m['vec.js'];
 const { R_EARTH, R_MOON } = __m['constants.js'];
+const { buildLanderModel, drawScale, sizeNote } = __m['model.js'];
 
 const K = 1 / 1000;
 
@@ -3633,21 +3862,34 @@ function buildEarthScene(plan, labels) {
   const dot = (p, c, r) => { const m = new T.Mesh(new T.SphereGeometry(r, 12, 8), new T.MeshBasicMaterial({ color: c })); m.position.copy(p); scene.add(m); return m; };
   dot(geo(t.tliMs), 0xffcf6b, 0.35);
 
-  const craft = new T.Mesh(new T.SphereGeometry(0.25, 12, 8), new T.MeshBasicMaterial({ color: 0xffffff }));
+  // the lander model (metres) in this 1000 km scene: always enlarged here, with the factor in its label
+  const lander = buildLanderModel();
+  const craft = lander.group;
   scene.add(craft);
+  const qTarget = new T.Quaternion(), basis = new T.Matrix4();
+  let attInit = false;
   const controls = createControls(camera, { radius: 700, theta: 0.3, phi: 0.9 });
   labels.add('Earth', 'body earth', () => earth.position);
   labels.add('Moon', 'body', () => moon.position);
   const craftLbl = labels.add('Lander', 'craft', () => craft.position);
   labels.add('TLI', 'event', () => geo(t.tliMs));
 
-  function update(st, { dt = 1 / 60 } = {}) {
+  function update(st, { dt = 1 / 60, att = null } = {}) {
     const m = moonAt(st.tMs) ?? moon.position;
     moon.position.copy(m);
     const p = st.pos && st.earth ? v3(sub(st.pos, st.earth), K) : craft.position;
     craft.position.copy(p);
     sun.position.copy(v3(st.sunDir, 1000));
-    craftLbl.el.textContent = st.tliStageAttached ? 'Lander + upper stage' : 'Lander';
+    const ds = drawScale(camera.position.distanceTo(p), 1e-6, 0.04);
+    craft.scale.setScalar(ds.s);
+    const lbl = `${st.tliStageAttached ? 'Lander + upper stage' : 'Lander'} · ${sizeNote(ds.times)}`;
+    if (craftLbl.el.textContent !== lbl) craftLbl.el.textContent = lbl;
+    if (att) {
+      basis.makeBasis(v3(att.axes.x), v3(att.axes.y), v3(att.axes.z));
+      qTarget.setFromRotationMatrix(basis);
+      if (!attInit) { craft.quaternion.copy(qTarget); attInit = true; } else craft.quaternion.slerp(qTarget, 1 - Math.exp(-dt / 0.35));
+      lander.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: att.stage, stageFiring: att.stageFiring });
+    }
     // automatic framing by phase: the parking orbit close in, the coast between the bodies, the approach on the Moon
     const dE = norm(sub(st.pos, st.earth)) * K;
     let target, radius, key;
@@ -3669,6 +3911,7 @@ const { R_MOON, R_EARTH, MOON_RATE, RAD } = __m['constants.js'];
 const { fromXY } = __m['../terrain.js'];
 const { unitFromLonLat } = __m['../geometry.js'];
 const { norm, scale, unit } = __m['vec.js'];
+const { buildLanderModel, drawScale, sizeNote } = __m['model.js'];
 
 // LOLA polar cap mesh in Moon-fixed km (three.js axes). dem: terrain.createDem(); edge at maxLatDeg.
 function polarCapGeometry(dem, { maxLatDeg = -79.5, n = 240 } = {}) {
@@ -3742,8 +3985,12 @@ function buildMoonScene(plan, labels) {
 
   const earth = new T.Mesh(new T.SphereGeometry(R_EARTH, 48, 24), new T.MeshStandardMaterial({ color: 0x3a6fb0, roughness: 0.8, emissive: 0x0a1830 }));
   scene.add(earth);
-  const craft = new T.Mesh(new T.SphereGeometry(1, 12, 8), new T.MeshBasicMaterial({ color: 0xffffff }));
+  // the lander model (metres) in this km scene: real size close up, enlarged (and said so) when far
+  const lander = buildLanderModel();
+  const craft = lander.group;
   scene.add(craft);
+  const qTarget = new T.Quaternion(), basis = new T.Matrix4();
+  let attInit = false;
   const branchGroup = new T.Group();
   scene.add(branchGroup);
 
@@ -3753,18 +4000,27 @@ function buildMoonScene(plan, labels) {
   labels.add('LOI', 'event', () => v3(plan.stateAt(t.loiMs).pos), moonOcc);
   labels.add('DOI', 'event', () => v3(plan.stateAt(t.doiMs).pos), moonOcc);
   labels.add('PDI', 'event', () => v3(plan.stateAt(t.pdiMs).pos), moonOcc);
-  labels.add('Lander', 'craft', () => craft.position, moonOcc);
+  const craftLbl = labels.add('Lander', 'craft', () => craft.position, moonOcc);
 
   const controls = createControls(camera, { radius: 7000, theta: 0.5, phi: 2.2, minRadius: 0.5 });
 
-  function update(st, { dt = 1 / 60 } = {}) {
+  function update(st, { dt = 1 / 60, att = null } = {}) {
     moonGroup.rotation.y = (MOON_RATE * (st.tMs - plan.epochMs)) / 1000;
     sun.position.copy(v3(st.sunDir, 1e5));
     if (st.earth) earth.position.copy(v3(st.earth));
     const p = v3(st.pos);
     craft.position.copy(p);
     const camD = camera.position.distanceTo(p);
-    craft.scale.setScalar(Math.max(0.02, camD * 0.004));
+    const ds = drawScale(camD, 0.001, 0.05);
+    craft.scale.setScalar(ds.s);
+    const lbl = `Lander${sizeNote(ds.times) ? ` · ${sizeNote(ds.times)}` : ''}`;
+    if (craftLbl.el.textContent !== lbl) craftLbl.el.textContent = lbl;
+    if (att) {
+      basis.makeBasis(v3(att.axes.x), v3(att.axes.y), v3(att.axes.z));
+      qTarget.setFromRotationMatrix(basis);
+      if (!attInit) { craft.quaternion.copy(qTarget); attInit = true; } else craft.quaternion.slerp(qTarget, 1 - Math.exp(-dt / 0.35));
+      lander.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: att.stage, stageFiring: att.stageFiring });
+    }
     siteMark.scale.setScalar(Math.max(0.05, camera.position.distanceTo(siteMark.getWorldPosition(new T.Vector3())) * 0.004));
     const r = norm(st.pos);
     const out = p.clone().normalize();
@@ -3817,7 +4073,8 @@ const { three, enu3, makeLine, setLinePoints, starField, createControls } = __m[
 const { enuAt } = __m['mission.js'];
 const { R_MOON, MOON_RATE, RAD } = __m['constants.js'];
 const { toXY } = __m['../terrain.js'];
-const { add, scale, cross, unit, norm, rotZ } = __m['vec.js'];
+const { add, scale, cross, unit, norm, rotZ, dot } = __m['vec.js'];
+const { buildLanderModel, drawScale, sizeNote } = __m['model.js'];
 const { unitFromLonLat } = __m['../geometry.js'];
 
 const PATCH_HALF_M = 8000;
@@ -3893,40 +4150,6 @@ function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HALF_M, n 
   return { geometry: geo, slope, axis, N, siteHeightM: up[mid * N + mid] };
 }
 
-function landerModel() {
-  const T = three();
-  const g = new T.Group();
-  const foil = new T.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.6, roughness: 0.35 });
-  const white = new T.MeshStandardMaterial({ color: 0xdedede, metalness: 0.1, roughness: 0.6 });
-  const dark = new T.MeshStandardMaterial({ color: 0x222222, metalness: 0.4, roughness: 0.5 });
-  const panelM = new T.MeshStandardMaterial({ color: 0x1b2a4a, metalness: 0.3, roughness: 0.3, emissive: 0x050a18 });
-  const body = new T.Mesh(new T.CylinderGeometry(1.25, 1.25, 1.5, 8), foil);
-  body.position.y = 1.55;
-  const deck = new T.Mesh(new T.CylinderGeometry(1.1, 1.25, 0.25, 8), white);
-  deck.position.y = 2.42;
-  const bell = new T.Mesh(new T.CylinderGeometry(0.22, 0.5, 0.7, 16, 1, true), dark);
-  bell.position.y = 0.55;
-  const panel = new T.Mesh(new T.BoxGeometry(0.06, 1.3, 2.2), panelM);
-  panel.position.set(1.45, 1.7, 0);
-  const dish = new T.Mesh(new T.SphereGeometry(0.35, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), white);
-  dish.position.set(-0.5, 2.7, 0.4);
-  g.add(body, deck, bell, panel, dish);
-  for (let k = 0; k < 4; k++) {
-    const a = Math.PI / 4 + (k * Math.PI) / 2;
-    const leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 2.0, 6), white);
-    const fx = Math.cos(a) * 2.1, fz = Math.sin(a) * 2.1;
-    leg.position.set(fx * 0.7, 0.75, fz * 0.7);
-    leg.lookAt(fx, 0.05, fz);
-    leg.rotateX(Math.PI / 2);
-    const pad = new T.Mesh(new T.CylinderGeometry(0.28, 0.32, 0.08, 12), white);
-    pad.position.set(fx, 0.04, fz);
-    g.add(leg, pad);
-  }
-  const plume = new T.Mesh(new T.ConeGeometry(0.55, 1, 20, 1, true), new T.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.55, blending: T.AdditiveBlending, depthWrite: false }));
-  plume.rotation.x = Math.PI;
-  g.add(plume);
-  return { group: g, plume };
-}
 
 // sky(tMs) → { sun: { azDeg, elDeg }, earth: { azDeg, elDeg } } at the site (landing.skyAt)
 function buildSurfaceScene(plan, labels, { sky } = {}) {
@@ -3986,8 +4209,17 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
   pin.position.y = 20;
   scene.add(ring, pin);
 
-  const { group: lander, plume } = landerModel();
-  lander.traverse((o) => { if (o.isMesh && o !== plume) { o.castShadow = true; } });
+  // the lander model (metres, real size; enlarged with a note only when the camera is far)
+  const model = buildLanderModel();
+  const lander = model.group;
+  let shadowsOn = true;
+  // Moon-centred inertial direction → this scene (ENU at the site with the landing-time rotation, as toEnu)
+  let east0 = unit(cross([0, 0, 1], plan.siteFixed));
+  if (norm(east0) < 1e-9) east0 = [0, 1, 0];
+  const north0 = cross(plan.siteFixed, east0);
+  const mciDir3 = (d) => { const f = rotZ(d, -thL); return new T.Vector3(dot(f, east0), dot(f, plan.siteFixed), -dot(f, north0)); };
+  const qAtt = new T.Quaternion(), basis = new T.Matrix4();
+  let attInit = false;
   scene.add(lander);
   const earthDot = new T.Mesh(new T.SphereGeometry(1, 16, 8), new T.MeshBasicMaterial({ color: 0x4cb3f0 }));
   const sunDot = new T.Mesh(new T.SphereGeometry(1, 16, 8), new T.MeshBasicMaterial({ color: 0xffe6a8 }));
@@ -4001,7 +4233,7 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
   labels.add('High gate', 'event', () => { const e = plan.descent.events.find((x) => x.name === 'high-gate'); return e ? enu3(toEnu(sampleAt(e.tS).r)) : null; });
   labels.add('Low gate', 'event', () => { const e = plan.descent.events.find((x) => x.name === 'low-gate'); return e ? enu3(toEnu(sampleAt(e.tS).r)) : null; });
   const farLbl = labels.add('', 'note', () => (farLbl.el.textContent ? new T.Vector3(0, 90, 0) : null));
-  labels.add('Lander', 'craft', () => (lander.visible ? lander.position.clone().setY(lander.position.y + 4) : null));
+  const craftLbl = labels.add('Lander', 'craft', () => (lander.visible ? lander.position.clone().setY(lander.position.y + 4 * lander.scale.y) : null));
 
   function sampleAt(tS) {
     const s = plan.descent.samples;
@@ -4011,10 +4243,10 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
   }
 
   const controls = createControls(camera, { radius: 900, theta: 0.8, phi: 1.15, minRadius: 3, maxRadius: 3e5 });
-  const qTmp = new T.Quaternion(), yAxis = new T.Vector3(0, 1, 0), heading = new T.Vector3(0.6, 0, 0.8);
+  const heading = new T.Vector3(0.6, 0, 0.8);
   const dirTo = (az, el, dist) => enu3([Math.sin(az * RAD) * Math.cos(el * RAD) * dist, Math.cos(az * RAD) * Math.cos(el * RAD) * dist, Math.sin(el * RAD) * dist]);
 
-  function update(st, { dt = 0.016 } = {}) {
+  function update(st, { dt = 0.016, att = null } = {}) {
     // Sun and Earth in the local sky at this instant
     const loc = st.local ?? sky?.(st.tMs);
     if (loc) {
@@ -4037,18 +4269,19 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
     farLbl.el.textContent = far ? `Lander is ${st.descent ? Math.round(Math.hypot(e[0], e[1]) / 1000) + ' km away' : 'still in orbit'}` : '';
     if (!far) {
       lander.position.copy(enu3(e));
-      const th = st.descent.throttle;
-      if (th > 0 && st.descent.thrustDir) {
-        const d = toEnu(add(st.descent.r, scale(st.descent.thrustDir, 1000)));
-        const dir = enu3([d[0] - e[0], d[1] - e[1], d[2] - e[2]]).normalize();
-        qTmp.setFromUnitVectors(yAxis, dir);
-        lander.quaternion.slerp(qTmp, 1 - Math.exp(-dt * 2.5));
-      } else if (st.phase === 'landed') {
-        lander.quaternion.slerp(new T.Quaternion(), 1 - Math.exp(-dt * 12));
+      // attitude as in the other views (body along the thrust, upright after touchdown), array on the Sun, dish on Earth
+      if (att) {
+        basis.makeBasis(mciDir3(att.axes.x), mciDir3(att.axes.y), mciDir3(att.axes.z));
+        qAtt.setFromRotationMatrix(basis);
+        if (!attInit) { lander.quaternion.copy(qAtt); attInit = true; } else lander.quaternion.slerp(qAtt, 1 - Math.exp(-dt / 0.35));
+        model.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: false });
       }
-      plume.visible = th > 0.01;
-      plume.scale.set(1, 2 + th * 9, 1);
-      plume.position.y = -(1 + th * 4.5) + 0.2;
+      const ds = drawScale(camera.position.distanceTo(lander.position), 1, 0.012);
+      lander.scale.setScalar(ds.s);
+      const big = ds.times >= 1.5;
+      if (big === shadowsOn) { shadowsOn = !big; lander.traverse((o) => { if (o.isMesh) o.castShadow = shadowsOn; }); }
+      const lbl = big ? `Lander · ${sizeNote(ds.times)}` : 'Lander';
+      if (craftLbl.el.textContent !== lbl) craftLbl.el.textContent = lbl;
       const alt = Math.max(0, e[2]);
       const v = st.descent.v;
       const vh = toEnu(add(st.descent.r, scale(v, 1)));
@@ -4112,7 +4345,7 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
   return { scene, camera, controls, update, setTerrain, setBranches, setSpot, toEnu, groundAt, name: 'surface', terrainInfo: () => terrainInfo };
 }
 
-return { PATCH_HALF_M, gradedAxis, terrainGeometry, landerModel, buildSurfaceScene };
+return { PATCH_HALF_M, gradedAxis, terrainGeometry, buildSurfaceScene };
 })();
 __m['ui.js'] = (() => {
 // DOM side of the lander page: timeline scrubber, HUD and the detail panels. No three.js here.
@@ -4436,6 +4669,125 @@ function nextSteps(doc, after, { getMission = () => readMission(), className = '
 }
 
 return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
+})();
+__m['closeup.js'] = (() => {
+// Close-up of the lander at real size (top of the Vehicle tab): the model in its own small scene, lit by the Sun
+// from where the Sun is in the lander's body frame at the current time, with the array and the high-gain dish
+// articulated as in the main view, arrows to the Sun and the Earth, and the main parts labelled on request.
+// Drag to turn it, wheel or pinch to zoom. Its own WebGL canvas, drawn only while it is on screen.
+const { three, createControls, bindControls } = __m['view-common.js'];
+const { buildLanderModel, LANDER_DIMS } = __m['model.js'];
+
+const MODE_TEXT = {
+  'sun-point': 'Coasting, array on the Sun', safe: 'Safe mode, array on the Sun', burn: 'Burn, body along the thrust',
+  descent: 'Powered descent, body along the thrust', surface: 'On the surface, array tracking the Sun',
+};
+
+function createCloseup(doc = document) {
+  const T = three();
+  const el = doc.createElement('section');
+  el.className = 'closeup';
+  el.innerHTML = `<h3>The lander <small>generic robotic lander, real size: ${LANDER_DIMS.footprintM} m across the footpads, ${LANDER_DIMS.heightM} m tall (assumed)</small></h3>
+    <div class="closeup-view"><canvas aria-label="3D close-up of the lander"></canvas><div class="closeup-labels"></div></div>
+    <div class="closeup-bar"><label class="check"><input type="checkbox" data-parts checked> Label the parts</label><span class="closeup-hint">drag to turn · wheel to zoom</span></div>
+    <p class="note closeup-att"></p>`;
+  const canvas = el.querySelector('canvas'), layer = el.querySelector('.closeup-labels'), att = el.querySelector('.closeup-att');
+  const partsBox = el.querySelector('[data-parts]');
+  let renderer = null, w = 0, h = 0;
+  const scene = new T.Scene();
+  scene.add(new T.AmbientLight(0x6a7280, 0.6));
+  const sun = new T.DirectionalLight(0xfff4e6, 3.0);
+  scene.add(sun, sun.target);
+  const model = buildLanderModel();
+  scene.add(model.group);
+  const lineTo = (color) => {
+    const g = new T.BufferGeometry().setFromPoints([new T.Vector3(), new T.Vector3(0, 1, 0)]);
+    const l = new T.Line(g, new T.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+    scene.add(l);
+    return l;
+  };
+  const sunLine = lineTo(0xf2b33d), earthLine = lineTo(0x4cb3f0);
+  const centre = new T.Vector3(0, 1.6, 0);
+  const camera = new T.PerspectiveCamera(35, 1, 0.1, 500);
+  const controls = createControls(camera, { target: [0, 1.4, 0], radius: 13, theta: 0.9, phi: 1.25, minRadius: 4, maxRadius: 60 });
+  bindControls(canvas, () => controls, null);
+  const tags = new Map();
+  const tag = (id, text, cls) => {
+    if (!tags.has(id)) { const s = doc.createElement('span'); s.className = `part ${cls ?? ''}`; layer.appendChild(s); tags.set(id, s); }
+    const s = tags.get(id);
+    if (s.textContent !== text) s.textContent = text;
+    return s;
+  };
+  let last = null;
+
+  function resize() {
+    const r = canvas.parentElement.getBoundingClientRect();
+    if (r.width < 10) return;
+    w = Math.round(r.width); h = Math.round(r.height);
+    if (!renderer) {
+      renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setClearColor(0x000000, 0);
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  // a: model.attitudeState(); pw: power timeline sample (factor, mode); dt: seconds since the last frame
+  function update(a, pw, dt = 1 / 60) {
+    if (!a) return;
+    if (!renderer || Math.round(canvas.parentElement.clientWidth) !== w) resize();   // first show, or the panel resized
+    last = a;
+    model.articulate({ sunBody: a.sunBody, earthBody: a.earthBody, throttle: a.throttle, stageAttached: a.stage, stageFiring: a.stageFiring });
+    if (a.sunBody) {
+      const d = new T.Vector3(...a.sunBody).normalize();
+      sun.position.copy(d).multiplyScalar(30); sun.target.position.set(0, 0, 0);
+      sunLine.geometry.setFromPoints([centre, centre.clone().addScaledVector(d, 6)]);
+    }
+    sunLine.visible = !!a.sunBody;
+    if (a.earthBody) earthLine.geometry.setFromPoints([centre, centre.clone().addScaledVector(new T.Vector3(...a.earthBody).normalize(), 6)]);
+    earthLine.visible = !!a.earthBody;
+    // the lander framed from a little off the array's face (so the wing is seen, not edge-on); with the
+    // trans-lunar stage attached, a little lower and wider (the stage runs out below)
+    const az = a.arrayAngle + 0.65;
+    controls.followView(new T.Vector3(0, a.stage ? 0.2 : 1.4, 0), a.stage ? 16 : 13, new T.Vector3(Math.sin(az), 0.42, Math.cos(az)), { tau: 0.6, dt, key: 'closeup' });
+    const pct = (x) => `${Math.round(Math.max(0, x) * 100)} %`;
+    const text = `${MODE_TEXT[a.mode] ?? a.mode}. Array at ${pct(a.arrayIncidence)} of full Sun${pw && Number.isFinite(pw.factor) ? ` (power model ${pct(pw.factor)})` : ''}${a.throttle > 0.01 ? `, ${a.stageFiring ? 'trans-lunar stage' : 'main engine'} firing${a.stageFiring ? '' : ` at ${pct(a.throttle)}`}` : ''}. Yellow line: to the Sun; blue: to the Earth.`;
+    if (att.textContent !== text) att.textContent = text;
+  }
+
+  function render() {
+    if (!renderer || !last) return;
+    renderer.render(scene, camera);
+    const show = partsBox.checked;
+    const list = show ? model.parts() : [];
+    const live = new Set(), placed = [];
+    const items = [...list.map((p) => [p.id, p.label, p.pos, '']),
+      ...(last.sunBody ? [['sun', 'Sun', centre.clone().addScaledVector(new T.Vector3(...last.sunBody).normalize(), 6.3), 'sun']] : []),
+      ...(last.earthBody ? [['earth', 'Earth', centre.clone().addScaledVector(new T.Vector3(...last.earthBody).normalize(), 6.3), 'earth']] : [])]
+      .map(([id, text, p, cls]) => { const q = p.clone().project(camera); return { id, text, cls, q, x: ((q.x + 1) / 2) * w, y: ((1 - q.y) / 2) * h }; })
+      .sort((a, b) => a.y - b.y);
+    // simple declutter: push a label down until its box clears the ones already placed
+    for (const it of items) {
+      const s = tag(it.id, it.text, it.cls);
+      const on = it.q.z < 1 && Math.abs(it.q.x) < 1.05 && Math.abs(it.q.y) < 1.05;
+      s.hidden = !on;
+      live.add(it.id);
+      if (!on) continue;
+      const bw = 14 + it.text.length * 6;
+      let y = it.y;
+      for (let k = 0; k < 12 && placed.some((p) => Math.abs(p.x - it.x) < (p.w + bw) / 2 + 2 && Math.abs(p.y - y) < 14); k++) y += 14;
+      placed.push({ x: it.x + bw / 2, y, w: bw });
+      s.style.transform = `translate(${it.x}px, ${y}px)`;
+    }
+    for (const [id, s] of tags) if (!live.has(id)) s.hidden = true;
+  }
+
+  return { el, resize, update, render, model };
+}
+
+return { createCloseup };
 })();
 __m['../globe-terrain.js'] = (() => {
 // Global lunar terrain model (phase 1, docs/PHASES.md): one height for any latitude and longitude on the
@@ -4764,6 +5116,8 @@ const { buildMoonScene } = __m['view-moon.js'];
 const { buildSurfaceScene } = __m['view-surface.js'];
 const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle } = __m['ui.js'];
 const { readMission, writeMission, stageUrl, stageBar } = __m['../mission-flow.js'];
+const { attitudeState } = __m['model.js'];
+const { createCloseup } = __m['closeup.js'];
 const { createHiresSet } = __m['../hires.js'];
 const { bootScreen } = __m['../boot.js'];
 
@@ -4828,6 +5182,9 @@ function boot() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.PCFSoftShadowMap;
   renderer.setClearColor(0x000000, 1);
+  const closeup = createCloseup(document);
+  const closeupOn = () => closeup.el.isConnected && !$('#side').classList.contains('closed') && document.querySelector('.tabs .on')?.dataset.tab === 'vehicle';
+  window.addEventListener('resize', () => { if (closeupOn()) closeup.resize(); });
   const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); };
   bindControls(canvas, () => S.scenes?.[S.scene].controls, userCamera);
 
@@ -4951,7 +5308,11 @@ function boot() {
     if (tab === 'plan') renderPlan(body, S.plan, S.power);
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
     else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
-    else if (tab === 'vehicle') renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
+    else if (tab === 'vehicle') {
+      renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
+      body.prepend(closeup.el);
+      requestAnimationFrame(() => closeup.resize());
+    }
   }
 
   function setBranches() {
@@ -5022,6 +5383,14 @@ function boot() {
     b.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); camAct(b.dataset.cam, 0.12); } });
   });
   $('#cam-follow').addEventListener('click', () => $('#auto').click());
+  // "Look at the lander": the close-up at the top of the Vehicle tab (opens the panel)
+  const lookAtLander = () => {
+    const side = $('#side');
+    if (side.classList.contains('closed')) $('#side-toggle').click();
+    document.querySelector('.tabs button[data-tab="vehicle"]').click();
+    $('#tab-body').scrollTop = 0;
+  };
+  $('#cam-look').addEventListener('click', lookAtLander);
   $('#auto').addEventListener('click', () => {
     S.auto = true;
     $('#auto').classList.add('on');
@@ -5057,6 +5426,7 @@ function boot() {
     const cam = cameraKey(e);
     if (cam) { e.preventDefault(); camAct(cam, e.repeat ? 0.05 : 0.12); }
     if (e.code === 'Digit0' || e.key === '0' || e.code === 'Home' || e.key === 'Home') $('#auto').click();
+    if (e.code === 'KeyL' || e.key === 'l' || e.key === 'L') lookAtLander();
   });
 
   // start: the 480 m DEM is a startup pack; wait for it if the script tag has not run yet
@@ -5085,7 +5455,9 @@ function boot() {
     if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; next.hidden = st.phase !== 'landed'; }
     const sc = S.scenes[S.scene];
     if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
-    sc.update(st, { dt });
+    const att = attitudeState(st, S.plan);
+    sc.update(st, { dt, att });
+    if (closeupOn()) { closeup.update(att, S.power.at(t), dt); closeup.render(); }
     renderer.render(sc.scene, sc.camera);
     if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);

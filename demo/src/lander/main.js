@@ -17,6 +17,8 @@ import { buildMoonScene } from './view-moon.js';
 import { buildSurfaceScene } from './view-surface.js';
 import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle } from './ui.js';
 import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.js';
+import { attitudeState } from './model.js';
+import { createCloseup } from './closeup.js';
 import { createHiresSet } from '../hires.js';
 import { bootScreen } from '../boot.js';
 
@@ -81,6 +83,9 @@ export function boot() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.PCFSoftShadowMap;
   renderer.setClearColor(0x000000, 1);
+  const closeup = createCloseup(document);
+  const closeupOn = () => closeup.el.isConnected && !$('#side').classList.contains('closed') && document.querySelector('.tabs .on')?.dataset.tab === 'vehicle';
+  window.addEventListener('resize', () => { if (closeupOn()) closeup.resize(); });
   const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); };
   bindControls(canvas, () => S.scenes?.[S.scene].controls, userCamera);
 
@@ -204,7 +209,11 @@ export function boot() {
     if (tab === 'plan') renderPlan(body, S.plan, S.power);
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
     else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
-    else if (tab === 'vehicle') renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
+    else if (tab === 'vehicle') {
+      renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
+      body.prepend(closeup.el);
+      requestAnimationFrame(() => closeup.resize());
+    }
   }
 
   function setBranches() {
@@ -275,6 +284,14 @@ export function boot() {
     b.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); camAct(b.dataset.cam, 0.12); } });
   });
   $('#cam-follow').addEventListener('click', () => $('#auto').click());
+  // "Look at the lander": the close-up at the top of the Vehicle tab (opens the panel)
+  const lookAtLander = () => {
+    const side = $('#side');
+    if (side.classList.contains('closed')) $('#side-toggle').click();
+    document.querySelector('.tabs button[data-tab="vehicle"]').click();
+    $('#tab-body').scrollTop = 0;
+  };
+  $('#cam-look').addEventListener('click', lookAtLander);
   $('#auto').addEventListener('click', () => {
     S.auto = true;
     $('#auto').classList.add('on');
@@ -310,6 +327,7 @@ export function boot() {
     const cam = cameraKey(e);
     if (cam) { e.preventDefault(); camAct(cam, e.repeat ? 0.05 : 0.12); }
     if (e.code === 'Digit0' || e.key === '0' || e.code === 'Home' || e.key === 'Home') $('#auto').click();
+    if (e.code === 'KeyL' || e.key === 'l' || e.key === 'L') lookAtLander();
   });
 
   // start: the 480 m DEM is a startup pack; wait for it if the script tag has not run yet
@@ -338,7 +356,9 @@ export function boot() {
     if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; next.hidden = st.phase !== 'landed'; }
     const sc = S.scenes[S.scene];
     if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
-    sc.update(st, { dt });
+    const att = attitudeState(st, S.plan);
+    sc.update(st, { dt, att });
+    if (closeupOn()) { closeup.update(att, S.power.at(t), dt); closeup.render(); }
     renderer.render(sc.scene, sc.camera);
     if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);

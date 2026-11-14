@@ -5,6 +5,7 @@ import { R_MOON, R_EARTH, MOON_RATE, RAD } from './constants.js';
 import { fromXY } from '../terrain.js';
 import { unitFromLonLat } from '../geometry.js';
 import { norm, scale, unit } from './vec.js';
+import { buildLanderModel, drawScale, sizeNote } from './model.js';
 
 // LOLA polar cap mesh in Moon-fixed km (three.js axes). dem: terrain.createDem(); edge at maxLatDeg.
 export function polarCapGeometry(dem, { maxLatDeg = -79.5, n = 240 } = {}) {
@@ -78,8 +79,12 @@ export function buildMoonScene(plan, labels) {
 
   const earth = new T.Mesh(new T.SphereGeometry(R_EARTH, 48, 24), new T.MeshStandardMaterial({ color: 0x3a6fb0, roughness: 0.8, emissive: 0x0a1830 }));
   scene.add(earth);
-  const craft = new T.Mesh(new T.SphereGeometry(1, 12, 8), new T.MeshBasicMaterial({ color: 0xffffff }));
+  // the lander model (metres) in this km scene: real size close up, enlarged (and said so) when far
+  const lander = buildLanderModel();
+  const craft = lander.group;
   scene.add(craft);
+  const qTarget = new T.Quaternion(), basis = new T.Matrix4();
+  let attInit = false;
   const branchGroup = new T.Group();
   scene.add(branchGroup);
 
@@ -89,18 +94,27 @@ export function buildMoonScene(plan, labels) {
   labels.add('LOI', 'event', () => v3(plan.stateAt(t.loiMs).pos), moonOcc);
   labels.add('DOI', 'event', () => v3(plan.stateAt(t.doiMs).pos), moonOcc);
   labels.add('PDI', 'event', () => v3(plan.stateAt(t.pdiMs).pos), moonOcc);
-  labels.add('Lander', 'craft', () => craft.position, moonOcc);
+  const craftLbl = labels.add('Lander', 'craft', () => craft.position, moonOcc);
 
   const controls = createControls(camera, { radius: 7000, theta: 0.5, phi: 2.2, minRadius: 0.5 });
 
-  function update(st, { dt = 1 / 60 } = {}) {
+  function update(st, { dt = 1 / 60, att = null } = {}) {
     moonGroup.rotation.y = (MOON_RATE * (st.tMs - plan.epochMs)) / 1000;
     sun.position.copy(v3(st.sunDir, 1e5));
     if (st.earth) earth.position.copy(v3(st.earth));
     const p = v3(st.pos);
     craft.position.copy(p);
     const camD = camera.position.distanceTo(p);
-    craft.scale.setScalar(Math.max(0.02, camD * 0.004));
+    const ds = drawScale(camD, 0.001, 0.05);
+    craft.scale.setScalar(ds.s);
+    const lbl = `Lander${sizeNote(ds.times) ? ` · ${sizeNote(ds.times)}` : ''}`;
+    if (craftLbl.el.textContent !== lbl) craftLbl.el.textContent = lbl;
+    if (att) {
+      basis.makeBasis(v3(att.axes.x), v3(att.axes.y), v3(att.axes.z));
+      qTarget.setFromRotationMatrix(basis);
+      if (!attInit) { craft.quaternion.copy(qTarget); attInit = true; } else craft.quaternion.slerp(qTarget, 1 - Math.exp(-dt / 0.35));
+      lander.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: att.stage, stageFiring: att.stageFiring });
+    }
     siteMark.scale.setScalar(Math.max(0.05, camera.position.distanceTo(siteMark.getWorldPosition(new T.Vector3())) * 0.004));
     const r = norm(st.pos);
     const out = p.clone().normalize();

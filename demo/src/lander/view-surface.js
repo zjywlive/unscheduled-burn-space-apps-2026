@@ -5,7 +5,8 @@ import { three, enu3, makeLine, setLinePoints, starField, createControls } from 
 import { enuAt } from './mission.js';
 import { R_MOON, MOON_RATE, RAD } from './constants.js';
 import { toXY } from '../terrain.js';
-import { add, scale, cross, unit, norm, rotZ } from './vec.js';
+import { add, scale, cross, unit, norm, rotZ, dot } from './vec.js';
+import { buildLanderModel, drawScale, sizeNote } from './model.js';
 import { unitFromLonLat } from '../geometry.js';
 
 export const PATCH_HALF_M = 8000;
@@ -81,40 +82,6 @@ export function terrainGeometry(siteF, siteRadiusKm, sample, { halfM = PATCH_HAL
   return { geometry: geo, slope, axis, N, siteHeightM: up[mid * N + mid] };
 }
 
-export function landerModel() {
-  const T = three();
-  const g = new T.Group();
-  const foil = new T.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.6, roughness: 0.35 });
-  const white = new T.MeshStandardMaterial({ color: 0xdedede, metalness: 0.1, roughness: 0.6 });
-  const dark = new T.MeshStandardMaterial({ color: 0x222222, metalness: 0.4, roughness: 0.5 });
-  const panelM = new T.MeshStandardMaterial({ color: 0x1b2a4a, metalness: 0.3, roughness: 0.3, emissive: 0x050a18 });
-  const body = new T.Mesh(new T.CylinderGeometry(1.25, 1.25, 1.5, 8), foil);
-  body.position.y = 1.55;
-  const deck = new T.Mesh(new T.CylinderGeometry(1.1, 1.25, 0.25, 8), white);
-  deck.position.y = 2.42;
-  const bell = new T.Mesh(new T.CylinderGeometry(0.22, 0.5, 0.7, 16, 1, true), dark);
-  bell.position.y = 0.55;
-  const panel = new T.Mesh(new T.BoxGeometry(0.06, 1.3, 2.2), panelM);
-  panel.position.set(1.45, 1.7, 0);
-  const dish = new T.Mesh(new T.SphereGeometry(0.35, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), white);
-  dish.position.set(-0.5, 2.7, 0.4);
-  g.add(body, deck, bell, panel, dish);
-  for (let k = 0; k < 4; k++) {
-    const a = Math.PI / 4 + (k * Math.PI) / 2;
-    const leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 2.0, 6), white);
-    const fx = Math.cos(a) * 2.1, fz = Math.sin(a) * 2.1;
-    leg.position.set(fx * 0.7, 0.75, fz * 0.7);
-    leg.lookAt(fx, 0.05, fz);
-    leg.rotateX(Math.PI / 2);
-    const pad = new T.Mesh(new T.CylinderGeometry(0.28, 0.32, 0.08, 12), white);
-    pad.position.set(fx, 0.04, fz);
-    g.add(leg, pad);
-  }
-  const plume = new T.Mesh(new T.ConeGeometry(0.55, 1, 20, 1, true), new T.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.55, blending: T.AdditiveBlending, depthWrite: false }));
-  plume.rotation.x = Math.PI;
-  g.add(plume);
-  return { group: g, plume };
-}
 
 // sky(tMs) → { sun: { azDeg, elDeg }, earth: { azDeg, elDeg } } at the site (landing.skyAt)
 export function buildSurfaceScene(plan, labels, { sky } = {}) {
@@ -174,8 +141,17 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
   pin.position.y = 20;
   scene.add(ring, pin);
 
-  const { group: lander, plume } = landerModel();
-  lander.traverse((o) => { if (o.isMesh && o !== plume) { o.castShadow = true; } });
+  // the lander model (metres, real size; enlarged with a note only when the camera is far)
+  const model = buildLanderModel();
+  const lander = model.group;
+  let shadowsOn = true;
+  // Moon-centred inertial direction → this scene (ENU at the site with the landing-time rotation, as toEnu)
+  let east0 = unit(cross([0, 0, 1], plan.siteFixed));
+  if (norm(east0) < 1e-9) east0 = [0, 1, 0];
+  const north0 = cross(plan.siteFixed, east0);
+  const mciDir3 = (d) => { const f = rotZ(d, -thL); return new T.Vector3(dot(f, east0), dot(f, plan.siteFixed), -dot(f, north0)); };
+  const qAtt = new T.Quaternion(), basis = new T.Matrix4();
+  let attInit = false;
   scene.add(lander);
   const earthDot = new T.Mesh(new T.SphereGeometry(1, 16, 8), new T.MeshBasicMaterial({ color: 0x4cb3f0 }));
   const sunDot = new T.Mesh(new T.SphereGeometry(1, 16, 8), new T.MeshBasicMaterial({ color: 0xffe6a8 }));
@@ -189,7 +165,7 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
   labels.add('High gate', 'event', () => { const e = plan.descent.events.find((x) => x.name === 'high-gate'); return e ? enu3(toEnu(sampleAt(e.tS).r)) : null; });
   labels.add('Low gate', 'event', () => { const e = plan.descent.events.find((x) => x.name === 'low-gate'); return e ? enu3(toEnu(sampleAt(e.tS).r)) : null; });
   const farLbl = labels.add('', 'note', () => (farLbl.el.textContent ? new T.Vector3(0, 90, 0) : null));
-  labels.add('Lander', 'craft', () => (lander.visible ? lander.position.clone().setY(lander.position.y + 4) : null));
+  const craftLbl = labels.add('Lander', 'craft', () => (lander.visible ? lander.position.clone().setY(lander.position.y + 4 * lander.scale.y) : null));
 
   function sampleAt(tS) {
     const s = plan.descent.samples;
@@ -199,10 +175,10 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
   }
 
   const controls = createControls(camera, { radius: 900, theta: 0.8, phi: 1.15, minRadius: 3, maxRadius: 3e5 });
-  const qTmp = new T.Quaternion(), yAxis = new T.Vector3(0, 1, 0), heading = new T.Vector3(0.6, 0, 0.8);
+  const heading = new T.Vector3(0.6, 0, 0.8);
   const dirTo = (az, el, dist) => enu3([Math.sin(az * RAD) * Math.cos(el * RAD) * dist, Math.cos(az * RAD) * Math.cos(el * RAD) * dist, Math.sin(el * RAD) * dist]);
 
-  function update(st, { dt = 0.016 } = {}) {
+  function update(st, { dt = 0.016, att = null } = {}) {
     // Sun and Earth in the local sky at this instant
     const loc = st.local ?? sky?.(st.tMs);
     if (loc) {
@@ -225,18 +201,19 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
     farLbl.el.textContent = far ? `Lander is ${st.descent ? Math.round(Math.hypot(e[0], e[1]) / 1000) + ' km away' : 'still in orbit'}` : '';
     if (!far) {
       lander.position.copy(enu3(e));
-      const th = st.descent.throttle;
-      if (th > 0 && st.descent.thrustDir) {
-        const d = toEnu(add(st.descent.r, scale(st.descent.thrustDir, 1000)));
-        const dir = enu3([d[0] - e[0], d[1] - e[1], d[2] - e[2]]).normalize();
-        qTmp.setFromUnitVectors(yAxis, dir);
-        lander.quaternion.slerp(qTmp, 1 - Math.exp(-dt * 2.5));
-      } else if (st.phase === 'landed') {
-        lander.quaternion.slerp(new T.Quaternion(), 1 - Math.exp(-dt * 12));
+      // attitude as in the other views (body along the thrust, upright after touchdown), array on the Sun, dish on Earth
+      if (att) {
+        basis.makeBasis(mciDir3(att.axes.x), mciDir3(att.axes.y), mciDir3(att.axes.z));
+        qAtt.setFromRotationMatrix(basis);
+        if (!attInit) { lander.quaternion.copy(qAtt); attInit = true; } else lander.quaternion.slerp(qAtt, 1 - Math.exp(-dt / 0.35));
+        model.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: false });
       }
-      plume.visible = th > 0.01;
-      plume.scale.set(1, 2 + th * 9, 1);
-      plume.position.y = -(1 + th * 4.5) + 0.2;
+      const ds = drawScale(camera.position.distanceTo(lander.position), 1, 0.012);
+      lander.scale.setScalar(ds.s);
+      const big = ds.times >= 1.5;
+      if (big === shadowsOn) { shadowsOn = !big; lander.traverse((o) => { if (o.isMesh) o.castShadow = shadowsOn; }); }
+      const lbl = big ? `Lander · ${sizeNote(ds.times)}` : 'Lander';
+      if (craftLbl.el.textContent !== lbl) craftLbl.el.textContent = lbl;
       const alt = Math.max(0, e[2]);
       const v = st.descent.v;
       const vh = toEnu(add(st.descent.r, scale(v, 1)));

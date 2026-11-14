@@ -2,6 +2,7 @@
 import { three, v3, makeLine, starField, createControls } from './view-common.js';
 import { sub, norm } from './vec.js';
 import { R_EARTH, R_MOON } from './constants.js';
+import { buildLanderModel, drawScale, sizeNote } from './model.js';
 
 const K = 1 / 1000;
 
@@ -41,21 +42,34 @@ export function buildEarthScene(plan, labels) {
   const dot = (p, c, r) => { const m = new T.Mesh(new T.SphereGeometry(r, 12, 8), new T.MeshBasicMaterial({ color: c })); m.position.copy(p); scene.add(m); return m; };
   dot(geo(t.tliMs), 0xffcf6b, 0.35);
 
-  const craft = new T.Mesh(new T.SphereGeometry(0.25, 12, 8), new T.MeshBasicMaterial({ color: 0xffffff }));
+  // the lander model (metres) in this 1000 km scene: always enlarged here, with the factor in its label
+  const lander = buildLanderModel();
+  const craft = lander.group;
   scene.add(craft);
+  const qTarget = new T.Quaternion(), basis = new T.Matrix4();
+  let attInit = false;
   const controls = createControls(camera, { radius: 700, theta: 0.3, phi: 0.9 });
   labels.add('Earth', 'body earth', () => earth.position);
   labels.add('Moon', 'body', () => moon.position);
   const craftLbl = labels.add('Lander', 'craft', () => craft.position);
   labels.add('TLI', 'event', () => geo(t.tliMs));
 
-  function update(st, { dt = 1 / 60 } = {}) {
+  function update(st, { dt = 1 / 60, att = null } = {}) {
     const m = moonAt(st.tMs) ?? moon.position;
     moon.position.copy(m);
     const p = st.pos && st.earth ? v3(sub(st.pos, st.earth), K) : craft.position;
     craft.position.copy(p);
     sun.position.copy(v3(st.sunDir, 1000));
-    craftLbl.el.textContent = st.tliStageAttached ? 'Lander + upper stage' : 'Lander';
+    const ds = drawScale(camera.position.distanceTo(p), 1e-6, 0.04);
+    craft.scale.setScalar(ds.s);
+    const lbl = `${st.tliStageAttached ? 'Lander + upper stage' : 'Lander'} · ${sizeNote(ds.times)}`;
+    if (craftLbl.el.textContent !== lbl) craftLbl.el.textContent = lbl;
+    if (att) {
+      basis.makeBasis(v3(att.axes.x), v3(att.axes.y), v3(att.axes.z));
+      qTarget.setFromRotationMatrix(basis);
+      if (!attInit) { craft.quaternion.copy(qTarget); attInit = true; } else craft.quaternion.slerp(qTarget, 1 - Math.exp(-dt / 0.35));
+      lander.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: att.stage, stageFiring: att.stageFiring });
+    }
     // automatic framing by phase: the parking orbit close in, the coast between the bodies, the approach on the Moon
     const dE = norm(sub(st.pos, st.earth)) * K;
     let target, radius, key;
