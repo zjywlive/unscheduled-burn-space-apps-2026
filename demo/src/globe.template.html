@@ -58,7 +58,23 @@
   .leg-label b { color: #8ab4f8; font-weight: 600; margin-right: 2px; }
   .wp-label { margin: 8px 0 0 8px; padding: 1px 6px; border-radius: 999px; color: #111; background: #fff; font-weight: 600; font-size: 10.5px; }
   .frame-label { margin: -8px 0 0 6px; padding: 1px 5px; border-radius: 4px; color: #d7f3ff; background: rgba(0,0,0,0.65); font: 500 10px ui-monospace, Menlo, monospace; }
-  .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 16px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
+  /* the action bar: every action of the page in one row over the globe, between the title and the side panel;
+     the side panel keeps the settings and the data */
+  .act-bar { position: fixed; top: 16px; left: calc(50% + 82px); transform: translateX(-50%); max-width: calc(100vw - 780px); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; padding: 5px 6px; z-index: 6; }
+  .act-bar .ab-group { display: flex; align-items: center; gap: 4px; position: relative; }
+  .act-bar .ab-sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+  .ab-btn { font: 500 12px/1 Inter, system-ui, sans-serif; height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; color: var(--text); background: rgba(255,255,255,0.07); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .ab-btn:hover { background: rgba(255,255,255,0.15); }
+  .ab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ab-btn[aria-pressed="true"], .ab-btn[aria-expanded="true"] { background: rgba(138,180,248,0.25); border-color: rgba(138,180,248,0.6); }
+  .ab-primary { background: #e8eaed; color: #0b0c0e; border-color: #e8eaed; }
+  .ab-primary:hover { background: #fff; }
+  .ab-btn.is-off { opacity: 0.45; cursor: not-allowed; }
+  .act-bar .wp-plan { margin: 0; display: inline-flex; color: #0b0c0e; font-weight: 600; }
+  .ab-pop { position: absolute; top: 38px; left: 0; width: 260px; padding: 10px; z-index: 7; }
+  .ab-pop[hidden] { display: none; }
+  @media (max-width: 1100px) { .act-bar { top: auto; bottom: 92px; left: 50%; max-width: calc(100vw - 24px); } body.route-mode .act-bar { bottom: 252px; left: calc(12px + 276px + 12px); right: 12px; transform: none; max-width: none; justify-content: flex-start; } .ab-pop { top: auto; bottom: 38px; } }
+  .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 62px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
   .leg-label[hidden], .wp-label[hidden], .frame-label[hidden], .frames-box[hidden] { display: none; }
   /* the small 3D window in the navigator (embed=1): the view only */
   body.embed .brand, body.embed .panel, body.embed .readout, body.embed .status, body.embed #route-left, body.embed .route-hud, body.embed #labels, body.embed .cam-ctl { display: none !important; }
@@ -189,11 +205,15 @@
   <p>Real LOLA elevation, whole Moon; 5–20 m around the landing sites</p>
   <div id="stages" style="margin-top:8px"></div>
 </header>
-<aside class="glass panel" aria-label="View controls">
-  <section>
-    <h2>Fly to</h2>
-    <div id="presets"></div>
-  </section>
+<nav class="glass act-bar" aria-label="Actions">
+  <div class="ab-group" id="ab-fly-wrap"><button type="button" class="ab-btn" id="ab-fly" aria-expanded="false" aria-controls="presets-pop" aria-haspopup="true">Fly to ▾</button>
+    <div class="glass ab-pop" id="presets-pop" hidden><div id="presets"></div></div></div>
+  <span class="ab-sep" aria-hidden="true"></span>
+  <div class="ab-group" id="ab-wp" role="group" aria-label="Waypoints"></div>
+  <span class="ab-sep" aria-hidden="true"></span>
+  <div class="ab-group" id="ab-mapped" role="group" aria-label="Mapped areas"></div>
+</nav>
+<aside class="glass panel" aria-label="View settings and data">
   <section>
     <h2>Vertical exaggeration</h2>
     <div class="row"><input id="exaggeration" type="range" min="1" max="10" step="1" value="3" aria-label="Vertical exaggeration"><span id="exaggeration-out">3×</span></div>

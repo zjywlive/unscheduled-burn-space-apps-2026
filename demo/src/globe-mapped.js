@@ -30,7 +30,8 @@ export function tileSquares(level) {
   }).filter(Boolean);
 }
 
-export function createMappedLayer(view, { parent, meta, hires } = {}) {
+// parent: the panel section (legend, figures, targets list); bar: where its actions go (the page's action bar)
+export function createMappedLayer(view, { parent, bar = null, meta, hires } = {}) {
   if (!parent) return null;
   const THREE = view.THREE;
   const levels = meta?.levels ?? [];
@@ -52,14 +53,15 @@ export function createMappedLayer(view, { parent, meta, hires } = {}) {
   }
   readDrives();
 
+  const actions = `<button type="button" class="ab-btn mp-on" aria-pressed="false" title="Show which terrain the app has at each resolution, saved drives and areas to map next">Mapped</button><button type="button" class="ab-btn mp-add" aria-pressed="false" title="Click the terrain to mark a 10 km box to map next">Mark area</button><button type="button" class="ab-btn mp-export" title="Download the areas to map next as JSON">Export</button>`;
+  if (bar) bar.insertAdjacentHTML('beforeend', actions);
   parent.innerHTML = `
     <h2>Mapped</h2>
-    <label class="row"><input type="checkbox" class="mp-on"> Show what is mapped</label>
+    ${bar ? '' : `<div class="wp-tools">${actions}</div>`}
     <ul class="mp-key"></ul>
-    <div class="wp-tools"><button type="button" class="chip mp-add" aria-pressed="false">Mark an area to map</button><button type="button" class="chip mp-export">Export targets</button></div>
     <ol class="mp-list"></ol>
     <p class="hint mp-hint"></p>`;
-  const $ = (s) => parent.querySelector(s);
+  const $ = (s) => parent.querySelector(s) ?? bar?.querySelector(s);
   const on = $('.mp-on'), key = $('.mp-key'), list = $('.mp-list'), hint = $('.mp-hint'), addBtn = $('.mp-add');
   let adding = false;
 
@@ -156,8 +158,11 @@ export function createMappedLayer(view, { parent, meta, hires } = {}) {
     if (targets.length) { const s = targetSquares(); group.add(fill(s, 0xffffff, lift, 0.08)); group.add(outline(s, 0xffffff, lift, true)); }
   });
 
-  on.addEventListener('change', () => { group.visible = on.checked; built = ''; view.redraw(); if (on.checked && view.camera.dist > 2000) view.flyTo({ lat: -89, lon: 0, dist: 700, tilt: 0 }); });
-  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Click the terrain…' : 'Mark an area to map'; if (adding && !on.checked) on.click(); renderKey(); });
+  // the Mapped toggle (a pressed button in the action bar)
+  const setShown = (v) => { on.setAttribute('aria-pressed', String(v)); group.visible = v; built = ''; view.redraw(); if (v && view.camera.dist > 2000) view.flyTo({ lat: -89, lon: 0, dist: 700, tilt: 0 }); };
+  const shown = () => on.getAttribute('aria-pressed') === 'true';
+  on.addEventListener('click', () => setShown(!shown()));
+  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Click the terrain…' : 'Mark area'; if (adding && !shown()) setShown(true); renderKey(); });
   let down = null;
   view.canvas.addEventListener('pointerdown', (e) => { down = adding && e.button === 0 ? [e.clientX, e.clientY] : null; });
   view.canvas.addEventListener('pointerup', (e) => {
@@ -167,7 +172,7 @@ export function createMappedLayer(view, { parent, meta, hires } = {}) {
     if (!hit) return;
     if (hit.latDeg > -79.5) { hint.textContent = 'Targets go on the south polar map (south of 79.5°S) for now.'; return; }
     targets.push({ latDeg: +hit.latDeg.toFixed(5), lonDeg: +hit.lonDeg.toFixed(5), halfKm: 5, addedMs: Date.now() });
-    adding = false; addBtn.setAttribute('aria-pressed', 'false'); addBtn.textContent = 'Mark an area to map';
+    adding = false; addBtn.setAttribute('aria-pressed', 'false'); addBtn.textContent = 'Mark area';
     changed();
   });
   $('.mp-export').addEventListener('click', () => downloadText(document, 'survey-targets.json', JSON.stringify({ about: 'Areas to map next, from the Lunar Site Navigator globe. Centres in selenographic degrees (east longitude); 10 × 10 km boxes.', targets }, null, 1)));

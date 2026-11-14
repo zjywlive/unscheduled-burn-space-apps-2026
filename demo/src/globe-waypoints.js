@@ -31,24 +31,26 @@ export function navigatorLink(points, mission) {
   return `${base}&rp=${rp}`;
 }
 
-export function createWaypointTool(view, { parent, mission = null, terrain, payload = null } = {}) {
+// parent: the panel section (typed entry, the list, hints); bar: where its actions go (the page's action bar)
+export function createWaypointTool(view, { parent, bar = null, mission = null, terrain, payload = null } = {}) {
   if (!parent) return null;
   const THREE = view.THREE;
   let pts = [];
   try { const a = JSON.parse(localStorage.getItem(KEY) ?? '[]'); if (Array.isArray(a)) pts = a.filter((p) => Number.isFinite(p?.latDeg) && Number.isFinite(p?.lonDeg)).slice(0, MAX); } catch { pts = []; }
   let adding = false;
+  const actions = `
+      <button type="button" class="ab-btn wp-add" aria-pressed="false" title="Click the terrain to place waypoints">Add points</button>
+      ${payload?.wps?.length ? '<button type="button" class="ab-btn wp-from" title="Start from the planned route\'s waypoints">Route\'s</button>' : ''}
+      <button type="button" class="ab-btn wp-clear" title="Remove all waypoints">Clear</button>
+      <a class="ab-btn ab-primary wp-plan" target="_blank" rel="noopener" title="Open the navigator and plan the rover route through these points">Plan route →</a>`;
+  if (bar) bar.insertAdjacentHTML('beforeend', actions);
   parent.innerHTML = `
     <h2>Waypoints</h2>
-    <div class="wp-tools">
-      <button type="button" class="chip wp-add" aria-pressed="false">Click to add</button>
-      ${payload?.wps?.length ? '<button type="button" class="chip wp-from">Use the route\'s</button>' : ''}
-      <button type="button" class="chip wp-clear">Clear</button>
-    </div>
+    ${bar ? '' : `<div class="wp-tools">${actions}</div>`}
     <form class="wp-type"><input type="text" placeholder="lat, lon  (e.g. -89.45, 222.69)" aria-label="Add a waypoint by latitude and longitude"><button type="submit" class="chip">Add</button></form>
     <ol class="wp-list"></ol>
-    <a class="wp-plan" target="_blank" rel="noopener">Plan the rover route through these →</a>
     <p class="hint wp-hint"></p>`;
-  const $ = (s) => parent.querySelector(s);
+  const $ = (s) => parent.querySelector(s) ?? bar?.querySelector(s);
   const addBtn = $('.wp-add'), list = $('.wp-list'), planA = $('.wp-plan'), hint = $('.wp-hint');
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(pts)); } catch { /* storage blocked */ } };
 
@@ -109,14 +111,16 @@ export function createWaypointTool(view, { parent, mission = null, terrain, payl
     const total = pts.slice(1).reduce((a, p, i) => a + gcKm(pts[i], p), 0);
     const south = pts.every((p) => p.latDeg < -79.5);
     const ok = pts.length >= 2 && south;
-    planA.hidden = !ok;
-    if (ok) planA.href = navigatorLink(pts, mission);
+    // never hidden: greyed out, with the reason in its tooltip, until there is a route to plan
+    planA.classList.toggle('is-off', !ok); planA.setAttribute('aria-disabled', String(!ok));
+    if (ok) { planA.href = navigatorLink(pts, mission); planA.title = 'Open the navigator and plan the rover route through these points'; }
+    else { planA.removeAttribute('href'); planA.title = pts.length < 2 ? 'Add at least a start and an end' : 'The navigator plans south of 79.5°S'; }
     hint.textContent = pts.length < 2 ? `${adding ? 'Click the terrain to place a waypoint' : 'Add a start, any waypoints and an end'} (2–${MAX}).` : !south ? 'The navigator plans rover routes south of 79.5°S; move the points there.' : `${pts.length} points, ${total.toFixed(2)} km in straight legs; the planner finds the drivable way.`;
   }
   function changed() { save(); rebuild(); render(); view.redraw(); }
   function add(p) { if (pts.length >= MAX) { hint.textContent = `At most ${MAX} points.`; return; } pts.push(p); changed(); }
 
-  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Adding: click the map' : 'Click to add'; view.canvas.classList.toggle('adding', adding); render(); });
+  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Adding… (click the map)' : 'Add points'; view.canvas.classList.toggle('adding', adding); render(); });
   $('.wp-clear').addEventListener('click', () => { pts = []; changed(); });
   $('.wp-from')?.addEventListener('click', () => { pts = payload.wps.map((w) => ({ latDeg: w.latDeg, lonDeg: w.lonDeg })).slice(0, MAX); changed(); });
   $('.wp-type').addEventListener('submit', (e) => {

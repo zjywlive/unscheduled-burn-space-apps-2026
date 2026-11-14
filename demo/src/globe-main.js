@@ -96,6 +96,13 @@ export function startGlobe() {
     b.addEventListener('click', () => view?.flyTo({ lat: p.lat, lon: p.lon, dist: p.dist, tilt: p.tilt ?? 0, heading: p.heading ?? 0 }));
     chips.appendChild(b);
   }
+  // the action bar's Fly to menu (the presets were a panel section; actions now sit in the bar over the globe)
+  const flyBtn = $('ab-fly'), flyPop = $('presets-pop');
+  const setFly = (open) => { flyPop.hidden = !open; flyBtn.setAttribute('aria-expanded', String(open)); };
+  flyBtn.addEventListener('click', () => setFly(flyPop.hidden));
+  flyPop.addEventListener('click', (e) => { if (e.target.closest('button')) setFly(false); });
+  document.addEventListener('pointerdown', (e) => { if (!flyPop.hidden && !e.target.closest('#ab-fly-wrap')) setFly(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !flyPop.hidden) { setFly(false); flyBtn.focus(); } });
   const ex = $('exaggeration'), exOut = $('exaggeration-out');
   ex.addEventListener('input', () => { exOut.textContent = `${ex.value}×`; view?.setExaggeration(Number(ex.value)); });
   for (const r of document.querySelectorAll('input[name="colour"]')) r.addEventListener('change', () => view?.setColour(r.value));
@@ -180,8 +187,8 @@ export function startGlobe() {
       window.addEventListener('hashchange', () => { if (!hashFlag('route') || cameraFromHash(location.hash).lat !== undefined) view.jumpTo(cameraFromHash(location.hash)); });
       if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission });
       if (!embed) {
-        window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), mission, terrain, payload: window.__globe.route?.payload ?? null });
-        window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), meta, hires: hiresMeta });
+        window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), bar: $('ab-wp'), mission, terrain, payload: window.__globe.route?.payload ?? null });
+        window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), bar: $('ab-mapped'), meta, hires: hiresMeta });
       }
       // the small 3D window in the navigator: reload when the navigator writes a new route
       if (embed) window.addEventListener('storage', (e) => { if (e.key === ROUTE3D_KEY) location.reload(); });

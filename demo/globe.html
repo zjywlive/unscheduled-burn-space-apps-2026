@@ -58,7 +58,23 @@
   .leg-label b { color: #8ab4f8; font-weight: 600; margin-right: 2px; }
   .wp-label { margin: 8px 0 0 8px; padding: 1px 6px; border-radius: 999px; color: #111; background: #fff; font-weight: 600; font-size: 10.5px; }
   .frame-label { margin: -8px 0 0 6px; padding: 1px 5px; border-radius: 4px; color: #d7f3ff; background: rgba(0,0,0,0.65); font: 500 10px ui-monospace, Menlo, monospace; }
-  .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 16px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
+  /* the action bar: every action of the page in one row over the globe, between the title and the side panel;
+     the side panel keeps the settings and the data */
+  .act-bar { position: fixed; top: 16px; left: calc(50% + 82px); transform: translateX(-50%); max-width: calc(100vw - 780px); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; padding: 5px 6px; z-index: 6; }
+  .act-bar .ab-group { display: flex; align-items: center; gap: 4px; position: relative; }
+  .act-bar .ab-sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+  .ab-btn { font: 500 12px/1 Inter, system-ui, sans-serif; height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; color: var(--text); background: rgba(255,255,255,0.07); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .ab-btn:hover { background: rgba(255,255,255,0.15); }
+  .ab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ab-btn[aria-pressed="true"], .ab-btn[aria-expanded="true"] { background: rgba(138,180,248,0.25); border-color: rgba(138,180,248,0.6); }
+  .ab-primary { background: #e8eaed; color: #0b0c0e; border-color: #e8eaed; }
+  .ab-primary:hover { background: #fff; }
+  .ab-btn.is-off { opacity: 0.45; cursor: not-allowed; }
+  .act-bar .wp-plan { margin: 0; display: inline-flex; color: #0b0c0e; font-weight: 600; }
+  .ab-pop { position: absolute; top: 38px; left: 0; width: 260px; padding: 10px; z-index: 7; }
+  .ab-pop[hidden] { display: none; }
+  @media (max-width: 1100px) { .act-bar { top: auto; bottom: 92px; left: 50%; max-width: calc(100vw - 24px); } body.route-mode .act-bar { bottom: 252px; left: calc(12px + 276px + 12px); right: 12px; transform: none; max-width: none; justify-content: flex-start; } .ab-pop { top: auto; bottom: 38px; } }
+  .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 62px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
   .leg-label[hidden], .wp-label[hidden], .frame-label[hidden], .frames-box[hidden] { display: none; }
   /* the small 3D window in the navigator (embed=1): the view only */
   body.embed .brand, body.embed .panel, body.embed .readout, body.embed .status, body.embed #route-left, body.embed .route-hud, body.embed #labels, body.embed .cam-ctl { display: none !important; }
@@ -210,11 +226,15 @@
   <p>Real LOLA elevation, whole Moon; 5–20 m around the landing sites</p>
   <div id="stages" style="margin-top:8px"></div>
 </header>
-<aside class="glass panel" aria-label="View controls">
-  <section>
-    <h2>Fly to</h2>
-    <div id="presets"></div>
-  </section>
+<nav class="glass act-bar" aria-label="Actions">
+  <div class="ab-group" id="ab-fly-wrap"><button type="button" class="ab-btn" id="ab-fly" aria-expanded="false" aria-controls="presets-pop" aria-haspopup="true">Fly to ▾</button>
+    <div class="glass ab-pop" id="presets-pop" hidden><div id="presets"></div></div></div>
+  <span class="ab-sep" aria-hidden="true"></span>
+  <div class="ab-group" id="ab-wp" role="group" aria-label="Waypoints"></div>
+  <span class="ab-sep" aria-hidden="true"></span>
+  <div class="ab-group" id="ab-mapped" role="group" aria-label="Mapped areas"></div>
+</nav>
+<aside class="glass panel" aria-label="View settings and data">
   <section>
     <h2>Vertical exaggeration</h2>
     <div class="row"><input id="exaggeration" type="range" min="1" max="10" step="1" value="3" aria-label="Vertical exaggeration"><span id="exaggeration-out">3×</span></div>
@@ -2871,24 +2891,26 @@ function navigatorLink(points, mission) {
   return `${base}&rp=${rp}`;
 }
 
-function createWaypointTool(view, { parent, mission = null, terrain, payload = null } = {}) {
+// parent: the panel section (typed entry, the list, hints); bar: where its actions go (the page's action bar)
+function createWaypointTool(view, { parent, bar = null, mission = null, terrain, payload = null } = {}) {
   if (!parent) return null;
   const THREE = view.THREE;
   let pts = [];
   try { const a = JSON.parse(localStorage.getItem(KEY) ?? '[]'); if (Array.isArray(a)) pts = a.filter((p) => Number.isFinite(p?.latDeg) && Number.isFinite(p?.lonDeg)).slice(0, MAX); } catch { pts = []; }
   let adding = false;
+  const actions = `
+      <button type="button" class="ab-btn wp-add" aria-pressed="false" title="Click the terrain to place waypoints">Add points</button>
+      ${payload?.wps?.length ? '<button type="button" class="ab-btn wp-from" title="Start from the planned route\'s waypoints">Route\'s</button>' : ''}
+      <button type="button" class="ab-btn wp-clear" title="Remove all waypoints">Clear</button>
+      <a class="ab-btn ab-primary wp-plan" target="_blank" rel="noopener" title="Open the navigator and plan the rover route through these points">Plan route →</a>`;
+  if (bar) bar.insertAdjacentHTML('beforeend', actions);
   parent.innerHTML = `
     <h2>Waypoints</h2>
-    <div class="wp-tools">
-      <button type="button" class="chip wp-add" aria-pressed="false">Click to add</button>
-      ${payload?.wps?.length ? '<button type="button" class="chip wp-from">Use the route\'s</button>' : ''}
-      <button type="button" class="chip wp-clear">Clear</button>
-    </div>
+    ${bar ? '' : `<div class="wp-tools">${actions}</div>`}
     <form class="wp-type"><input type="text" placeholder="lat, lon  (e.g. -89.45, 222.69)" aria-label="Add a waypoint by latitude and longitude"><button type="submit" class="chip">Add</button></form>
     <ol class="wp-list"></ol>
-    <a class="wp-plan" target="_blank" rel="noopener">Plan the rover route through these →</a>
     <p class="hint wp-hint"></p>`;
-  const $ = (s) => parent.querySelector(s);
+  const $ = (s) => parent.querySelector(s) ?? bar?.querySelector(s);
   const addBtn = $('.wp-add'), list = $('.wp-list'), planA = $('.wp-plan'), hint = $('.wp-hint');
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(pts)); } catch { /* storage blocked */ } };
 
@@ -2949,14 +2971,16 @@ function createWaypointTool(view, { parent, mission = null, terrain, payload = n
     const total = pts.slice(1).reduce((a, p, i) => a + gcKm(pts[i], p), 0);
     const south = pts.every((p) => p.latDeg < -79.5);
     const ok = pts.length >= 2 && south;
-    planA.hidden = !ok;
-    if (ok) planA.href = navigatorLink(pts, mission);
+    // never hidden: greyed out, with the reason in its tooltip, until there is a route to plan
+    planA.classList.toggle('is-off', !ok); planA.setAttribute('aria-disabled', String(!ok));
+    if (ok) { planA.href = navigatorLink(pts, mission); planA.title = 'Open the navigator and plan the rover route through these points'; }
+    else { planA.removeAttribute('href'); planA.title = pts.length < 2 ? 'Add at least a start and an end' : 'The navigator plans south of 79.5°S'; }
     hint.textContent = pts.length < 2 ? `${adding ? 'Click the terrain to place a waypoint' : 'Add a start, any waypoints and an end'} (2–${MAX}).` : !south ? 'The navigator plans rover routes south of 79.5°S; move the points there.' : `${pts.length} points, ${total.toFixed(2)} km in straight legs; the planner finds the drivable way.`;
   }
   function changed() { save(); rebuild(); render(); view.redraw(); }
   function add(p) { if (pts.length >= MAX) { hint.textContent = `At most ${MAX} points.`; return; } pts.push(p); changed(); }
 
-  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Adding: click the map' : 'Click to add'; view.canvas.classList.toggle('adding', adding); render(); });
+  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Adding… (click the map)' : 'Add points'; view.canvas.classList.toggle('adding', adding); render(); });
   $('.wp-clear').addEventListener('click', () => { pts = []; changed(); });
   $('.wp-from')?.addEventListener('click', () => { pts = payload.wps.map((w) => ({ latDeg: w.latDeg, lonDeg: w.lonDeg })).slice(0, MAX); changed(); });
   $('.wp-type').addEventListener('submit', (e) => {
@@ -3138,7 +3162,8 @@ function tileSquares(level) {
   }).filter(Boolean);
 }
 
-function createMappedLayer(view, { parent, meta, hires } = {}) {
+// parent: the panel section (legend, figures, targets list); bar: where its actions go (the page's action bar)
+function createMappedLayer(view, { parent, bar = null, meta, hires } = {}) {
   if (!parent) return null;
   const THREE = view.THREE;
   const levels = meta?.levels ?? [];
@@ -3160,14 +3185,15 @@ function createMappedLayer(view, { parent, meta, hires } = {}) {
   }
   readDrives();
 
+  const actions = `<button type="button" class="ab-btn mp-on" aria-pressed="false" title="Show which terrain the app has at each resolution, saved drives and areas to map next">Mapped</button><button type="button" class="ab-btn mp-add" aria-pressed="false" title="Click the terrain to mark a 10 km box to map next">Mark area</button><button type="button" class="ab-btn mp-export" title="Download the areas to map next as JSON">Export</button>`;
+  if (bar) bar.insertAdjacentHTML('beforeend', actions);
   parent.innerHTML = `
     <h2>Mapped</h2>
-    <label class="row"><input type="checkbox" class="mp-on"> Show what is mapped</label>
+    ${bar ? '' : `<div class="wp-tools">${actions}</div>`}
     <ul class="mp-key"></ul>
-    <div class="wp-tools"><button type="button" class="chip mp-add" aria-pressed="false">Mark an area to map</button><button type="button" class="chip mp-export">Export targets</button></div>
     <ol class="mp-list"></ol>
     <p class="hint mp-hint"></p>`;
-  const $ = (s) => parent.querySelector(s);
+  const $ = (s) => parent.querySelector(s) ?? bar?.querySelector(s);
   const on = $('.mp-on'), key = $('.mp-key'), list = $('.mp-list'), hint = $('.mp-hint'), addBtn = $('.mp-add');
   let adding = false;
 
@@ -3264,8 +3290,11 @@ function createMappedLayer(view, { parent, meta, hires } = {}) {
     if (targets.length) { const s = targetSquares(); group.add(fill(s, 0xffffff, lift, 0.08)); group.add(outline(s, 0xffffff, lift, true)); }
   });
 
-  on.addEventListener('change', () => { group.visible = on.checked; built = ''; view.redraw(); if (on.checked && view.camera.dist > 2000) view.flyTo({ lat: -89, lon: 0, dist: 700, tilt: 0 }); });
-  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Click the terrain…' : 'Mark an area to map'; if (adding && !on.checked) on.click(); renderKey(); });
+  // the Mapped toggle (a pressed button in the action bar)
+  const setShown = (v) => { on.setAttribute('aria-pressed', String(v)); group.visible = v; built = ''; view.redraw(); if (v && view.camera.dist > 2000) view.flyTo({ lat: -89, lon: 0, dist: 700, tilt: 0 }); };
+  const shown = () => on.getAttribute('aria-pressed') === 'true';
+  on.addEventListener('click', () => setShown(!shown()));
+  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Click the terrain…' : 'Mark area'; if (adding && !shown()) setShown(true); renderKey(); });
   let down = null;
   view.canvas.addEventListener('pointerdown', (e) => { down = adding && e.button === 0 ? [e.clientX, e.clientY] : null; });
   view.canvas.addEventListener('pointerup', (e) => {
@@ -3275,7 +3304,7 @@ function createMappedLayer(view, { parent, meta, hires } = {}) {
     if (!hit) return;
     if (hit.latDeg > -79.5) { hint.textContent = 'Targets go on the south polar map (south of 79.5°S) for now.'; return; }
     targets.push({ latDeg: +hit.latDeg.toFixed(5), lonDeg: +hit.lonDeg.toFixed(5), halfKm: 5, addedMs: Date.now() });
-    adding = false; addBtn.setAttribute('aria-pressed', 'false'); addBtn.textContent = 'Mark an area to map';
+    adding = false; addBtn.setAttribute('aria-pressed', 'false'); addBtn.textContent = 'Mark area';
     changed();
   });
   $('.mp-export').addEventListener('click', () => downloadText(document, 'survey-targets.json', JSON.stringify({ about: 'Areas to map next, from the Lunar Site Navigator globe. Centres in selenographic degrees (east longitude); 10 × 10 km boxes.', targets }, null, 1)));
@@ -3508,6 +3537,13 @@ function startGlobe() {
     b.addEventListener('click', () => view?.flyTo({ lat: p.lat, lon: p.lon, dist: p.dist, tilt: p.tilt ?? 0, heading: p.heading ?? 0 }));
     chips.appendChild(b);
   }
+  // the action bar's Fly to menu (the presets were a panel section; actions now sit in the bar over the globe)
+  const flyBtn = $('ab-fly'), flyPop = $('presets-pop');
+  const setFly = (open) => { flyPop.hidden = !open; flyBtn.setAttribute('aria-expanded', String(open)); };
+  flyBtn.addEventListener('click', () => setFly(flyPop.hidden));
+  flyPop.addEventListener('click', (e) => { if (e.target.closest('button')) setFly(false); });
+  document.addEventListener('pointerdown', (e) => { if (!flyPop.hidden && !e.target.closest('#ab-fly-wrap')) setFly(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !flyPop.hidden) { setFly(false); flyBtn.focus(); } });
   const ex = $('exaggeration'), exOut = $('exaggeration-out');
   ex.addEventListener('input', () => { exOut.textContent = `${ex.value}×`; view?.setExaggeration(Number(ex.value)); });
   for (const r of document.querySelectorAll('input[name="colour"]')) r.addEventListener('change', () => view?.setColour(r.value));
@@ -3592,8 +3628,8 @@ function startGlobe() {
       window.addEventListener('hashchange', () => { if (!hashFlag('route') || cameraFromHash(location.hash).lat !== undefined) view.jumpTo(cameraFromHash(location.hash)); });
       if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission });
       if (!embed) {
-        window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), mission, terrain, payload: window.__globe.route?.payload ?? null });
-        window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), meta, hires: hiresMeta });
+        window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), bar: $('ab-wp'), mission, terrain, payload: window.__globe.route?.payload ?? null });
+        window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), bar: $('ab-mapped'), meta, hires: hiresMeta });
       }
       // the small 3D window in the navigator: reload when the navigator writes a new route
       if (embed) window.addEventListener('storage', (e) => { if (e.key === ROUTE3D_KEY) location.reload(); });
