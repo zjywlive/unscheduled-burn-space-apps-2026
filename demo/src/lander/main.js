@@ -11,7 +11,7 @@ import { buildBranches } from './branches.js';
 import { pickLandingTime, landingChecks, skyAt, flownTouchdown } from './landing.js';
 import { loadSiteTerrain } from './terrain-local.js';
 import { cleanVehicle, VEHICLE_DEFAULTS } from './vehicle.js';
-import { three, bindControls, createLabels } from './view-common.js';
+import { three, bindControls, createLabels, cameraStep, cameraKey } from './view-common.js';
 import { buildEarthScene } from './view-earth.js';
 import { buildMoonScene } from './view-moon.js';
 import { buildSurfaceScene } from './view-surface.js';
@@ -81,7 +81,8 @@ export function boot() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.PCFSoftShadowMap;
   renderer.setClearColor(0x000000, 1);
-  bindControls(canvas, () => S.scenes?.[S.scene].controls, () => { $('#auto').classList.remove('on'); });
+  const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); };
+  bindControls(canvas, () => S.scenes?.[S.scene].controls, userCamera);
 
   // the top bar wraps on narrow screens: the panels below it start at its bottom edge (--top)
   const setTop = () => document.documentElement.style.setProperty('--top', `${Math.round($('#top').getBoundingClientRect().bottom + 12)}px`);
@@ -244,7 +245,7 @@ export function boot() {
 
   function setScene(id, user = true) {
     S.scene = id;
-    if (user) { S.auto = false; $('#auto').classList.remove('on'); }
+    if (user) { S.auto = false; userCamera(); }
     document.querySelectorAll('#scenes button').forEach((b) => b.classList.toggle('on', b.dataset.scene === id));
     for (const k of ['earth', 'moon', 'surface']) $(`#labels-${k}`).hidden = k !== id;
   }
@@ -259,9 +260,25 @@ export function boot() {
 
   // controls
   document.querySelectorAll('#scenes button').forEach((b) => b.addEventListener('click', () => setScene(b.dataset.scene)));
+  // camera buttons (bottom left): a tap nudges, holding keeps going (stepped in the frame loop by real time);
+  // any of them stops the automatic follow, "Follow craft" brings it back (as Auto camera does)
+  const camAct = (action, dt) => { const c = S.scenes?.[S.scene]?.controls; if (c && cameraStep(c, action, dt)) userCamera(); };
+  const stopHold = () => { S.camHold = null; };
+  document.querySelectorAll('#camctl [data-cam]').forEach((b) => {
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      try { b.setPointerCapture(e.pointerId); } catch { /* not an active pointer (synthetic event): the hold still ends on pointerup */ }
+      camAct(b.dataset.cam, 0.12);
+      S.camHold = { action: b.dataset.cam, after: performance.now() + 180 };
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, stopHold);
+    b.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); camAct(b.dataset.cam, 0.12); } });
+  });
+  $('#cam-follow').addEventListener('click', () => $('#auto').click());
   $('#auto').addEventListener('click', () => {
     S.auto = true;
     $('#auto').classList.add('on');
+    $('#cam-follow').classList.add('on');
     for (const sc of Object.values(S.scenes)) sc.controls.state.user = false;
   });
   $('#play').addEventListener('click', () => togglePlay());
@@ -289,6 +306,10 @@ export function boot() {
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if (e.code === 'ArrowRight') S.f = Math.min(1, S.f + 0.005);
     if (e.code === 'ArrowLeft') S.f = Math.max(0, S.f - 0.005);
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const cam = cameraKey(e);
+    if (cam) { e.preventDefault(); camAct(cam, e.repeat ? 0.05 : 0.12); }
+    if (e.code === 'Digit0' || e.key === '0' || e.code === 'Home' || e.key === 'Home') $('#auto').click();
   });
 
   // start: the 480 m DEM is a startup pack; wait for it if the script tag has not run yet
@@ -316,6 +337,7 @@ export function boot() {
     if (S.auto && st.scene !== S.scene) setScene(st.scene, false);
     if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; next.hidden = st.phase !== 'landed'; }
     const sc = S.scenes[S.scene];
+    if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
     sc.update(st, { dt });
     renderer.render(sc.scene, sc.camera);
     if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }

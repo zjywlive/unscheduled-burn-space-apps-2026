@@ -171,6 +171,18 @@
   .next-step { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 14px 0 0; }
   .next-step small { color: var(--faint); font-size: 11px; }
 
+  /* camera buttons, bottom left of the 3D view (same look as the globe's) */
+  .camctl { position: fixed; left: 16px; bottom: 104px; z-index: 2; display: grid; grid-template-columns: repeat(4, 32px); gap: 4px; transition: bottom 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .next:not([hidden]) ~ .camctl { bottom: 176px; }
+  .cam { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(20, 22, 26, 0.72); -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); color: #e8eaed; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .cam svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .cam:hover { background: rgba(44, 47, 54, 0.82); }
+  .cam:active { background: rgba(255, 255, 255, 0.22); }
+  .cam:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+  .cam.follow.on { background: #fff; color: #000; border-color: #fff; }
+  .cam.zoom { margin-left: 6px; }
+  .cam-gap { width: 32px; }
+
   @media (max-width: 1360px) {
     .field > span { display: none; }
   }
@@ -204,6 +216,11 @@
     #side-toggle, .side.closed ~ #side-toggle { top: var(--top); bottom: auto; right: 16px; }
     .next, .side:not(.closed) ~ .next { left: 16px; right: 16px; transform: none; top: calc(var(--top) + 44px); bottom: auto; justify-content: space-between; }
     .side:not(.closed) ~ .next { display: none; }   /* the Landing tab has the same link */
+    /* phone: zoom and follow only (drag rotates, two fingers pinch), in a row left of the Details button */
+    .camctl, .next:not([hidden]) ~ .camctl { left: auto; right: 108px; bottom: auto; top: calc(var(--top) + 1px); grid-template-columns: repeat(3, 32px); }
+    .camctl .cam:not(.zoom):not(.follow), .cam-gap { display: none; }
+    .cam.zoom { margin-left: 0; }
+    .cam[data-cam="zoom-out"] { order: 0; } .cam.follow { order: 1; } .cam[data-cam="zoom-in"] { order: 2; }
     .hud dl { font-size: 12px; }
     .timeline { height: 68px; padding: 0 10px; }
     .seg-ph span { display: none; }
@@ -253,6 +270,11 @@
 </footer>
 <div id="status" class="status" hidden></div>
 <a id="next" class="glass next" href="index.html" hidden><span class="next-t">Touchdown<small id="next-where"></small></span><span class="btn primary">Plan the rover route →</span></a>
+<div id="camctl" class="camctl" role="group" aria-label="Camera">
+  <button type="button" class="cam" data-cam="rotate-left" title="Rotate left (Q)" aria-label="Rotate left (Q)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.6 8.6A4.5 4.5 0 1 0 5 4.6M3 2.6v3h3"/></svg></button><button type="button" class="cam" data-cam="pan-up" title="Pan up (W)" aria-label="Pan up (W)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button><button type="button" class="cam" data-cam="rotate-right" title="Rotate right (E)" aria-label="Rotate right (E)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M12.4 8.6A4.5 4.5 0 1 1 11 4.6M13 2.6v3h-3"/></svg></button><button type="button" class="cam zoom" data-cam="zoom-in" title="Zoom in (+)" aria-label="Zoom in (+)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
+  <button type="button" class="cam" data-cam="pan-left" title="Pan left (A)" aria-label="Pan left (A)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M10 4l-4 4 4 4"/></svg></button><button type="button" id="cam-follow" class="cam follow on" title="Follow the craft again (0)" aria-label="Follow craft"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6zM8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg></button><button type="button" class="cam" data-cam="pan-right" title="Pan right (D)" aria-label="Pan right (D)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button><span class="cam-gap" aria-hidden="true"></span>
+  <button type="button" class="cam tilt" data-cam="lower" title="Lower the camera (F)" aria-label="Lower the camera (F)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 4.5h10M5 8l3 3 3-3"/></svg></button><button type="button" class="cam" data-cam="pan-down" title="Pan down (S)" aria-label="Pan down (S)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button><button type="button" class="cam tilt" data-cam="raise" title="Raise the camera (R)" aria-label="Raise the camera (R)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 11.5h10M5 8l3-3 3 3"/></svg></button><button type="button" class="cam zoom" data-cam="zoom-out" title="Zoom out (−)" aria-label="Zoom out (−)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 8h9"/></svg></button>
+</div>
 
 <script src="vendor/three.classic.js"></script>
 <script src="data/js/dem_480m.js"></script>
@@ -3458,6 +3480,33 @@ function createControls(camera, { target = [0, 0, 0], radius = 10, minRadius = 0
 }
 
 // Pointer and wheel handling on the canvas, dispatched to whichever controls are active.
+// On-screen buttons and keys for the camera: one step of an action held for dt seconds (rates per second:
+// rotate 1.2 rad, raise/lower 0.8 rad, zoom ×e^1.2, pan 0.6 view radii). Every action takes the camera from the
+// automatic follow (controls.state.user), like a drag does.
+const CAMERA_ACTIONS = ['rotate-left', 'rotate-right', 'raise', 'lower', 'zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down'];
+function cameraStep(c, action, dt) {
+  const rot = (1.2 * dt) / 0.005, tilt = (0.8 * dt) / 0.005, pan = (0.6 * dt) / 0.0015;   // in the drag units of rotate()/pan()
+  switch (action) {
+    case 'rotate-left': c.rotate(-rot, 0); break;
+    case 'rotate-right': c.rotate(rot, 0); break;
+    case 'raise': c.rotate(0, tilt); break;
+    case 'lower': c.rotate(0, -tilt); break;
+    case 'zoom-in': c.zoom(Math.exp(-1.2 * dt)); break;
+    case 'zoom-out': c.zoom(Math.exp(1.2 * dt)); break;
+    case 'pan-left': c.pan(pan, 0); break;
+    case 'pan-right': c.pan(-pan, 0); break;
+    case 'pan-up': c.pan(0, pan); break;
+    case 'pan-down': c.pan(0, -pan); break;
+    default: return false;
+  }
+  return true;
+}
+// keyboard: +/− zoom, Q/E rotate, R/F raise/lower, W/A/S/D pan (the arrow keys stay on the timeline)
+const CAMERA_KEYS = { Equal: 'zoom-in', NumpadAdd: 'zoom-in', Minus: 'zoom-out', NumpadSubtract: 'zoom-out', KeyQ: 'rotate-left', KeyE: 'rotate-right', KeyR: 'raise', KeyF: 'lower', KeyA: 'pan-left', KeyD: 'pan-right', KeyW: 'pan-up', KeyS: 'pan-down' };
+// the same by the character typed (other layouts, or events without a physical key code)
+const CAMERA_CHARS = { '+': 'zoom-in', '=': 'zoom-in', '-': 'zoom-out', '_': 'zoom-out', q: 'rotate-left', e: 'rotate-right', r: 'raise', f: 'lower', a: 'pan-left', d: 'pan-right', w: 'pan-up', s: 'pan-down' };
+const cameraKey = (e) => CAMERA_KEYS[e.code] ?? CAMERA_CHARS[String(e.key ?? '').toLowerCase()] ?? null;
+
 function bindControls(dom, getControls, onUser) {
   let last = null, mode = null, pinch = null;
   const pts = new Map();
@@ -3538,7 +3587,7 @@ function createLabels(layer) {
   return { add, remove, update, items };
 }
 
-return { three, v3, enu3, makeLine, setLinePoints, starField, createControls, bindControls, createLabels };
+return { three, v3, enu3, makeLine, setLinePoints, starField, createControls, CAMERA_ACTIONS, cameraStep, CAMERA_KEYS, CAMERA_CHARS, cameraKey, bindControls, createLabels };
 })();
 __m['view-earth.js'] = (() => {
 // Scene 1: Earth–Moon transfer, geocentric and non-rotating (axes of the MCI frame), 1 unit = 1000 km, true scale.
@@ -4709,7 +4758,7 @@ const { buildBranches } = __m['branches.js'];
 const { pickLandingTime, landingChecks, skyAt, flownTouchdown } = __m['landing.js'];
 const { loadSiteTerrain } = __m['terrain-local.js'];
 const { cleanVehicle, VEHICLE_DEFAULTS } = __m['vehicle.js'];
-const { three, bindControls, createLabels } = __m['view-common.js'];
+const { three, bindControls, createLabels, cameraStep, cameraKey } = __m['view-common.js'];
 const { buildEarthScene } = __m['view-earth.js'];
 const { buildMoonScene } = __m['view-moon.js'];
 const { buildSurfaceScene } = __m['view-surface.js'];
@@ -4779,7 +4828,8 @@ function boot() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.PCFSoftShadowMap;
   renderer.setClearColor(0x000000, 1);
-  bindControls(canvas, () => S.scenes?.[S.scene].controls, () => { $('#auto').classList.remove('on'); });
+  const userCamera = () => { $('#auto').classList.remove('on'); $('#cam-follow').classList.remove('on'); };
+  bindControls(canvas, () => S.scenes?.[S.scene].controls, userCamera);
 
   // the top bar wraps on narrow screens: the panels below it start at its bottom edge (--top)
   const setTop = () => document.documentElement.style.setProperty('--top', `${Math.round($('#top').getBoundingClientRect().bottom + 12)}px`);
@@ -4942,7 +4992,7 @@ function boot() {
 
   function setScene(id, user = true) {
     S.scene = id;
-    if (user) { S.auto = false; $('#auto').classList.remove('on'); }
+    if (user) { S.auto = false; userCamera(); }
     document.querySelectorAll('#scenes button').forEach((b) => b.classList.toggle('on', b.dataset.scene === id));
     for (const k of ['earth', 'moon', 'surface']) $(`#labels-${k}`).hidden = k !== id;
   }
@@ -4957,9 +5007,25 @@ function boot() {
 
   // controls
   document.querySelectorAll('#scenes button').forEach((b) => b.addEventListener('click', () => setScene(b.dataset.scene)));
+  // camera buttons (bottom left): a tap nudges, holding keeps going (stepped in the frame loop by real time);
+  // any of them stops the automatic follow, "Follow craft" brings it back (as Auto camera does)
+  const camAct = (action, dt) => { const c = S.scenes?.[S.scene]?.controls; if (c && cameraStep(c, action, dt)) userCamera(); };
+  const stopHold = () => { S.camHold = null; };
+  document.querySelectorAll('#camctl [data-cam]').forEach((b) => {
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      try { b.setPointerCapture(e.pointerId); } catch { /* not an active pointer (synthetic event): the hold still ends on pointerup */ }
+      camAct(b.dataset.cam, 0.12);
+      S.camHold = { action: b.dataset.cam, after: performance.now() + 180 };
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, stopHold);
+    b.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); e.stopPropagation(); camAct(b.dataset.cam, 0.12); } });
+  });
+  $('#cam-follow').addEventListener('click', () => $('#auto').click());
   $('#auto').addEventListener('click', () => {
     S.auto = true;
     $('#auto').classList.add('on');
+    $('#cam-follow').classList.add('on');
     for (const sc of Object.values(S.scenes)) sc.controls.state.user = false;
   });
   $('#play').addEventListener('click', () => togglePlay());
@@ -4987,6 +5053,10 @@ function boot() {
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if (e.code === 'ArrowRight') S.f = Math.min(1, S.f + 0.005);
     if (e.code === 'ArrowLeft') S.f = Math.max(0, S.f - 0.005);
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const cam = cameraKey(e);
+    if (cam) { e.preventDefault(); camAct(cam, e.repeat ? 0.05 : 0.12); }
+    if (e.code === 'Digit0' || e.key === '0' || e.code === 'Home' || e.key === 'Home') $('#auto').click();
   });
 
   // start: the 480 m DEM is a startup pack; wait for it if the script tag has not run yet
@@ -5014,6 +5084,7 @@ function boot() {
     if (S.auto && st.scene !== S.scene) setScene(st.scene, false);
     if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; next.hidden = st.phase !== 'landed'; }
     const sc = S.scenes[S.scene];
+    if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
     sc.update(st, { dt });
     renderer.render(sc.scene, sc.camera);
     if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }

@@ -112,6 +112,33 @@ export function createControls(camera, { target = [0, 0, 0], radius = 10, minRad
 }
 
 // Pointer and wheel handling on the canvas, dispatched to whichever controls are active.
+// On-screen buttons and keys for the camera: one step of an action held for dt seconds (rates per second:
+// rotate 1.2 rad, raise/lower 0.8 rad, zoom ×e^1.2, pan 0.6 view radii). Every action takes the camera from the
+// automatic follow (controls.state.user), like a drag does.
+export const CAMERA_ACTIONS = ['rotate-left', 'rotate-right', 'raise', 'lower', 'zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down'];
+export function cameraStep(c, action, dt) {
+  const rot = (1.2 * dt) / 0.005, tilt = (0.8 * dt) / 0.005, pan = (0.6 * dt) / 0.0015;   // in the drag units of rotate()/pan()
+  switch (action) {
+    case 'rotate-left': c.rotate(-rot, 0); break;
+    case 'rotate-right': c.rotate(rot, 0); break;
+    case 'raise': c.rotate(0, tilt); break;
+    case 'lower': c.rotate(0, -tilt); break;
+    case 'zoom-in': c.zoom(Math.exp(-1.2 * dt)); break;
+    case 'zoom-out': c.zoom(Math.exp(1.2 * dt)); break;
+    case 'pan-left': c.pan(pan, 0); break;
+    case 'pan-right': c.pan(-pan, 0); break;
+    case 'pan-up': c.pan(0, pan); break;
+    case 'pan-down': c.pan(0, -pan); break;
+    default: return false;
+  }
+  return true;
+}
+// keyboard: +/− zoom, Q/E rotate, R/F raise/lower, W/A/S/D pan (the arrow keys stay on the timeline)
+export const CAMERA_KEYS = { Equal: 'zoom-in', NumpadAdd: 'zoom-in', Minus: 'zoom-out', NumpadSubtract: 'zoom-out', KeyQ: 'rotate-left', KeyE: 'rotate-right', KeyR: 'raise', KeyF: 'lower', KeyA: 'pan-left', KeyD: 'pan-right', KeyW: 'pan-up', KeyS: 'pan-down' };
+// the same by the character typed (other layouts, or events without a physical key code)
+export const CAMERA_CHARS = { '+': 'zoom-in', '=': 'zoom-in', '-': 'zoom-out', '_': 'zoom-out', q: 'rotate-left', e: 'rotate-right', r: 'raise', f: 'lower', a: 'pan-left', d: 'pan-right', w: 'pan-up', s: 'pan-down' };
+export const cameraKey = (e) => CAMERA_KEYS[e.code] ?? CAMERA_CHARS[String(e.key ?? '').toLowerCase()] ?? null;
+
 export function bindControls(dom, getControls, onUser) {
   let last = null, mode = null, pinch = null;
   const pts = new Map();
