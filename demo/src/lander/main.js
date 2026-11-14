@@ -8,7 +8,7 @@ import { hasData, readData, loadData } from '../data-loader.js';
 import { planMission } from './mission.js';
 import { powerTimeline } from './power-timeline.js';
 import { buildBranches } from './branches.js';
-import { pickLandingTime, landingChecks, skyAt, flownTouchdown } from './landing.js';
+import { pickLandingTime, pickLandingWindow, landingChecks, skyAt, flownTouchdown } from './landing.js';
 import { loadSiteTerrain } from './terrain-local.js';
 import { cleanVehicle, VEHICLE_DEFAULTS } from './vehicle.js';
 import { three, bindControls, createLabels, cameraStep, cameraKey } from './view-common.js';
@@ -20,6 +20,7 @@ import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.j
 import { attitudeState } from './model.js';
 import { createCloseup } from './closeup.js';
 import { createPlanner } from './planner.js';
+import { createSiteContexts, isPolarSite } from './globalsite.js';
 import { createHiresSet } from '../hires.js';
 import { bootScreen } from '../boot.js';
 
@@ -34,7 +35,8 @@ const PLAYBACK_S = 150;   // the whole timeline in 150 s at 1×
 // custom site. A stored landing time is used only with the stored site and inside the ephemeris.
 export function startingPoint(q, mission, sites, eph) {
   const byId = (id) => sites.find((s) => s.id === id);
-  const custom = (latDeg, lonDeg, name) => (latDeg <= TERRAIN_MAX_LAT ? { id: 'custom', name: name ?? `${latDeg.toFixed(2)}°, ${lonDeg.toFixed(2)}°`, latDeg, lonDeg } : null);
+  // anywhere on the Moon (south of 80°S the polar data, elsewhere the global LOLA terrain and a computed skyline)
+  const custom = (latDeg, lonDeg, name) => (latDeg >= -90 && latDeg <= 90 ? { id: 'custom', name: name ?? `${latDeg.toFixed(2)}°, ${lonDeg.toFixed(2)}°`, latDeg, lonDeg } : null);
   const inEph = (t) => Number.isFinite(t) && t > eph.startMs + 10 * 86400e3 && t < eph.endMs - 86400e3;
   const qs = q.get('site');
   if (qs || q.get('t')) {
@@ -61,10 +63,12 @@ export function boot() {
   if (!T) { lift(); status('three.js did not load (vendor/three.classic.js).'); return; }
   loading.set(0.08, 'Reading the ephemeris and the landing sites…');
   const eph = createEphemeris(json('data-ephemeris'));
-  const sites = json('data-sites').filter((s) => s.latDeg <= TERRAIN_MAX_LAT);
+  const sites = json('data-sites');   // every listed site: polar ones on the polar data, others on the global terrain
   const meta = json('data-terrain');
   // high-resolution patches (5/10/20 m) around the listed sites; only the selected site's pack is loaded
   const hires = createHiresSet(json('data-hires'), (name) => loadData(name, { timeoutMs: 60000 }));
+  // skyline, height and terrain per site: polar pyramid south of 80°S, global LOLA terrain elsewhere
+  const siteCtx = createSiteContexts({ load: (name) => loadData(name, { timeoutMs: 90000 }), getDem: () => S.dem });
   const q = new URLSearchParams(location.search);
   const start0 = startingPoint(q, readMission(), sites, eph);
   let choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
@@ -124,20 +128,26 @@ export function boot() {
 
   function skyOkFor(mask) {
     return (site, tMs) => {
-      const m = site.id === S.site.id ? mask : skylineFor(S.dem, site);
+      const m = site.id === S.site.id ? mask : isPolarSite(site) ? skylineFor(S.dem, site) : () => 0;
       const s = skyAt(eph, site, tMs, m);
       return !!s && s.sun.clearDeg > 0 && s.earth.clearDeg > 0;
     };
   }
 
+  // the site's skyline and height first (computed from the global terrain north of 80°S), then the plan
+  async function replanAt(opts) {
+    if (!isPolarSite(S.site)) status('Loading the global LOLA terrain and computing the skyline at this site…');
+    try { S.ctx = await siteCtx.context(S.site); } catch (e) { S.ctx = { polar: false, mask: () => 0, heightM: 0, resKm: 7.6, label: 'none', skyline: `not computed (${e.message})` }; }
+    replan(opts);
+  }
   function replan({ keepTime = false } = {}) {
     const site = S.site;
-    const mask = skylineFor(S.dem, site);
+    const mask = S.ctx?.mask ?? skylineFor(S.dem, site);
     if (!Number.isFinite(S.landingMs)) {
       status('Finding a landing time with the Sun and Earth both above the skyline…');
-      S.landingMs = pickLandingTime(eph, site, mask, DEFAULT_FROM) ?? DEFAULT_FROM + 15 * 86400e3;
+      S.landingMs = pickLandingWindow(eph, site, mask, DEFAULT_FROM)?.tMs ?? DEFAULT_FROM + 15 * 86400e3;
     }
-    const h = S.dem.heightAt(site.latDeg, site.lonDeg);
+    const h = S.ctx ? S.ctx.heightM : S.dem.heightAt(site.latDeg, site.lonDeg);
     const plan = planMission({ eph, site, landingMs: S.landingMs, vehicle: S.vehicle, siteHeightKm: (h ?? 0) / 1000, mask });
     if (!plan.ok) { lift(); status(plan.error); return; }
     status('');
@@ -177,7 +187,11 @@ export function boot() {
     S.terrainNote = 'Loading terrain…';
     try {
       let k = 0;
-      const terr = await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => { status(m); loading.set(0.55 + 0.1 * k++, m); } });
+      // polar sites: the polar pyramid and the fine patches; elsewhere the global LOLA terrain around the site
+      const ctx = S.ctx;
+      const terr = ctx && !ctx.polar
+        ? { sample: ctx.sampleXY, resAt: ctx.resAtXY, levelsKm: [ctx.resKm], finestKm: ctx.resKm, bounds: null, hires: null, fine: null, global: ctx.label }
+        : await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => { status(m); loading.set(0.55 + 0.1 * k++, m); } });
       if (token !== S.token) return;
       status('Building the descent terrain…');
       loading.set(0.88, 'Building the descent terrain mesh…');
@@ -191,11 +205,13 @@ export function boot() {
       setTimeout(lift, 400);   // a background tab draws no frames; do not leave the screen up until the cap
       const m = (k) => `${Math.round(k * 1000)} m`;
       const shift = S.scenes.surface.terrainInfo()?.offsetM ?? 0;
-      S.terrainNote = `Descent terrain: LOLA DEM at ${terr.levelsKm.map(m).join(' / ')} around the site (finest first), with lunar curvature.`
+      S.terrainNote = terr.global
+        ? `Descent terrain: ${terr.global} global LOLA terrain around the site (no polar data north of 80°S); the skyline is ${S.ctx.skyline}. Lander-scale hazards (rocks, small craters, slopes under about 1 km) are not resolved at this resolution. No fine patch here: run node tools/fetch-hires.mjs --at ${plan.site.latDeg.toFixed(3)},${plan.site.lonDeg.toFixed(3)} to fetch one.`
+        : `Descent terrain: LOLA DEM at ${terr.levelsKm.map(m).join(' / ')} around the site (finest first), with lunar curvature.`
         + (terr.hires ? ` The ${m(terr.hires.kmPerPixel)} patch covers ${Math.round(terr.hires.sizeKm)} × ${Math.round(terr.hires.sizeKm)} km around the site; the mesh uses its full resolution within ${(terr.fine?.halfM ?? 0) / 1000} km of the target and coarsens outward.` : ' No high-resolution patch here.')
         + (Math.abs(shift) >= 0.5 ? ` The terrain is shifted ${shift > 0 ? 'up' : 'down'} ${Math.abs(shift).toFixed(1)} m so the site matches the 480 m DEM height the trajectory was planned to.` : '');
       // slopes over two pixels of the finest level (10 m on a 5 m patch, 40 m on the 20 m tiles)
-      S.checks = landingChecks({ eph, site: plan.site, tMs: plan.times.landingMs, mask: skylineFor(S.dem, plan.site), sample: terr.sample, stepKm: Math.max(0.01, 2 * (terr.finestKm ?? 0.06)), vehicle: plan.vehicle, touchdown: plan.descent.touchdown });
+      S.checks = landingChecks({ eph, site: plan.site, tMs: plan.times.landingMs, mask: S.ctx?.mask ?? skylineFor(S.dem, plan.site), sample: terr.sample, stepKm: Math.max(0.01, 2 * (terr.finestKm ?? 0.06)), vehicle: plan.vehicle, touchdown: plan.descent.touchdown });
       S.scenes.surface.setSpot(S.checks.spot && S.checks.checks.find((c) => c.id === 'slope' && !c.ok) ? S.checks.spot : null);
       status('');
       renderPanels();
@@ -213,7 +229,7 @@ export function boot() {
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
     else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
     else if (tab === 'vehicle') {
-      renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
+      renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replanAt({ keepTime: true }); });
       body.prepend(closeup.el);
       requestAnimationFrame(() => closeup.resize());
     }
@@ -306,7 +322,7 @@ export function boot() {
   $('#speed').addEventListener('change', (e) => { S.speed = e.target.value === 'real' ? 'real' : Number(e.target.value); });
   // "Where to land": the landing-site planner (map, scores, better spots); "Land here" replans the mission there
   const planner = createPlanner({
-    root: $('#planner'), eph, sites, meta, hires,
+    root: $('#planner'), eph, sites, meta, hires, siteCtx,
     getDem: () => S.dem, getVehicle: () => S.plan?.vehicle ?? S.vehicle,
     getFromMs: () => (Number.isFinite(S.landingMs) ? S.landingMs - 2 * 86400e3 : DEFAULT_FROM),
     getStayDays: () => readMission()?.stayDays ?? 7,
@@ -318,14 +334,14 @@ export function boot() {
       if (!listed) { choices = [s, ...sites]; fillSites(); }
       S.site = s; S.landingMs = landingMs;
       $('#site').value = s.id;
-      replan();
+      replanAt();
     },
   });
   S.planner = planner;   // inspection from the console, as S itself
   $('#plan-site').addEventListener('click', () => planner.open());
-  $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replan(); });
-  $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replan(); } });
-  $('#find').addEventListener('click', () => { S.landingMs = pickLandingTime(eph, S.site, skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3); replan(); });
+  $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replanAt(); });
+  $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replanAt(); } });
+  $('#find').addEventListener('click', () => { S.landingMs = pickLandingWindow(eph, S.site, S.ctx?.mask ?? skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3)?.tMs ?? S.landingMs; replanAt(); });
   // terrain key (descent view): colour mode, contours, legend, contour interval and scale bar
   S.terrStyle = { mode: 'plain', contours: true };
   document.querySelectorAll('#terrkey [data-tmode]').forEach((b) => b.addEventListener('click', () => {
@@ -384,7 +400,7 @@ export function boot() {
     S.dem = readDem();
     loading.set(0.3, 'Planning the trajectory from Earth orbit to the site…');
     // a moment for the loading text to paint before the (synchronous) planning and scene build
-    setTimeout(() => { replan(); setScene('earth', false); requestAnimationFrame(frame); }, loading.active ? 30 : 0);
+    setTimeout(async () => { await replanAt(); setScene('earth', false); requestAnimationFrame(frame); }, loading.active ? 30 : 0);
   };
   if (hasData('dem_480m')) start();
   else { status('Loading terrain…'); loading.set(0.15, 'Loading the 480 m terrain map…'); loadData('dem_480m').then(start, (e) => { lift(); status(`dem_480m failed to load: ${e.message}`); }); }

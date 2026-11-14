@@ -11,10 +11,16 @@ import { cross, dot, norm } from './vec.js';
 const DEG = 180 / Math.PI;
 const clearance = (r, mask) => r.elDeg - (typeof mask === 'function' ? mask(r.azDeg) : mask ?? 0);
 
-// Slope (deg) of a height field sample(xKm, yKm) → metres | NaN at map point (x, y), central differences over stepKm.
-export function slopeDeg(sample, xKm, yKm, stepKm) {
-  const e = sample(xKm + stepKm, yKm), w = sample(xKm - stepKm, yKm);
-  const n = sample(xKm, yKm + stepKm), s = sample(xKm, yKm - stepKm);
+// Scale of the south polar stereographic map (map km per ground km) at a latitude: 1 at the pole, 1.008 at 80°S,
+// 2 at the equator, ~15 at 60°N. Conformal, so the same in every direction.
+export const mapScale = (latDeg) => 1 / Math.cos(((90 + latDeg) / 2) * Math.PI / 180) ** 2;
+
+// Slope (deg) of a height field sample(xKm, yKm) → metres | NaN at map point (x, y), central differences over a
+// ground step of stepKm (k: map scale there, so the map offsets are stepKm·k).
+export function slopeDeg(sample, xKm, yKm, stepKm, k = 1) {
+  const d = stepKm * k;
+  const e = sample(xKm + d, yKm), w = sample(xKm - d, yKm);
+  const n = sample(xKm, yKm + d), s = sample(xKm, yKm - d);
   if (![e, w, n, s].every(Number.isFinite)) return NaN;
   const gx = (e - w) / (2000 * stepKm), gy = (n - s) / (2000 * stepKm);
   return Math.atan(Math.hypot(gx, gy)) * DEG;
@@ -24,12 +30,13 @@ export function slopeDeg(sample, xKm, yKm, stepKm) {
 // on a stepKm grid with slopes over baselineKm. Returns { latDeg, lonDeg, slopeDeg, distM, azDeg, heightM, ok } | null.
 export function flattestNear(sample, site, { radiusKm = 0.5, stepKm = 0.02, baselineKm = 0.04, limitDeg = 10 } = {}) {
   const [x0, y0] = toXY(site.latDeg, site.lonDeg);
+  const k = mapScale(site.latDeg);   // ground distances below; map offsets × k
   let best = null;
   const n = Math.round(radiusKm / stepKm);
   for (let j = -n; j <= n; j++) for (let i = -n; i <= n; i++) {
-    const dx = i * stepKm, dy = j * stepKm, d = Math.hypot(dx, dy);
+    const dx = i * stepKm * k, dy = j * stepKm * k, d = Math.hypot(i * stepKm, j * stepKm);
     if (d > radiusKm) continue;
-    const sl = slopeDeg(sample, x0 + dx, y0 + dy, baselineKm);
+    const sl = slopeDeg(sample, x0 + dx, y0 + dy, baselineKm, k);
     if (!Number.isFinite(sl)) continue;
     const score = sl <= limitDeg ? d : 1e3 + sl;
     if (!best || score < best.score) best = { score, x: x0 + dx, y: y0 + dy, sl, d };
@@ -85,10 +92,10 @@ export function skyAt(eph, site, tMs, mask = 0) {
 
 // First time ≥ fromMs (hour steps) when the Sun and the Earth both clear the skyline by clearDeg and stay up for
 // holdMs. Searches up to maxDays. Returns null if there is none.
-export function pickLandingTime(eph, site, mask, fromMs, { stepMs = 3600e3, holdMs = 48 * 3600e3, clearDeg = 0.3, maxDays = 150 } = {}) {
+export function pickLandingTime(eph, site, mask, fromMs, { stepMs = 3600e3, holdMs = 48 * 3600e3, clearDeg = 0.3, maxDays = 150, requireEarth = true } = {}) {
   const ok = (t) => {
     const s = skyAt(eph, site, t, mask);
-    return !!s && s.sun.clearDeg > clearDeg && s.earth.clearDeg > clearDeg;
+    return !!s && s.sun.clearDeg > clearDeg && (!requireEarth || s.earth.clearDeg > clearDeg);
   };
   const end = Math.min(eph.endMs - holdMs, fromMs + maxDays * 86400e3);
   let runStart = null;
@@ -99,6 +106,15 @@ export function pickLandingTime(eph, site, mask, fromMs, { stepMs = 3600e3, hold
     } else runStart = null;
   }
   return null;
+}
+
+// The landing time: the first window with the Sun and the Earth both up (a direct link at touchdown), or, where
+// the Earth never rises (the far side), the first with the Sun up (a relay is then needed). → { tMs, earth } | null
+export function pickLandingWindow(eph, site, mask, fromMs, opts = {}) {
+  const t = pickLandingTime(eph, site, mask, fromMs, opts);
+  if (t !== null) return { tMs: t, earth: true };
+  const t2 = pickLandingTime(eph, site, mask, fromMs, { ...opts, requireEarth: false });
+  return t2 !== null ? { tMs: t2, earth: false } : null;
 }
 
 // The checklist shown next to the descent view. sample: map-plane height sampler (km → m | NaN); stepKm: the DEM
@@ -116,7 +132,7 @@ export function landingChecks({ eph, site, tMs, mask = 0, sample = null, stepKm 
   }
   if (sample) {
     const [x, y] = toXY(site.latDeg, site.lonDeg);
-    const sl = slopeDeg(sample, x, y, stepKm);
+    const sl = slopeDeg(sample, x, y, stepKm, mapScale(site.latDeg));
     add('slope', `Slope (DEM, ${Math.round(stepKm * 1000)} m baseline)`, Number.isFinite(sl) ? `${sl.toFixed(1)}°` : 'no data', `≤ ${lim.maxSlopeDeg}°`, Number.isFinite(sl) && sl <= lim.maxSlopeDeg, 'LOLA DEM; lander-scale rocks need LROC NAC or lidar');
     spot = flattestNear(sample, site, { baselineKm: stepKm, stepKm: Math.max(0.02, stepKm / 2), limitDeg: lim.maxSlopeDeg });
     if (spot) add('spot', 'Nearest spot meeting the slope limit (within 500 m)', spot.ok ? `${spot.slopeDeg.toFixed(1)}° at ${Math.round(spot.distM)} m, az ${Math.round(spot.azDeg)}°` : `none; flattest ${spot.slopeDeg.toFixed(1)}°`, `≤ ${lim.maxSlopeDeg}°`, spot.ok, 'LOLA DEM search around the target; retarget before PDI');

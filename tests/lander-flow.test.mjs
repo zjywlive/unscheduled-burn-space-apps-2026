@@ -43,15 +43,16 @@ test('flow: URL parameters win, then the stored mission, then the default site',
   assert.deepEqual([s.site.id, s.landingMs, s.from], ['shackleton', null, 'default']);
 });
 
-test('flow: a stored or linked point that is not a listed site becomes a custom site south of 80°S only', () => {
+test('flow: a stored or linked point that is not a listed site becomes a custom site, anywhere on the Moon', () => {
   let s = startingPoint(q(''), { siteId: null, siteName: 'Rim point A', latDeg: -89.43, lonDeg: 220.5, landingMs: T }, SITES, EPH);
   assert.deepEqual(s.site, { id: 'custom', name: 'Rim point A', latDeg: -89.43, lonDeg: 220.5 });
   s = startingPoint(q('?site=-88.5,-66.7'), null, SITES, EPH);
   assert.equal(s.site.id, 'custom');
   assert.equal(s.site.latDeg, -88.5);
-  // north of the terrain (Apollo 11) or a time outside the ephemeris: back to the default site / a picked time
-  s = startingPoint(q(''), { siteId: 'apollo11', latDeg: 0.67, lonDeg: 23.47, landingMs: T }, SITES, EPH);
-  assert.equal(s.site.id, 'shackleton');
+  // north of 80°S too (the global terrain and a computed skyline): Apollo 11, not in this list, is a custom site
+  s = startingPoint(q(''), { siteId: 'apollo11', siteName: 'Apollo 11', latDeg: 0.67, lonDeg: 23.47, landingMs: T }, SITES, EPH);
+  assert.deepEqual([s.site.id, s.site.latDeg, s.site.name], ['custom', 0.67, 'Apollo 11']);
+  // a time outside the ephemeris: a picked time instead
   s = startingPoint(q(''), { siteId: 'im2', latDeg: -84.79, lonDeg: 29.2, landingMs: Date.parse('2030-01-01T00:00Z') }, SITES, EPH);
   assert.deepEqual([s.site.id, s.landingMs], ['im2', null]);
 });

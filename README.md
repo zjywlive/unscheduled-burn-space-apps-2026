@@ -108,6 +108,7 @@ as the submission rules require.
 | GRAIL gravity model GRGM900C (Lemoine et al. 2014) | NASA PDS, https://pds-geosciences.wustl.edu/grail/grail-l-lgrs-5-rdr-v1/grail_1001/shadr/ | Lunar J2 and C22 in the lander dynamics |
 | Orloff, *Apollo by the Numbers* (NASA SP-2000-4029); Bennett, NASA TN D-6846 | NASA | Published Apollo Δv values the lander budget is compared with |
 | Grün et al. (1985), *Icarus* 62; NOAA SWPC Space Weather Scales | Icarus; https://www.swpc.noaa.gov/noaa-scales-explanation | Micrometeoroid flux and solar radiation storm levels in the lander's contingency decisions |
+| IAU/USGS Gazetteer of Planetary Nomenclature (Moon; LOLA 2011 control-network centres and diameters) | https://planetarynames.wr.usgs.gov (accessed 2026-11-14; one feature page per entry in `demo/src/lander/gazetteer.js`) | Names and positions of 32 major maria, craters and basins on the lander planner's whole-Moon map |
 | Further lander references | `docs/LANDER.md` §11 | Constants, guidance and comparisons, each marked where unverified |
 
 ## Use of AI tools

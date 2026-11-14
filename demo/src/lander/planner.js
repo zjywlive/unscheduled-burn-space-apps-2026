@@ -6,9 +6,11 @@
 import { loadData } from '../data-loader.js';
 import { createDem, toXY, fromXY, skylineFor, TERRAIN_MAX_LAT } from '../terrain.js';
 import { createPsr, paintPsr, PSR_PACK } from '../psr.js';
-import { decodePack, G0, sampleG0 } from '../globe-terrain.js';
+import { decodePack, G0, G2, sampleG0 } from '../globe-terrain.js';
 import { loadSiteTerrain } from './terrain-local.js';
-import { pickLandingTime, skyAt } from './landing.js';
+import { pickLandingWindow, skyAt, mapScale, slopeDeg } from './landing.js';
+import { distanceBearing, subPoint } from './skyline.js';
+import { GAZETTEER, GAZETTEER_SOURCE } from './gazetteer.js';
 import { planMission } from './mission.js';
 import { ELLIPSE, ellipsePoints, terrainStats, skyDirections, skyStats, batteryHours, figures, verdict, searchGrid, suitability, bestPoints, landableClass, LANDABLE } from './siteplan.js';
 import { createHeatGrid, fractionJob } from '../heat.js';
@@ -33,17 +35,19 @@ export function parseLatLon(text) {
   return { latDeg: lat, lonDeg: L };
 }
 
-export function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, getVehicle, getFromMs, getStayDays, getStayStartMs, getCurrent, onLand }) {
+export function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getStayStartMs, getCurrent, onLand }) {
   root.innerHTML = `
     <div class="pl-map">
       <canvas aria-label="Map of the lunar south pole: click to propose a landing point"></canvas>
       <div class="pl-top glass">
-        <div class="seg" role="group" aria-label="Map"><button data-view="polar" class="on">South pole</button><button data-view="moon">Whole Moon</button></div>
+        <div class="seg" role="group" aria-label="Map"><button data-view="polar" class="on" title="Map around the point (south polar stereographic; polar data south of 80°S, global LOLA elsewhere)">Map</button><button data-view="moon">Whole Moon</button></div>
+        <label class="pl-names" title="Major named features from the IAU/USGS Gazetteer" hidden><input type="checkbox" checked> Names</label>
         <form class="pl-go"><input type="text" placeholder="lat, lon  e.g. 85.4S 35.3E" aria-label="Latitude and longitude"><button class="btn" type="submit">Go</button></form>
         <span class="pl-hint">Click the map to propose a landing point · drag to pan · wheel or pinch to zoom</span>
       </div>
       <div class="pl-zoom"><button class="cam" data-z="1.6" aria-label="Zoom in" title="Zoom in">+</button><button class="cam" data-z="0.625" aria-label="Zoom out" title="Zoom out">−</button></div>
       <div class="pl-key glass"></div>
+      <div class="pl-read glass" hidden></div>
       <div class="pl-toast" hidden></div>
     </div>
     <aside class="pl-side glass">
@@ -53,7 +57,9 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     </aside>`;
   const canvas = root.querySelector('canvas'), ctx = canvas.getContext('2d');
   const body = root.querySelector('.pl-body'), keyBox = root.querySelector('.pl-key'), toast = root.querySelector('.pl-toast');
-  const S = { view: 'polar', cx: 0, cy: 0, kmPerPx: 0.8, w: 0, h: 0, pick: null, sel: 0, grid: null, results: null, token: 0, base: null, baseKey: '', g0: null, moonImg: null };
+  const S = { view: 'polar', cx: 0, cy: 0, kmPerPx: 0.8, w: 0, h: 0, pick: null, sel: 0, grid: null, results: null, token: 0, base: null, baseKey: '', g0: null, moonImg: null, mz: 0, mlon0: 0, mlat0: 0, names: true, lib: null };
+  const readBox = root.querySelector('.pl-read');
+  root.querySelector('.pl-names input').addEventListener('change', (e) => { S.names = e.target.checked; draw(); });
   const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null, slope2: null, shadow2: null };
   // where landing is possible over the whole region (2 km cells): navigator sky grid + its slope and shadow grids
   const R = { grid: null, job: null, cls: null, img: null, startMs: 0, endMs: 0, progress: 0, token: 0 };
@@ -160,17 +166,20 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     if (S.kmPerPx < 0.06 && L.fine) chain.push(L.fine);
     if (S.kmPerPx < 0.4 && L.dem120) chain.push(L.dem120.sample);
     if (dem) chain.push(dem.sample);
+    if (siteCtx?.globe.ready) chain.push((x, y) => { const p = fromXY(x, y); return siteCtx.sampleLL(p.latDeg, p.lonDeg); });
     return (x, y) => { for (const f of chain) { const v = f(x, y); if (v === v) return v; } return NaN; };
   }
   function renderBase() {
-    const key = `${S.view}|${S.cx.toFixed(3)}|${S.cy.toFixed(3)}|${S.kmPerPx.toFixed(5)}|${S.w}x${S.h}|${!!L.dem120}|${!!L.fine}`;
+    const key = `${S.view}|${S.cx.toFixed(3)}|${S.cy.toFixed(3)}|${S.kmPerPx.toFixed(5)}|${S.w}x${S.h}|${!!L.dem120}|${!!L.fine}|${S.mz.toFixed(3)}|${S.mlon0.toFixed(2)}|${S.mlat0.toFixed(2)}|${siteCtx?.globe.version ?? 0}`;
     if (key === S.baseKey && S.base) return S.base;
     const w = S.w, h = S.h, img = new ImageData(w, h);
     if (S.view === 'polar') {
       const f = sampler(), k = S.kmPerPx;
       const H = new Float32Array((w + 1) * (h + 1));
       for (let j = 0; j <= h; j++) for (let i = 0; i <= w; i++) { const [x, y] = toMap(i, j); H[j * (w + 1) + i] = f(x, y); }
-      const lx = -0.6, ly = 0.6, lz = 0.53, ex = Math.max(1, 6 * Math.sqrt(k));   // exaggerate gentle relief at small scales
+      // exaggerate gentle relief at small scales; kc: map scale at the centre (map km per ground km, 2 at the equator)
+      const kc = mapScale(fromXY(S.cx, S.cy).latDeg);
+      const lx = -0.6, ly = 0.6, lz = 0.53, ex = Math.max(1, 6 * Math.sqrt(k / kc)) * kc;
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const a = H[j * (w + 1) + i], b = H[j * (w + 1) + i + 1], c = H[(j + 1) * (w + 1) + i];
         const o = (j * w + i) * 4;
@@ -182,15 +191,22 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
         img.data[o] = v; img.data[o + 1] = v * 0.99; img.data[o + 2] = v * 0.96; img.data[o + 3] = 255;
       }
     } else if (S.g0) {
-      // whole Moon, equirectangular, 7.6 km LOLA (globe_g0): fit the width
+      // whole Moon, equirectangular: LOLA 7.6 km zoomed out, the finest global tiles loaded when zoomed in;
+      // the night side at the start of the planned stay is darkened (terminator)
+      const fine = S.mz > 6 && siteCtx?.globe.ready;
+      const hAt = fine ? (la, lo) => siteCtx.sampleLL(la, lo) : (la, lo) => sampleG0(S.g0, la, lo) * 0.5;
+      const sun = eph.at(getStayStartMs())?.sun;
+      const dd = Math.max(0.02, 1 / S.mz);   // one pixel in degrees
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const { lat, lon } = moonLL(i, j);
         const o = (j * w + i) * 4;
         if (lat === null) { img.data[o + 3] = 255; continue; }
-        const a = sampleG0(S.g0, lat, lon), b = sampleG0(S.g0, lat, lon + 0.5), c = sampleG0(S.g0, lat - 0.5, lon);
-        // heights in DN (0.5 m); 0.5° is about 15 km at the equator: a gentle slope shade
-        const sh = Math.max(0, Math.min(1, 0.55 + ((a - b) + (a - c)) * 0.00025));
-        const v = 30 + sh * 180;
+        const a = hAt(lat, lon), b = hAt(lat, lon + dd), c = hAt(lat - dd, lon);
+        const kmE = Math.max(0.05, dd * 30.32 * Math.cos(lat * RAD)), kmN = dd * 30.32;
+        const gx = (b - a) / (kmE * 1000), gy = (a - c) / (kmN * 1000), ex = 4 + 2 * Math.sqrt(30.32 / S.mz);
+        const nz = 1 / Math.sqrt((gx * ex) ** 2 + (gy * ex) ** 2 + 1);
+        let v = 30 + Math.max(0, (-gx * ex * -0.6 - gy * ex * 0.6 + 0.53) * nz) * 190;
+        if (sun) { const cp = Math.cos(lat * RAD); if (cp * Math.cos(lon * RAD) * sun[0] + cp * Math.sin(lon * RAD) * sun[1] + Math.sin(lat * RAD) * sun[2] < 0) v *= 0.42; }
         img.data[o] = v; img.data[o + 1] = v * 0.99; img.data[o + 2] = v * 0.96; img.data[o + 3] = 255;
       }
     }
@@ -199,11 +215,14 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     S.base = c; S.baseKey = key;
     return c;
   }
+  // whole-Moon view: equirectangular, mz pixels per degree, centred on (mlat0, mlon0); longitudes east 0–360
+  const fitMz = () => Math.max(S.w / 360, 1e-3);
   const moonLL = (i, j) => {
-    const sc = S.w / 360, top = (S.h - 180 * sc) / 2;
-    const lat = 90 - (j - top) / sc, lon = i / sc;
-    return lat < -90 || lat > 90 ? { lat: null, lon: null } : { lat, lon };
+    const mz = S.mz || fitMz();
+    const lat = S.mlat0 - (j - S.h / 2) / mz, lon = S.mlon0 + (i - S.w / 2) / mz;
+    return lat < -90 || lat > 90 ? { lat: null, lon: null } : { lat, lon: ((lon % 360) + 360) % 360 };
   };
+  const moonXY = (lat, lon) => { const mz = S.mz || fitMz(); let d = (((lon - S.mlon0) % 360) + 540) % 360 - 180; return [S.w / 2 + d * mz, S.h / 2 - (lat - S.mlat0) * mz]; };
   let drawQueued = false;
   function draw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(() => { drawQueued = false; paint(); }); setTimeout(() => { if (drawQueued) { drawQueued = false; paint(); } }, 60); } }
   function paint() {
@@ -279,16 +298,94 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
     label(x + px + 6, y + 1, km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`, '#fff');
   }
+  // great circle 90° from a point (limb or terminator) as screen segments (split at the map edge)
+  function circle90(c, colour, dash = []) {
+    const n = [Math.cos(c.latDeg * RAD) * Math.cos(c.lonDeg * RAD), Math.cos(c.latDeg * RAD) * Math.sin(c.lonDeg * RAD), Math.sin(c.latDeg * RAD)];
+    const u = Math.abs(n[2]) < 0.9 ? [-n[1], n[0], 0] : [0, -n[2], n[1]], ul = Math.hypot(...u); u.forEach((v, i) => { u[i] = v / ul; });
+    const w = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+    ctx.strokeStyle = colour; ctx.setLineDash(dash); ctx.lineWidth = 1.5; ctx.beginPath();
+    let prev = null;
+    for (let a = 0; a <= 360; a += 2) {
+      const t = a * RAD, v = [0, 1, 2].map((i) => Math.cos(t) * u[i] + Math.sin(t) * w[i]);
+      const [x, y] = moonXY(Math.asin(v[2]) / RAD, Math.atan2(v[1], v[0]) / RAD);
+      if (prev && Math.abs(x - prev[0]) < S.w / 2) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      prev = [x, y];
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // the sub-Earth point's range over the ephemeris (libration), once
+  function libration() {
+    if (S.lib) return S.lib;
+    let la0 = 90, la1 = -90, lo0 = 180, lo1 = -180;
+    for (let t = eph.startMs; t <= eph.endMs; t += 86400e3) {
+      const d = eph.at(t); if (!d) continue;
+      const p = subPoint(d.earth), lo = p.lonDeg > 180 ? p.lonDeg - 360 : p.lonDeg;
+      la0 = Math.min(la0, p.latDeg); la1 = Math.max(la1, p.latDeg); lo0 = Math.min(lo0, lo); lo1 = Math.max(lo1, lo);
+    }
+    return (S.lib = { la0, la1, lo0, lo1 });
+  }
   function paintMoon() {
-    const sc = S.w / 360, top = (S.h - 180 * sc) / 2, y80 = top + (90 + 80) * sc;
-    ctx.fillStyle = 'rgba(242,179,61,0.18)'; ctx.fillRect(0, y80, S.w, top + 180 * sc - y80);
-    ctx.strokeStyle = 'rgba(242,179,61,0.8)'; ctx.beginPath(); ctx.moveTo(0, y80); ctx.lineTo(S.w, y80); ctx.stroke();
-    label(10, top + 180 * sc + 18, '↑ 80°S to the pole (shaded band): the lander plans landings there; click it to open the polar map', 'rgba(242,179,61,0.95)');
-    for (const s of sites) { const x = (((s.lonDeg % 360) + 360) % 360) * sc, y = top + (90 - s.latDeg) * sc; dot(x, y, 2.5, '#f2b33d'); }
-    keyBox.innerHTML = '<b>Whole Moon</b> · LOLA 7.6 km (LDEM_4), equirectangular. The planner works south of 80°S, where the page has the polar terrain, skyline and descent data.';
+    const mz = S.mz || fitMz(), tMs = getStayStartMs(), d = eph.at(tMs);
+    // graticule: every 30° zoomed out, finer zoomed in; 0° and 180° stronger
+    const step = [30, 15, 10, 5, 2, 1, 0.5, 0.25].find((v) => v * mz < 140 && v * mz >= 60) ?? (mz * 30 < 60 ? 30 : 0.25);
+    ctx.lineWidth = 1; ctx.font = '11px Inter, system-ui, sans-serif';
+    const [, yTop] = moonXY(90, 0), [, yBot] = moonXY(-90, 0);
+    for (let lon = 0; lon < 360; lon += step) {
+      const [x] = moonXY(0, lon); if (x < -2 || x > S.w + 2) continue;
+      const main = lon === 0 || lon === 180;
+      ctx.strokeStyle = main ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.16)'; ctx.beginPath(); ctx.moveTo(x, Math.max(0, yTop)); ctx.lineTo(x, Math.min(S.h, yBot)); ctx.stroke();
+      label(x + 3, Math.max(14, yTop + 14), lon === 0 ? '0° prime' : lon === 180 ? '180°' : `${+lon.toFixed(2)}°E`, main ? '#fff' : 'rgba(255,255,255,0.65)');
+    }
+    for (let lat = -90 + step; lat < 90; lat += step) {
+      const [, y] = moonXY(lat, 0); if (y < 0 || y > S.h) continue;
+      ctx.strokeStyle = lat === 0 ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.16)'; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S.w, y); ctx.stroke();
+      label(4, y - 3, lat === 0 ? '0° equator' : `${Math.abs(+lat.toFixed(2))}°${lat < 0 ? 'S' : 'N'}`, 'rgba(255,255,255,0.65)');
+    }
+    // near side / far side at the stay start (limb seen from Earth), the libration zone, the terminator
+    if (d) {
+      const se = subPoint(d.earth), ss = subPoint(d.sun), lib = libration();
+      circle90(se, 'rgba(76,179,240,0.9)');
+      circle90({ latDeg: 0, lonDeg: lib.lo0 }, 'rgba(76,179,240,0.45)', [5, 5]);
+      circle90({ latDeg: 0, lonDeg: lib.lo1 }, 'rgba(76,179,240,0.45)', [5, 5]);
+      circle90(ss, 'rgba(242,179,61,0.85)', [8, 4]);
+      const [ex, ey] = moonXY(se.latDeg, se.lonDeg), [sx, sy] = moonXY(ss.latDeg, ss.lonDeg);
+      const [b0x, b0y] = moonXY(lib.la1, lib.lo0), [b1x, b1y] = moonXY(lib.la0, lib.lo1);
+      ctx.strokeStyle = 'rgba(76,179,240,0.8)'; ctx.strokeRect(Math.min(b0x, b1x), Math.min(b0y, b1y), Math.abs(b1x - b0x), Math.abs(b1y - b0y));
+      dot(ex, ey, 4, '#4cb3f0'); label(ex + 7, ey - 6, 'sub-Earth point', '#9fd6f7');
+      dot(sx, sy, 5, '#f2b33d'); label(sx + 7, sy - 6, 'subsolar point', '#ffd98a');
+    }
+    // named features (IAU) and the listed landing sites
+    if (S.names) {
+      for (const f of GAZETTEER) {
+        const [x, y] = moonXY(f.latDeg, f.lonDeg); if (x < -40 || y < -10 || x > S.w + 40 || y > S.h + 10) continue;
+        const big = f.type === 'mare' || f.type === 'oceanus' || f.type === 'basin';
+        if (!big && mz < 2.5) continue;
+        if (!big) dot(x, y, 2, 'rgba(255,255,255,0.8)');
+        label(x + (big ? 0 : 4), y + 4, f.name, big ? 'rgba(210,225,255,0.9)' : 'rgba(255,255,255,0.85)', big ? 'center' : 'left');
+      }
+    }
+    for (const s of sites) {
+      const [x, y] = moonXY(s.latDeg, s.lonDeg), g = siteRes.get(s.id)?.verdict?.grade;
+      dot(x, y, 4.5, g === 'pass' ? '#7fd18b' : g === 'near' ? '#e5b34d' : g === 'fail' ? '#ff7b7f' : '#f2b33d'); ring(x, y, 4.5, 'rgba(0,0,0,0.8)');
+      if (S.names && mz > 1.2) label(x + 7, y + 4, s.name, 'rgba(255,236,200,0.95)');
+    }
+    if (S.pick) { const [x, y] = moonXY(S.pick.latDeg, S.pick.lonDeg); cross(x, y); }
+    // scale at the centre latitude
+    const kmPx = (30.32 * Math.cos(S.mlat0 * RAD)) / mz, want = kmPx * 120, p = Math.pow(10, Math.floor(Math.log10(want)));
+    const km = [5, 2, 1].map((m) => m * p).find((v) => v <= want) ?? p, px = km / kmPx, bx = S.w - px - 110, by = S.h - 18;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by - 5); ctx.lineTo(bx, by); ctx.lineTo(bx + px, by); ctx.lineTo(bx + px, by - 5); ctx.stroke();
+    label(bx + px + 6, by + 1, `${km >= 1 ? km : km * 1000} ${km >= 1 ? 'km' : 'm'} at ${Math.abs(S.mlat0).toFixed(0)}°${S.mlat0 < 0 ? 'S' : 'N'}`, '#fff');
+    const when = new Date(tMs).toISOString().slice(0, 16).replace('T', ' ');
+    keyBox.innerHTML = `<div class="pl-k-row"><b>Whole Moon</b><span>equirectangular, east longitude 0–360°; relief LOLA ${S.mz > 6 && siteCtx?.globe.ready ? '1.9 km / 474 m where loaded' : '7.6 km (LDEM_4)'}; graticule every ${step}°</span></div>
+      <div class="pl-k-row"><span class="pl-k-ln earth"></span><span>limb seen from Earth at ${when} UTC: near side inside, far side outside</span><span class="pl-k-ln earth dash"></span><span>libration zone limits (sub-Earth point range 2026–2028, blue box)</span></div>
+      <div class="pl-k-row"><span class="pl-k-ln sun"></span><span>terminator and subsolar point at the same time; the dark half is night</span></div>
+      <div class="pl-k-row"><span>Click anywhere to score a landing there: south of 80°S on the polar data, elsewhere on the global LOLA terrain with the skyline computed (lander-scale hazards not resolved at 474 m).</span></div>
+      <div class="pl-k-src">Names: ${esc(GAZETTEER_SOURCE)}.</div>
+      <div class="pl-k-short">limb (blue) · terminator (amber) · ${step}° grid · click to score anywhere</div>`;
   }
   function renderKey() {
-    const res = S.kmPerPx < 0.06 && L.fine ? 'fine DEM near the pick' : S.kmPerPx < 0.4 && L.dem120 ? 'LOLA 120 m' : 'LOLA 480 m';
+    const centreLat = fromXY(S.cx, S.cy).latDeg;
+    const res = centreLat > TERRAIN_MAX_LAT ? 'global LOLA (474 m tiles where loaded, else 1.9 / 7.6 km); the landable shading covers the south polar data only' : S.kmPerPx < 0.06 && L.fine ? 'fine DEM near the pick' : S.kmPerPx < 0.4 && L.dem120 ? 'LOLA 120 m' : 'LOLA 480 m';
     const v = getVehicle(), battH = batteryHours(v), m = siteMargins(), pct = (x) => `${Math.round(x * 100)} %`;
     const when = R.startMs ? `${getStayDays()} days from ${new Date(R.startMs).toISOString().slice(0, 10)}` : `${getStayDays()} days`;
     const prog = R.job && !R.job.done ? ` · computing ${Math.round(R.progress * 100)} %` : !R.job ? ' · loading the sky grid…' : '';
@@ -318,16 +415,39 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
 
   // ---------- interaction ----------
   let drag = null; const pts = new Map(); let pinch = null;
-  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); drag = { x: e.clientX, y: e.clientY, cx: S.cx, cy: S.cy, moved: false }; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
+  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); drag = { x: e.clientX, y: e.clientY, cx: S.cx, cy: S.cy, mlon0: S.mlon0, mlat0: S.mlat0, moved: false }; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
   canvas.addEventListener('pointermove', (e) => {
     if (!pts.has(e.pointerId)) return;
     pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) zoomBy(d / pinch); pinch = d; drag.moved = true; return; }
-    if (!drag || S.view !== 'polar') return;
+    if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (Math.hypot(dx, dy) > 4) drag.moved = true;
-    if (drag.moved) { S.cx = drag.cx - dx * S.kmPerPx; S.cy = drag.cy + dy * S.kmPerPx; draw(); }
+    if (!drag.moved) return;
+    if (S.view === 'polar') { S.cx = drag.cx - dx * S.kmPerPx; S.cy = drag.cy + dy * S.kmPerPx; }
+    else { const mz = S.mz || fitMz(); S.mlon0 = drag.mlon0 - dx / mz; S.mlat0 = Math.max(-90, Math.min(90, drag.mlat0 + dy / mz)); }
+    draw();
   });
+  // cursor read-out: position, height and the terrain level under it, distance and bearing from the current site
+  canvas.addEventListener('pointermove', (e) => {
+    if (pts.size) return;
+    const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    let ll = null;
+    if (S.view === 'moon') { const m = moonLL(px, py); if (m.lat !== null) ll = { latDeg: m.lat, lonDeg: m.lon }; } else ll = fromXY(...toMap(px, py));
+    if (!ll) { readBox.hidden = true; return; }
+    const [x, y] = toXY(ll.latDeg, ll.lonDeg);
+    let h = NaN, lvl = '';
+    const polar = ll.latDeg <= TERRAIN_MAX_LAT;
+    if (polar && L.fine && S.view === 'polar' && S.kmPerPx < 0.06) { h = L.fine(x, y); lvl = 'fine DEM near the pick'; }
+    if (!(h === h) && polar && L.dem120) { h = L.dem120.sample(x, y); lvl = 'LOLA 120 m (polar)'; }
+    if (!(h === h) && polar && getDem()) { h = getDem().sample(x, y); lvl = 'LOLA 480 m (polar)'; }
+    if (!(h === h) && siteCtx?.globe.ready) { const q = siteCtx.sampleInfo(ll.latDeg, ll.lonDeg); h = q[0]; lvl = `LOLA ${q[1]} (global)`; }
+    const cur = getCurrent?.(), db = cur ? distanceBearing(cur, ll) : null;
+    const lon = ll.lonDeg, lonW = lon > 180 ? ` (${(360 - lon).toFixed(3)}°W)` : '';
+    readBox.innerHTML = `<b>${ll.latDeg.toFixed(3)}°, ${lon.toFixed(3)}°E</b> · ${fmtLat(ll.latDeg)} ${fmtLon(lon)}${lonW}<br>${h === h ? `height ${Math.round(h).toLocaleString('en-GB')} m (relative to the 1737.4 km sphere)` : 'height —'} · ${esc(lvl || 'loading terrain')}${db ? `<br>${Math.round(db.km).toLocaleString('en-GB')} km from ${esc(cur.name)}, bearing ${Math.round(db.bearingDeg)}°` : ''}`;
+    readBox.hidden = false;
+  });
+  canvas.addEventListener('pointerleave', () => { readBox.hidden = true; });
   const end = (e) => {
     const wasDrag = drag?.moved;
     pts.delete(e.pointerId); if (pts.size < 2) pinch = null;
@@ -336,9 +456,9 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
       if (S.view === 'moon') {
         const { lat, lon } = moonLL(px, py);
         if (lat === null) return;
-        if (lat > TERRAIN_MAX_LAT) return say('North of 80°S: the lander has no polar terrain, skyline or descent data there. Pick in the shaded band.');
+        const site = sites.find((q) => Math.hypot(...moonXY(q.latDeg, q.lonDeg).map((v, i) => v - [px, py][i])) < 8);
         setView('polar');
-        setPick(lat, lon, { center: true });
+        setPick(site?.latDeg ?? lat, site?.lonDeg ?? lon, { center: true });
       } else {
         // a numbered spot selects it; anywhere else proposes a new point
         const hit = S.results ? S.results.list.findIndex((c, n) => n > 0 && Math.hypot(...toScreen(c.xKm, c.yKm).map((v, i) => v - [px, py][i])) < 11) : -1;
@@ -347,7 +467,6 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
         if (site) return setPick(site.latDeg, site.lonDeg);
         const [x, y] = toMap(px, py);
         const { latDeg, lonDeg } = fromXY(x, y);
-        if (latDeg > TERRAIN_MAX_LAT) return say('Outside 80°S: no terrain, skyline or descent data there.');
         setPick(latDeg, lonDeg);
       }
     }
@@ -356,9 +475,18 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
   canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); const r = canvas.getBoundingClientRect(); zoomBy(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
   function zoomBy(f, px = S.w / 2, py = S.h / 2) {
-    if (S.view !== 'polar') return;
+    if (S.view === 'moon') {
+      const m = moonLL(px, py); if (m.lat === null) return;
+      const mz = S.mz || fitMz();
+      S.mz = Math.min(400, Math.max(fitMz(), mz * f));
+      let lon = m.lon; const d = (((lon - S.mlon0) % 360) + 540) % 360 - 180; lon = S.mlon0 + d;
+      S.mlon0 = lon - (px - S.w / 2) / S.mz; S.mlat0 = Math.max(-90, Math.min(90, m.lat + (py - S.h / 2) / S.mz));
+      if (S.mz > 6 && siteCtx?.globe.ready) { const a = moonLL(0, 0), b = moonLL(S.w, S.h); if (a.lat !== null || b.lat !== null) siteCtx.globe.need(G2, Math.max(-90, S.mlat0 - S.h / 2 / S.mz), Math.min(90, S.mlat0 + S.h / 2 / S.mz), S.mlon0 - S.w / 2 / S.mz, S.mlon0 + S.w / 2 / S.mz, { max: 40 }).then((n) => { if (n) { S.baseKey = ''; draw(); } }); }
+      draw();
+      return;
+    }
     const [x, y] = toMap(px, py);
-    S.kmPerPx = Math.min(1.6, Math.max(0.004, S.kmPerPx / f));
+    S.kmPerPx = Math.min(30, Math.max(0.004, S.kmPerPx / f));
     S.cx = x - (px - S.w / 2) * S.kmPerPx; S.cy = y + (py - S.h / 2) * S.kmPerPx;
     draw();
   }
@@ -367,8 +495,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
   root.querySelector('.pl-go').addEventListener('submit', (e) => {
     e.preventDefault();
     const ll = parseLatLon(root.querySelector('.pl-go input').value);
-    if (!ll) return say('Type a latitude and longitude, e.g. 85.4S 35.3E or −85.4, 35.3');
-    if (ll.latDeg > TERRAIN_MAX_LAT) return say('North of 80°S: outside the lander\'s polar terrain data.');
+    if (!ll) return say('Type a latitude and longitude, e.g. 85.4S 35.3E or −85.4, 35.3 or 0.67N 23.47E');
     setView('polar'); setPick(ll.latDeg, ll.lonDeg, { center: true });
   });
   root.querySelector('.pl-close').addEventListener('click', () => close());
@@ -377,6 +504,8 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     S.view = v;
     root.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
     if (v === 'moon' && !S.g0) { try { S.g0 = await decodePack(await loadData(G0.name, { timeoutMs: 60000 }), G0.width); } catch { say('The whole-Moon terrain (globe_g0) did not load.'); } }
+    if (v === 'moon') { siteCtx?.ready().then(() => { S.baseKey = ''; draw(); }); if (!S.mz) { S.mz = fitMz(); const c = getCurrent?.(); S.mlon0 = 0; S.mlat0 = 0; if (c && c.latDeg > -60) { S.mlon0 = c.lonDeg; } } }
+    root.querySelector('.pl-names').hidden = v !== 'moon';
     S.baseKey = ''; draw();
   }
 
@@ -392,23 +521,33 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
     const fromMs = getFromMs();
     const dem = getDem();
-    setBody(`<p class="note">Searching ${15} km around the point for the best landing spots…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
-    // stage 1: suitability on a 1 km grid around the pick (skyline from the 480 m DEM, Sun/Earth every 4 h over the stay)
-    const mask0 = skylineFor(dem, S.pick);
-    const land0 = pickLandingTime(eph, S.pick, mask0, fromMs) ?? fromMs;
+    const polar = latDeg <= TERRAIN_MAX_LAT;
+    setBody(`<p class="note">${polar ? '' : 'Loading the global LOLA terrain around the point and computing its skyline… '}Searching 15 km around the point for the best landing spots…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
+    // stage 1: suitability on a grid around the pick (1 km on the polar data, 2 km on the global terrain), Sun/Earth
+    // every 4 h over the stay above the skyline (480 m polar DEM, or computed from the global terrain)
+    const ctx0 = polar ? null : await siteCtx.context(S.pick);
+    if (token !== S.token) return;
+    const mask0 = polar ? skylineFor(dem, S.pick) : ctx0.mask;
+    const land0 = pickLandingWindow(eph, S.pick, mask0, fromMs)?.tMs ?? fromMs;
     const dirs4 = skyDirections(eph, land0, stayDays, 4);
-    const grid = searchGrid(x, y, { radiusKm: 15, stepKm: 1 }).filter((p) => p.latDeg <= TERRAIN_MAX_LAT);
-    grid.box = { x0: x - 15.5, x1: x + 15.5, y0: y - 15.5, y1: y + 15.5 };
+    const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
+    const grid = searchGrid(x, y, { radiusKm: 15 * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
+    const hb = (15 + stepKm / 2) * k;
+    grid.box = { x0: x - hb, x1: x + hb, y0: y - hb, y1: y + hb };
+    grid.cellKm = stepKm * k;
     S.grid = grid;
     const margin = siteMargins().min;
-    for (let k = 0; k < grid.length; k++) {
-      const p = grid[k];
-      const sky = skyStats(dirs4, p, skylineFor(dem, p), 4);
-      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slopeAt(p.xKm, p.yKm), shadowKm: shadowAt(p.xKm, p.yKm) });
-      if (k % 24 === 23 || k === grid.length - 1) {
-        const done = grid.slice(0, k + 1), s = suitability(done, { limitDeg: limit, battH });
+    for (let n = 0; n < grid.length; n++) {
+      const p = grid[n];
+      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
+      // off the poles: slope over 1 km on the global terrain; no permanent shadow there
+      const slope = polar ? slopeAt(p.xKm, p.yKm) : slopeDeg(ctx0.sampleXY, p.xKm, p.yKm, 1, k);
+      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
+      const k2 = n;
+      if (k2 % 24 === 23 || k2 === grid.length - 1) {
+        const done = grid.slice(0, k2 + 1), s = suitability(done, { limitDeg: limit, battH });
         done.forEach((q, n) => { q.score = s[n].score; q.ok = s[n].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
-        const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((k + 1) / grid.length) * 100)}%`;
+        const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((k2 + 1) / grid.length) * 100)}%`;
         draw();
         await tick();
         if (token !== S.token) return;
@@ -416,7 +555,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     }
     // stage 2: the pick and the eight best points that pass, in detail; the 1 km screen uses a 240 m slope, so the
     // fine ellipse figures re-rank them (fewest fails, then fewest near limits, then suitability) and five are kept
-    const best = bestPoints(grid, { count: 8, minKm: 2, avoid: [{ xKm: x, yKm: y }] });
+    const best = bestPoints(grid, { count: 8, minKm: 2 * k * (polar ? 1 : 1.5), avoid: [{ xKm: x, yKm: y }] });
     setBody(`<p class="note">Scoring the point and the ${best.length} best spots in detail (terrain in the ellipse, sky over the stay, Δv)…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
     const pick = { ...S.pick, name: 'Your point' };
     const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score }));
@@ -438,29 +577,40 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
 
   async function detail(c, { vehicle, limit, battH, stayDays, fromMs }) {
     const dem = getDem();
-    const listed = sites.find((s) => Math.hypot(...[0, 1].map((i) => toXY(s.latDeg, s.lonDeg)[i] - [c.xKm, c.yKm][i])) < 0.2);
+    const polar = c.latDeg <= TERRAIN_MAX_LAT;
+    const listed = sites.find((s) => distanceBearing(s, c).km < 0.2);
     const site = { id: listed?.id ?? 'custom', name: listed?.name ?? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}`, latDeg: c.latDeg, lonDeg: c.lonDeg };
-    let terr = null;
-    try { terr = await loadSiteTerrain(meta, site, { halfKm: 0.6, hires }); } catch { terr = null; }
-    const resKm = terr?.finestKm ?? 0.12;
-    if (c === S.results?.list?.[0] || c.name === 'Your point') L.fine = terr?.sample ?? null;
-    const sample = terr?.sample ?? ((x, y) => (L.dem120 ?? dem).sample(x, y));
-    // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM)
-    const pts = ellipsePoints(c.xKm, c.yKm, { stepM: Math.min(30, Math.max(5, resKm * 1000)) });
-    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit });
-    const psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(c.xKm, c.yKm) === 0 ? 1 : 0);
-    const mask = skylineFor(dem, site);
-    const landingMs = pickLandingTime(eph, site, mask, fromMs) ?? fromMs;
+    let sample, resKm, mask, heightM, psrShare, psrNote, skyline;
+    const k = mapScale(c.latDeg);
+    if (polar) {
+      let terr = null;
+      try { terr = await loadSiteTerrain(meta, site, { halfKm: 0.6, hires }); } catch { terr = null; }
+      resKm = terr?.finestKm ?? 0.12;
+      if (c === S.results?.list?.[0] || c.name === 'Your point') L.fine = terr?.sample ?? null;
+      sample = terr?.sample ?? ((x, y) => (L.dem120 ?? dem).sample(x, y));
+      mask = skylineFor(dem, site); heightM = dem.heightAt(site.latDeg, site.lonDeg) ?? 0; skyline = 'LOLA 480 m polar DEM';
+    } else {
+      // north of 80°S: the global LOLA terrain around the point, its skyline computed out to 180 km
+      const ctx = await siteCtx.context(site);
+      sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline;
+    }
+    // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
+    const pts = ellipsePoints(c.xKm, c.yKm, { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
+    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
+    if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(c.xKm, c.yKm) === 0 ? 1 : 0);
+    else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
+    else { psrShare = NaN; psrNote = 'unknown: no permanent-shadow map here (the page has the south polar one)'; }
+    const win = pickLandingWindow(eph, site, mask, fromMs);
+    const landingMs = win?.tMs ?? fromMs;
     const sky = skyStats(skyDirections(eph, landingMs, stayDays, 1), site, mask, 1);
     const at = skyAt(eph, site, landingMs, mask);
     let budget = null;
     try {
-      const h = dem.heightAt(site.latDeg, site.lonDeg);
-      const plan = planMission({ eph, site, landingMs, vehicle, siteHeightKm: (h ?? 0) / 1000, mask });
+      const plan = planMission({ eph, site, landingMs, vehicle, siteHeightKm: (heightM ?? 0) / 1000, mask });
       if (plan.ok) budget = plan.budget;
     } catch { budget = null; }
-    const figs = figures({ t, sky, psrShare, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, battH, limitDeg: limit, resKm, stayDays });
-    return { site, landingMs, figs, verdict: verdict(figs), resKm, distKm: S.pick ? Math.hypot(c.xKm - S.pick.xKm, c.yKm - S.pick.yKm) : 0 };
+    const figs = figures({ t, sky, psrShare, psrNote, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, earthWindow: win?.earth ?? true, battH, limitDeg: limit, resKm, stayDays });
+    return { site, landingMs, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, distKm: S.pick ? distanceBearing(S.pick, c).km : 0 };
   }
 
   function setBody(html) { body.innerHTML = html; }
@@ -470,7 +620,9 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     const fig = (id, x) => x.figs.find((f) => f.id === id);
     const cell = (f) => (f ? `<td class="r g-${G[f.grade]}">${esc(f.text.split(' (')[0].split(' · ')[0])}</td>` : '<td class="r">—</td>');
     body.innerHTML = `
-      <div class="pl-point"><b>${esc(c.name)}</b> · ${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}${c.distKm ? ` · ${c.distKm.toFixed(1)} km from your point` : ''}<br><span class="muted">landing ${new Date(c.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC (first lit window) · slopes on the ${Math.round(c.resKm * 1000)} m DEM</span></div>
+      <div class="pl-point"><b>${esc(c.name)}</b> · ${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}${c.distKm ? ` · ${c.distKm.toFixed(1)} km from your point` : ''}<br><span class="muted">landing ${new Date(c.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC (first lit window)</span></div>
+      <p class="pl-badge ${c.resKm > 0.04 ? 'coarse' : ''}">Terrain ${Math.round(c.resKm * 1000)} m · skyline ${c.polar ? 'polar 480 m' : 'computed from the global LOLA terrain'} · ${c.resKm > 0.1 ? 'lander-scale hazards not resolved' : c.resKm > 0.04 ? 'slopes at ~100 m scale, rocks not resolved' : 'lander-scale slopes resolved, rocks not'}</p>
+      ${c.polar ? '' : `<p class="note pl-fetch">No fine patch here: run <code>node tools/fetch-hires.mjs --at ${c.latDeg.toFixed(3)},${c.lonDeg.toFixed(3)}</code> to fetch one (SLDEM2015 ~59 m between 60°S and 60°N, LOLA polar products near the poles).</p>`}
       <p class="pl-verdict g-${c.verdict.grade}">${esc(c.verdict.text)}</p>
       <ul class="pl-figs">${c.figs.map((f) => `<li class="g-${G[f.grade]}"><div class="pl-f-h"><span>${esc(f.label)}</span><span class="pl-g">${f.grade}</span></div><div class="pl-f-v"><b>${esc(f.text)}</b><span class="muted">limit ${esc(f.limit)}</span></div><small>${esc(f.note)}</small></li>`).join('')}</ul>
       <button class="btn primary pl-land">Land here: plan the mission to ${esc(c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name)}</button>

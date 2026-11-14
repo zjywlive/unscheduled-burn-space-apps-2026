@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, searchGrid, suitability, bestPoints, landableClass } from '../demo/src/lander/siteplan.js';
 import { parseLatLon } from '../demo/src/lander/planner.js';
 import { scoreCells } from '../demo/src/score.js';
+import { mapScale } from '../demo/src/lander/landing.js';
 import { VEHICLE_DEFAULTS, cleanVehicle } from '../demo/src/lander/vehicle.js';
 import { createEphemeris } from '../demo/src/ephemeris.js';
 import { createDem, skylineFor, toXY } from '../demo/src/terrain.js';
@@ -18,10 +19,10 @@ test('siteplan: the 3σ ellipse is 150 m down-range (radial on the polar map) by
   const [x, y] = toXY(-85, 30);
   const pts = ellipsePoints(x, y, { stepM: 5 });
   close(pts.length, (Math.PI * ELLIPSE.downrangeM * ELLIPSE.crossrangeM) / 25, 60, 'point count ≈ area / step²');
-  const r = Math.hypot(x, y), u = [x / r, y / r], v = [-u[1], u[0]];
+  const r = Math.hypot(x, y), u = [x / r, y / r], v = [-u[1], u[0]], k = mapScale(-85);   // map km per ground km
   let maxU = 0, maxV = 0;
   for (const [px, py] of pts) {
-    const du = ((px - x) * u[0] + (py - y) * u[1]) * 1000, dv = ((px - x) * v[0] + (py - y) * v[1]) * 1000;
+    const du = (((px - x) * u[0] + (py - y) * u[1]) * 1000) / k, dv = (((px - x) * v[0] + (py - y) * v[1]) * 1000) / k;
     assert.ok((du * du) / 150 ** 2 + (dv * dv) / 100 ** 2 <= 1 + 1e-9);
     maxU = Math.max(maxU, Math.abs(du)); maxV = Math.max(maxV, Math.abs(dv));
   }

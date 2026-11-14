@@ -5,7 +5,7 @@
 import { azEl } from '../geometry.js';
 import { toXY, fromXY } from '../terrain.js';
 import { scoreCells, passes, DEFAULT_WEIGHTS } from '../score.js';
-import { slopeDeg } from './landing.js';
+import { slopeDeg, mapScale } from './landing.js';
 
 // Assumed 3σ landing dispersion with terrain-relative navigation: 150 m down-range × 100 m cross-range.
 // A polar orbit passes over the pole, so near it the descent runs along the meridian: down-range is radial on
@@ -13,11 +13,13 @@ import { slopeDeg } from './landing.js';
 export const ELLIPSE = Object.freeze({ downrangeM: 150, crossrangeM: 100 });
 
 // Map points (km) inside the ellipse centred on (x, y), on a grid of stepM.
-export function ellipsePoints(xKm, yKm, { downrangeM = ELLIPSE.downrangeM, crossrangeM = ELLIPSE.crossrangeM, stepM = 20 } = {}) {
+export function ellipsePoints(xKm, yKm, { downrangeM = ELLIPSE.downrangeM, crossrangeM = ELLIPSE.crossrangeM, stepM = 20, k = null } = {}) {
   const r = Math.hypot(xKm, yKm);
-  const u = r > 1e-9 ? [xKm / r, yKm / r] : [0, 1];   // down-range (radial)
+  const u = r > 1e-9 ? [xKm / r, yKm / r] : [0, 1];   // down-range (radial = along the meridian)
   const v = [-u[1], u[0]];                              // cross-range
-  const a = downrangeM / 1000, b = crossrangeM / 1000, s = stepM / 1000;
+  // ground metres → map km with the map scale at the point (1.008 at 80°S, 2 at the equator)
+  const kk = k ?? mapScale(2 * Math.atan(r / (2 * 1737.4)) * 180 / Math.PI - 90);
+  const a = (downrangeM / 1000) * kk, b = (crossrangeM / 1000) * kk, s = (stepM / 1000) * kk;
   const out = [];
   for (let i = -Math.floor(a / s); i <= Math.floor(a / s); i++) {
     for (let j = -Math.floor(b / s); j <= Math.floor(b / s); j++) {
@@ -31,13 +33,13 @@ export function ellipsePoints(xKm, yKm, { downrangeM = ELLIPSE.downrangeM, cross
 
 // Terrain inside the ellipse: slopes over baselineKm (share over the lander's limit, mean, 95th percentile) and
 // roughness (RMS of heights about the best-fit plane, m) at the DEM's scale. Rocks are below every DEM here.
-export function terrainStats(sample, pts, { baselineKm = 0.04, limitDeg = 10 } = {}) {
+export function terrainStats(sample, pts, { baselineKm = 0.04, limitDeg = 10, k = 1 } = {}) {
   const sl = [], hs = [];
   for (const [x, y] of pts) {
-    const s = slopeDeg(sample, x, y, baselineKm);
+    const s = slopeDeg(sample, x, y, baselineKm, k);
     if (Number.isFinite(s)) sl.push(s);
     const h = sample(x, y);
-    if (Number.isFinite(h)) hs.push([x * 1000, y * 1000, h]);
+    if (Number.isFinite(h)) hs.push([(x * 1000) / k, (y * 1000) / k, h]);   // ground metres
   }
   if (!sl.length) return { n: 0, overLimit: NaN, meanDeg: NaN, p95Deg: NaN, roughM: NaN };
   sl.sort((p, q) => p - q);
@@ -105,7 +107,7 @@ export function grade(value, { pass, near, higher = false }) {
 // The figures for one place, each { id, label, value, text, limit, grade, note }.
 // t: terrainStats; sky: skyStats; psrShare: share of the ellipse in permanent shadow; budget: plan budget or null;
 // earthAtLanding: boolean; battH: batteryHours; res: DEM km per pixel used for the slopes.
-export function figures({ t, sky, psrShare, budget = null, earthAtLanding = null, battH, limitDeg, resKm, stayDays }) {
+export function figures({ t, sky, psrShare, psrNote = null, budget = null, earthAtLanding = null, earthWindow = true, battH, limitDeg, resKm, stayDays }) {
   const pct = (x) => `${Math.round(x * 100)} %`;
   const out = [];
   const add = (id, label, value, text, limit, g, note) => out.push({ id, label, value, text, limit, grade: g, note });
@@ -115,23 +117,25 @@ export function figures({ t, sky, psrShare, budget = null, earthAtLanding = null
   const roughOk = resKm <= 0.04 && Number.isFinite(t.roughM);
   add('rough', 'Roughness in the ellipse', roughOk ? t.roughM : NaN, roughOk ? `${t.roughM.toFixed(1)} m RMS` : `not resolved at ${Math.round(resKm * 1000)} m`, '≤ 1 m RMS (assumed)', roughOk ? grade(t.roughM, { pass: 1, near: 2.5 }) : 'near',
     roughOk ? `height scatter about the best-fit plane on the ${Math.round(resKm * 1000)} m DEM; rocks are smaller than the DEM and not modelled` : 'needs 40 m or finer elevation data across the ellipse; rocks are not modelled either way');
-  add('psr', 'Ellipse in permanent shadow', psrShare, pct(psrShare), '0 %', grade(psrShare, { pass: 0, near: 0.05 }), 'LOLA PSR map, 120 m (Mazarico et al. 2011)');
+  if (Number.isFinite(psrShare)) add('psr', 'Ellipse in permanent shadow', psrShare, pct(psrShare), '0 %', grade(psrShare, { pass: 0, near: 0.05 }), psrNote ?? 'LOLA PSR map, 120 m (Mazarico et al. 2011)');
+  else add('psr', 'Ellipse in permanent shadow', NaN, 'unknown', '0 %', 'near', psrNote ?? 'no permanent-shadow map here');
   add('sun', `Sun above the skyline over ${stayDays} days`, sky.sun, `${pct(sky.sun)} (${Math.round(sky.sun * sky.hours)} h)`, '≥ 70 %', grade(sky.sun, { pass: 0.7, near: 0.4, higher: true }), 'ephemeris + LOLA skyline, hourly');
   add('dark', 'Longest dark spell vs battery', sky.longestDarkH, `${Math.round(sky.longestDarkH)} h of ${battH.toFixed(1)} h`, `≤ ${battH.toFixed(1)} h on battery`, grade(sky.longestDarkH / Math.max(0.1, battH), { pass: 1, near: 1.5 }),
     'battery and surface load assumed (Vehicle tab)');
   add('earth', `Earth above the skyline over ${stayDays} days`, sky.earth, `${pct(sky.earth)} (${Math.round(sky.earth * sky.hours)} h)`, '≥ 50 %', grade(sky.earth, { pass: 0.5, near: 0.25, higher: true }), 'direct-to-Earth line of sight; no relay modelled here');
-  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', 'needed for a live landing link');
+  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', earthWindow ? 'needed for a live landing link' : 'the Earth never clears the skyline in the window (far side): a relay is needed');
   if (budget) add('dv', 'Lander Δv margin after the reserve', budget.marginMs, `${Math.round(budget.marginMs)} m/s · ${Math.round(budget.propellantLeftKg)} kg left`, '≥ 50 m/s', grade(budget.marginMs, { pass: 50, near: 0, higher: true }), 'from the planned orbit, rocket equation; vehicle assumed');
   return out;
 }
 
-// One sentence for the figures.
-export function verdict(figs) {
+// One sentence for the figures; resKm adds what the terrain resolution cannot show.
+export function verdict(figs, { resKm = null } = {}) {
   const fails = figs.filter((f) => f.grade === 'fail'), nears = figs.filter((f) => f.grade === 'near');
   const names = (l) => l.map((f) => f.label.toLowerCase()).join(', ');
-  if (fails.length) return { grade: 'fail', text: `Not recommended: ${names(fails)}${nears.length ? `; also close on ${names(nears)}` : ''}.` };
-  if (nears.length) return { grade: 'near', text: `Possible with care: ${names(nears)} near the limit; everything else passes.` };
-  return { grade: 'pass', text: 'Good landing site: every figure passes its limit.' };
+  const res = resKm > 0.1 ? ` Terrain ${Math.round(resKm * 1000)} m: lander-scale hazards (rocks, small craters, slopes under about 1 km) are not resolved.` : '';
+  if (fails.length) return { grade: 'fail', text: `Not recommended: ${names(fails)}${nears.length ? `; also close on ${names(nears)}` : ''}.${res}` };
+  if (nears.length) return { grade: 'near', text: `Possible with care: ${names(nears)} near the limit; everything else passes.${res}` };
+  return { grade: 'pass', text: `Good landing site: every figure passes its limit.${res}` };
 }
 
 // Where a landing is possible, cell by cell (for the shading): 2 = landable (every check passes), 1 = possible
