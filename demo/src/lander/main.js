@@ -118,6 +118,7 @@ export function boot() {
       S.terrainSample = terr.sample;
       S.terrainNote = `Descent terrain: LOLA DEM at ${terr.levelsKm.map((k) => `${Math.round(k * 1000)} m`).join(' / ')} around the site (finest first), with lunar curvature.`;
       S.checks = landingChecks({ eph, site: plan.site, tMs: plan.times.landingMs, mask: skylineFor(S.dem, plan.site), sample: terr.sample, stepKm: Math.max(0.04, terr.finestKm ?? 0.12), vehicle: plan.vehicle, touchdown: plan.descent.touchdown });
+      S.scenes.surface.setSpot(S.checks.spot && S.checks.checks.find((c) => c.id === 'slope' && !c.ok) ? S.checks.spot : null);
       status('');
       renderPanels();
     } catch (e) {

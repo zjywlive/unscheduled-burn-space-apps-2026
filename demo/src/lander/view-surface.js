@@ -6,6 +6,7 @@ import { enuAt } from './mission.js';
 import { R_MOON, MOON_RATE, RAD } from './constants.js';
 import { toXY } from '../terrain.js';
 import { add, scale, cross, unit, norm, rotZ } from './vec.js';
+import { unitFromLonLat } from '../geometry.js';
 
 export const PATCH_HALF_M = 8000;
 
@@ -235,5 +236,18 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
       }
     }
   }
-  return { scene, camera, controls, update, setTerrain, setBranches, toEnu, name: 'surface', terrainInfo: () => terrainInfo };
+  // the flattest nearby spot from landing.flattestNear (green pin), or null to hide it
+  const spotPin = new T.Mesh(new T.CylinderGeometry(0.4, 0.4, 30, 8), new T.MeshBasicMaterial({ color: 0x7fd18b }));
+  spotPin.visible = false;
+  scene.add(spotPin);
+  let spotLbl = null;
+  function setSpot(spot) {
+    if (spotLbl) { labels.remove(spotLbl); spotLbl = null; }
+    spotPin.visible = !!spot;
+    if (!spot) return;
+    const p = enu3(enuAt(plan.siteFixed, siteRadiusKm, scale(unitFromLonLat(spot.lonDeg, spot.latDeg), R_MOON + (spot.heightM ?? 0) / 1000)));
+    spotPin.position.copy(p).setY(p.y + 15);
+    spotLbl = labels.add(`${spot.ok ? 'Flat spot' : 'Flattest spot'} ${spot.slopeDeg.toFixed(1)}°, ${Math.round(spot.distM)} m`, 'spot', () => spotPin.position.clone().setY(spotPin.position.y + 18));
+  }
+  return { scene, camera, controls, update, setTerrain, setBranches, setSpot, toEnu, name: 'surface', terrainInfo: () => terrainInfo };
 }

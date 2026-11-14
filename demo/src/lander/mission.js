@@ -189,10 +189,8 @@ export function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeigh
   const pdPhase0 = budget0.phases.find((p) => p.id === 'pd');
   const massAtPdi = pdPhase0.massBeforeKg;
   const descent = simulateDescent(vehicle, { massKg: massAtPdi, lloAltKm: o.lloAltKm, pdiAltKm: o.pdiAltKm, siteHeightKm });
-  const budget = deltaVBudget({ vehicle, leoAltKm: o.leoAltKm, lloAltKm: o.lloAltKm, pdiAltKm: o.pdiAltKm, vInfKms: tr.vInfKms, tcmMs: o.tcm1DvMs + o.tcm2DvMs, pdMs: descent.dvUsedMs });
   if (!descent.touchdown) warnings.push('The nominal descent did not reach touchdown.');
   else if (!descent.touchdown.ok) warnings.push('The nominal touchdown is outside the vehicle limits.');
-  if (!budget.feasible) warnings.push(`Propellant short by ${Math.round(-budget.marginMs)} m/s of Δv (after the reserve).`);
   const last = descent.samples[descent.samples.length - 1];
   const td = descent.touchdown ? descent.site.r : last.r;
   const phiTd = Math.atan2(td[0], td[2]);              // ground angle PDI → touchdown in the PD frame
@@ -219,6 +217,10 @@ export function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeigh
   const tPdiHat = cross(h2, rPdiHat);
   const planeChangeRad = Math.acos(Math.max(-1, Math.min(1, dot(h1, h2))));
   const dvPlaneMs = 2 * Math.sqrt(MU_MOON / r1) * 1000 * Math.sin(planeChangeRad / 2);
+  // final budget: the simulated descent Δv, and the plane trim charged to DOI (mass at PDI moves by < 1 kg; the
+  // descent is not re-run for that)
+  const budget = deltaVBudget({ vehicle, leoAltKm: o.leoAltKm, lloAltKm: o.lloAltKm, pdiAltKm: o.pdiAltKm, vInfKms: tr.vInfKms, tcmMs: o.tcm1DvMs + o.tcm2DvMs, pdMs: descent.dvUsedMs, doiExtraMs: dvPlaneMs });
+  if (!budget.feasible) warnings.push(`Propellant short by ${Math.round(-budget.marginMs)} m/s of Δv (after the reserve).`);
 
   // 4. times and phases
   const leoPeriodS = 2 * Math.PI * Math.sqrt(tr.rpKm ** 3 / MU_EARTH);
@@ -261,7 +263,7 @@ export function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeigh
     { tMs: t.soiMs, id: 'soi', name: 'Enter lunar sphere of influence' },
     { tMs: t.tcm2Ms, id: 'tcm2', name: `TCM-2 ${o.tcm2DvMs} m/s` },
     { tMs: tA, id: 'loi', name: `LOI ${Math.round(burnDv(budget, 'loi'))} m/s` },
-    { tMs: tDoi, id: 'doi', name: `DOI ${Math.round(burnDv(budget, 'doi') + dvPlaneMs)} m/s` },
+    { tMs: tDoi, id: 'doi', name: `DOI ${Math.round(burnDv(budget, 'doi'))} m/s` },
     ...descent.events.map((e) => ({ tMs: tPdi + e.tS * 1000, id: e.name, name: e.name.replace(/-/g, ' ') })),
   ].sort((a, b) => a.tMs - b.tMs);
 

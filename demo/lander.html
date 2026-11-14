@@ -33,6 +33,7 @@
   .lbl.event { color: var(--faint); font-size: 11px; }
   .lbl.note { color: var(--muted); }
   .lbl.branch { color: #ff5a5f; font-weight: 600; }
+  .lbl.spot { color: var(--ok); font-weight: 600; }
   .lbl.branch::first-letter { text-transform: uppercase; }
   .lbl.note::before, .lbl.body::before { display: none; }
 
@@ -1637,7 +1638,7 @@ const PUBLISHED = Object.freeze({
 });
 
 // Default altitudes 185/100/15 km, v_inf 0.83 km/s, TCM 30 m/s and plane change 0 deg: assumed scenario.
-function deltaVBudget({ vehicle, leoAltKm = 185, lloAltKm = 100, pdiAltKm = 15, vInfKms = 0.83, tcmMs = 30, pdMs = null, lloPlaneChangeDeg = 0 }) {
+function deltaVBudget({ vehicle, leoAltKm = 185, lloAltKm = 100, pdiAltKm = 15, vInfKms = 0.83, tcmMs = 30, pdMs = null, lloPlaneChangeDeg = 0, doiExtraMs = 0 }) {
   if (!Number.isFinite(lloAltKm) || !Number.isFinite(pdiAltKm) || pdiAltKm < 0 || lloAltKm < pdiAltKm) throw new RangeError('Require 0 <= pdiAltKm <= lloAltKm.');
   const wetKg = wetMassKg(vehicle), stage = vehicle.tliStage;
   const tliMs = tliFromLeo({ leoAltKm }).dvMs;
@@ -1652,7 +1653,8 @@ function deltaVBudget({ vehicle, leoAltKm = 185, lloAltKm = 100, pdiAltKm = 15, 
   const lloKm = R_MOON + lloAltKm, pdiKm = R_MOON + pdiAltKm;
   const vCircKms = circularSpeed(MU_MOON, lloKm);
   const loiMs = captureDvMs(MU_MOON, vInfKms, lloKm) + planeChangeDvMs(vCircKms, lloPlaneChangeDeg * RAD);
-  const doiMs = (vCircKms - visViva(MU_MOON, lloKm, (lloKm + pdiKm) / 2)) * 1000;
+  // doiExtraMs: a small plane trim folded into DOI (mission.js computes it from the site geometry)
+  const doiMs = (vCircKms - visViva(MU_MOON, lloKm, (lloKm + pdiKm) / 2)) * 1000 + Math.max(0, doiExtraMs);
   const descentMs = pdMs ?? 1950; // Assumed placeholder including descent losses/hover, until descent simulation supplies pdMs.
   let massKg = wetKg;
   for (const [id, name, dvMs] of [
@@ -2202,10 +2204,8 @@ function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeightKm = 0
   const pdPhase0 = budget0.phases.find((p) => p.id === 'pd');
   const massAtPdi = pdPhase0.massBeforeKg;
   const descent = simulateDescent(vehicle, { massKg: massAtPdi, lloAltKm: o.lloAltKm, pdiAltKm: o.pdiAltKm, siteHeightKm });
-  const budget = deltaVBudget({ vehicle, leoAltKm: o.leoAltKm, lloAltKm: o.lloAltKm, pdiAltKm: o.pdiAltKm, vInfKms: tr.vInfKms, tcmMs: o.tcm1DvMs + o.tcm2DvMs, pdMs: descent.dvUsedMs });
   if (!descent.touchdown) warnings.push('The nominal descent did not reach touchdown.');
   else if (!descent.touchdown.ok) warnings.push('The nominal touchdown is outside the vehicle limits.');
-  if (!budget.feasible) warnings.push(`Propellant short by ${Math.round(-budget.marginMs)} m/s of Δv (after the reserve).`);
   const last = descent.samples[descent.samples.length - 1];
   const td = descent.touchdown ? descent.site.r : last.r;
   const phiTd = Math.atan2(td[0], td[2]);              // ground angle PDI → touchdown in the PD frame
@@ -2232,6 +2232,10 @@ function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeightKm = 0
   const tPdiHat = cross(h2, rPdiHat);
   const planeChangeRad = Math.acos(Math.max(-1, Math.min(1, dot(h1, h2))));
   const dvPlaneMs = 2 * Math.sqrt(MU_MOON / r1) * 1000 * Math.sin(planeChangeRad / 2);
+  // final budget: the simulated descent Δv, and the plane trim charged to DOI (mass at PDI moves by < 1 kg; the
+  // descent is not re-run for that)
+  const budget = deltaVBudget({ vehicle, leoAltKm: o.leoAltKm, lloAltKm: o.lloAltKm, pdiAltKm: o.pdiAltKm, vInfKms: tr.vInfKms, tcmMs: o.tcm1DvMs + o.tcm2DvMs, pdMs: descent.dvUsedMs, doiExtraMs: dvPlaneMs });
+  if (!budget.feasible) warnings.push(`Propellant short by ${Math.round(-budget.marginMs)} m/s of Δv (after the reserve).`);
 
   // 4. times and phases
   const leoPeriodS = 2 * Math.PI * Math.sqrt(tr.rpKm ** 3 / MU_EARTH);
@@ -2274,7 +2278,7 @@ function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeightKm = 0
     { tMs: t.soiMs, id: 'soi', name: 'Enter lunar sphere of influence' },
     { tMs: t.tcm2Ms, id: 'tcm2', name: `TCM-2 ${o.tcm2DvMs} m/s` },
     { tMs: tA, id: 'loi', name: `LOI ${Math.round(burnDv(budget, 'loi'))} m/s` },
-    { tMs: tDoi, id: 'doi', name: `DOI ${Math.round(burnDv(budget, 'doi') + dvPlaneMs)} m/s` },
+    { tMs: tDoi, id: 'doi', name: `DOI ${Math.round(burnDv(budget, 'doi'))} m/s` },
     ...descent.events.map((e) => ({ tMs: tPdi + e.tS * 1000, id: e.name, name: e.name.replace(/-/g, ' ') })),
   ].sort((a, b) => a.tMs - b.tMs);
 
@@ -3057,7 +3061,8 @@ __m['landing.js'] = (() => {
 // the LOLA DEM, Sun and Earth above the terrain skyline (ephemeris + skyline), and a picker for a landing time
 // when both are up. Pure computation.
 const { bodyAzEl } = __m['../ephemeris.js'];
-const { toXY } = __m['../terrain.js'];
+const { toXY, fromXY } = __m['../terrain.js'];
+const { unitFromLonLat } = __m['../geometry.js'];
 
 const DEG = 180 / Math.PI;
 const clearance = (r, mask) => r.elDeg - (typeof mask === 'function' ? mask(r.azDeg) : mask ?? 0);
@@ -3069,6 +3074,31 @@ function slopeDeg(sample, xKm, yKm, stepKm) {
   if (![e, w, n, s].every(Number.isFinite)) return NaN;
   const gx = (e - w) / (2000 * stepKm), gy = (n - s) / (2000 * stepKm);
   return Math.atan(Math.hypot(gx, gy)) * DEG;
+}
+
+// The nearest map point within radiusKm of the site whose DEM slope meets limitDeg (or, if none does, the flattest),
+// on a stepKm grid with slopes over baselineKm. Returns { latDeg, lonDeg, slopeDeg, distM, azDeg, heightM, ok } | null.
+function flattestNear(sample, site, { radiusKm = 0.5, stepKm = 0.02, baselineKm = 0.04, limitDeg = 10 } = {}) {
+  const [x0, y0] = toXY(site.latDeg, site.lonDeg);
+  let best = null;
+  const n = Math.round(radiusKm / stepKm);
+  for (let j = -n; j <= n; j++) for (let i = -n; i <= n; i++) {
+    const dx = i * stepKm, dy = j * stepKm, d = Math.hypot(dx, dy);
+    if (d > radiusKm) continue;
+    const sl = slopeDeg(sample, x0 + dx, y0 + dy, baselineKm);
+    if (!Number.isFinite(sl)) continue;
+    const score = sl <= limitDeg ? d : 1e3 + sl;
+    if (!best || score < best.score) best = { score, x: x0 + dx, y: y0 + dy, sl, d };
+  }
+  if (!best) return null;
+  const { latDeg, lonDeg } = fromXY(best.x, best.y);
+  const u = unitFromLonLat(lonDeg, latDeg), s0 = unitFromLonLat(site.lonDeg, site.latDeg);
+  const lam = site.lonDeg * Math.PI / 180, phi = site.latDeg * Math.PI / 180;
+  const dv = [u[0] - s0[0], u[1] - s0[1], u[2] - s0[2]];
+  const east = -Math.sin(lam) * dv[0] + Math.cos(lam) * dv[1];
+  const north = -Math.sin(phi) * Math.cos(lam) * dv[0] - Math.sin(phi) * Math.sin(lam) * dv[1] + Math.cos(phi) * dv[2];
+  const az = ((Math.atan2(east, north) * DEG) + 360) % 360;
+  return { latDeg, lonDeg, slopeDeg: best.sl, distM: best.d * 1000, azDeg: az, heightM: sample(best.x, best.y), ok: best.sl <= limitDeg };
 }
 
 // Sun and Earth over the skyline at one instant. null outside the ephemeris.
@@ -3104,6 +3134,7 @@ function pickLandingTime(eph, site, mask, fromMs, { stepMs = 3600e3, holdMs = 48
 function landingChecks({ eph, site, tMs, mask = 0, sample = null, stepKm = 0.12, vehicle, touchdown }) {
   const lim = vehicle.touchdown;
   const out = [];
+  let spot = null;
   const add = (id, label, value, limit, ok, source) => out.push({ id, label, value, limit, ok, source });
   if (touchdown) {
     add('v-vert', 'Vertical speed at touchdown', `${Math.abs(touchdown.vVertMs).toFixed(2)} m/s`, `≤ ${lim.maxVerticalMs} m/s`, Math.abs(touchdown.vVertMs) <= lim.maxVerticalMs, 'descent simulation; limit assumed');
@@ -3115,16 +3146,18 @@ function landingChecks({ eph, site, tMs, mask = 0, sample = null, stepKm = 0.12,
     const [x, y] = toXY(site.latDeg, site.lonDeg);
     const sl = slopeDeg(sample, x, y, stepKm);
     add('slope', `Slope (DEM, ${Math.round(stepKm * 1000)} m baseline)`, Number.isFinite(sl) ? `${sl.toFixed(1)}°` : 'no data', `≤ ${lim.maxSlopeDeg}°`, Number.isFinite(sl) && sl <= lim.maxSlopeDeg, 'LOLA DEM; lander-scale rocks need LROC NAC or lidar');
+    spot = flattestNear(sample, site, { baselineKm: stepKm, stepKm: Math.max(0.02, stepKm / 2), limitDeg: lim.maxSlopeDeg });
+    if (spot) add('spot', 'Nearest spot meeting the slope limit (within 500 m)', spot.ok ? `${spot.slopeDeg.toFixed(1)}° at ${Math.round(spot.distM)} m, az ${Math.round(spot.azDeg)}°` : `none; flattest ${spot.slopeDeg.toFixed(1)}°`, `≤ ${lim.maxSlopeDeg}°`, spot.ok, 'LOLA DEM search around the target; retarget before PDI');
   }
   const sky = skyAt(eph, site, tMs, mask);
   if (sky) {
     add('sun', 'Sun above the skyline at landing', `${sky.sun.clearDeg >= 0 ? '+' : ''}${sky.sun.clearDeg.toFixed(2)}°`, '> 0°', sky.sun.clearDeg > 0, 'JPL Horizons ephemeris + LOLA skyline');
     add('earth', 'Earth above the skyline (direct link)', `${sky.earth.clearDeg >= 0 ? '+' : ''}${sky.earth.clearDeg.toFixed(2)}°`, '> 0°', sky.earth.clearDeg > 0, 'JPL Horizons ephemeris + LOLA skyline');
   }
-  return { checks: out, ok: out.every((c) => c.ok), sky };
+  return { checks: out, ok: out.every((c) => c.ok), sky, spot };
 }
 
-return { slopeDeg, skyAt, pickLandingTime, landingChecks };
+return { slopeDeg, flattestNear, skyAt, pickLandingTime, landingChecks };
 })();
 __m['terrain-local.js'] = (() => {
 // Terrain around one site for the descent scene: the finest plain LOLA level that covers the box, plus the 40 m
@@ -3578,6 +3611,7 @@ const { enuAt } = __m['mission.js'];
 const { R_MOON, MOON_RATE, RAD } = __m['constants.js'];
 const { toXY } = __m['../terrain.js'];
 const { add, scale, cross, unit, norm, rotZ } = __m['vec.js'];
+const { unitFromLonLat } = __m['../geometry.js'];
 
 const PATCH_HALF_M = 8000;
 
@@ -3807,7 +3841,20 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
       }
     }
   }
-  return { scene, camera, controls, update, setTerrain, setBranches, toEnu, name: 'surface', terrainInfo: () => terrainInfo };
+  // the flattest nearby spot from landing.flattestNear (green pin), or null to hide it
+  const spotPin = new T.Mesh(new T.CylinderGeometry(0.4, 0.4, 30, 8), new T.MeshBasicMaterial({ color: 0x7fd18b }));
+  spotPin.visible = false;
+  scene.add(spotPin);
+  let spotLbl = null;
+  function setSpot(spot) {
+    if (spotLbl) { labels.remove(spotLbl); spotLbl = null; }
+    spotPin.visible = !!spot;
+    if (!spot) return;
+    const p = enu3(enuAt(plan.siteFixed, siteRadiusKm, scale(unitFromLonLat(spot.lonDeg, spot.latDeg), R_MOON + (spot.heightM ?? 0) / 1000)));
+    spotPin.position.copy(p).setY(p.y + 15);
+    spotLbl = labels.add(`${spot.ok ? 'Flat spot' : 'Flattest spot'} ${spot.slopeDeg.toFixed(1)}°, ${Math.round(spot.distM)} m`, 'spot', () => spotPin.position.clone().setY(spotPin.position.y + 18));
+  }
+  return { scene, camera, controls, update, setTerrain, setBranches, setSpot, toEnu, name: 'surface', terrainInfo: () => terrainInfo };
 }
 
 return { PATCH_HALF_M, terrainGeometry, landerModel, buildSurfaceScene };
@@ -4090,6 +4137,7 @@ function boot() {
       S.terrainSample = terr.sample;
       S.terrainNote = `Descent terrain: LOLA DEM at ${terr.levelsKm.map((k) => `${Math.round(k * 1000)} m`).join(' / ')} around the site (finest first), with lunar curvature.`;
       S.checks = landingChecks({ eph, site: plan.site, tMs: plan.times.landingMs, mask: skylineFor(S.dem, plan.site), sample: terr.sample, stepKm: Math.max(0.04, terr.finestKm ?? 0.12), vehicle: plan.vehicle, touchdown: plan.descent.touchdown });
+      S.scenes.surface.setSpot(S.checks.spot && S.checks.checks.find((c) => c.id === 'slope' && !c.ok) ? S.checks.spot : null);
       status('');
       renderPanels();
     } catch (e) {

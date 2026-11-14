@@ -13,7 +13,7 @@ export const PUBLISHED = Object.freeze({
 });
 
 // Default altitudes 185/100/15 km, v_inf 0.83 km/s, TCM 30 m/s and plane change 0 deg: assumed scenario.
-export function deltaVBudget({ vehicle, leoAltKm = 185, lloAltKm = 100, pdiAltKm = 15, vInfKms = 0.83, tcmMs = 30, pdMs = null, lloPlaneChangeDeg = 0 }) {
+export function deltaVBudget({ vehicle, leoAltKm = 185, lloAltKm = 100, pdiAltKm = 15, vInfKms = 0.83, tcmMs = 30, pdMs = null, lloPlaneChangeDeg = 0, doiExtraMs = 0 }) {
   if (!Number.isFinite(lloAltKm) || !Number.isFinite(pdiAltKm) || pdiAltKm < 0 || lloAltKm < pdiAltKm) throw new RangeError('Require 0 <= pdiAltKm <= lloAltKm.');
   const wetKg = wetMassKg(vehicle), stage = vehicle.tliStage;
   const tliMs = tliFromLeo({ leoAltKm }).dvMs;
@@ -28,7 +28,8 @@ export function deltaVBudget({ vehicle, leoAltKm = 185, lloAltKm = 100, pdiAltKm
   const lloKm = R_MOON + lloAltKm, pdiKm = R_MOON + pdiAltKm;
   const vCircKms = circularSpeed(MU_MOON, lloKm);
   const loiMs = captureDvMs(MU_MOON, vInfKms, lloKm) + planeChangeDvMs(vCircKms, lloPlaneChangeDeg * RAD);
-  const doiMs = (vCircKms - visViva(MU_MOON, lloKm, (lloKm + pdiKm) / 2)) * 1000;
+  // doiExtraMs: a small plane trim folded into DOI (mission.js computes it from the site geometry)
+  const doiMs = (vCircKms - visViva(MU_MOON, lloKm, (lloKm + pdiKm) / 2)) * 1000 + Math.max(0, doiExtraMs);
   const descentMs = pdMs ?? 1950; // Assumed placeholder including descent losses/hover, until descent simulation supplies pdMs.
   let massKg = wetKg;
   for (const [id, name, dvMs] of [
