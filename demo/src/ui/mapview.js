@@ -469,6 +469,11 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   // bar. The narrow layout is phase 3's; switching moves a few nodes between their two homes.
   const { app, sideToggle, sideReopen, mapFinding, topModes, pickHome, chrome } = shellParts;
   const pointCol = pointCard.parentElement, mapCol = regionCard.parentElement;
+  // the route profile in the big layout: its own glass panel on the left, in front of the user, beside the
+  // tool rail (shown while there is a route; Hide folds it to a labelled tab, it never vanishes by itself)
+  const profileToggle = h('button', { type: 'button', class: 'profile-dock-toggle', 'aria-expanded': 'true', 'aria-controls': 'lsn-profile-dock', title: 'Hide or show the route profile',
+    onclick: () => { const c = profileDock.classList.toggle('is-collapsed'); profileToggle.setAttribute('aria-expanded', String(!c)); profileToggle.textContent = c ? 'Route profile' : 'Hide'; } }, 'Hide');
+  const profileDock = h('aside', { class: 'profile-dock', id: 'lsn-profile-dock', 'aria-label': 'Route profile' }, profileToggle);
   const routeParent = routeCard.parentElement;
   const controlsRow = mapCard.querySelector('.map-controls');
   pointCol.id = 'lsn-point-panel';
@@ -512,19 +517,19 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   function avoidRects() {
     if (!layoutBig || fullUi) return [];
     return [app?.querySelector('.topbar'), panelOpen('left') ? app?.querySelector('.sidebar') : null, tools.tools, layersOpen() ? layersPop : null,
-      panelOpen('right') ? pointCol : rightReopen, tools.zoom, ...(chrome?.() ?? [])].map(shown).filter(Boolean);
+      panelOpen('right') ? pointCol : rightReopen, tools.zoom, profileDock, ...(chrome?.() ?? [])].map(shown).filter(Boolean);
   }
   // fix L3: the space the map shows between the floating pieces, as insets from each window edge
   function fitInsets() {
     if (!layoutBig) return { left: 12, right: 12, top: 12, bottom: 12 };
     const g = 20, W = window.innerWidth, H = window.innerHeight;
-    const side = panelOpen('left') ? shown(app?.querySelector('.sidebar')) : null, tl = shown(tools.tools);
+    const side = panelOpen('left') ? shown(app?.querySelector('.sidebar')) : null, tl = shown(tools.tools), prof = shown(profileDock);
     const extra = (chrome?.() ?? []).map(shown).filter(Boolean);   // the time dock, an open sheet
     const right = panelOpen('right') ? shown(pointCol) : null;
     const sheet = extra.find((r) => r.top < H / 2 && r.left > W / 2);
     const dockR = extra.find((r) => r.top > H / 2);
     return {
-      left: Math.max(side?.right ?? 0, tl?.right ?? 0) + g,
+      left: Math.max(side?.right ?? 0, tl?.right ?? 0, prof?.right ?? 0) + g,
       right: W - Math.min(right?.left ?? W, sheet?.left ?? W) + g,
       top: (shown(app?.querySelector('.topbar'))?.bottom ?? 0) + g,
       bottom: H - (dockR?.top ?? H) + g,
@@ -589,7 +594,9 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       // the inspector: its head (route / region), then the point, Coordinates, the regions, Route plan and
       // the route profile (fix L2: the profile follows Route plan); CSS shows the selected object's
       pointCol.prepend(kindHead);
-      pointCol.append(regionCard, folds.plan.el, routeCard);
+      pointCol.append(regionCard, folds.plan.el);
+      profileDock.append(routeCard);
+      app?.append(profileDock);
       if (topModes) topModes.append(fieldModes, layersWrap);
       statusStash.append(drawNote, tools.hint, readout, frame.loadingEl, ...(mapFinding ? [mapFinding] : []));
       if (sideReopen) tools.tools.prepend(sideReopen);
@@ -604,6 +611,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       mapCol.append(regionCard);
       routeParent.append(routeCard);
       routeCard.after(folds.plan.el);
+      profileDock.remove();
       frame.slots.tc.prepend(frame.loadingEl);
       // the read-out, legend, scale, hint and note go back to the frame's corners on the next update
       const grid = mapCol.parentElement;

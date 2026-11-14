@@ -279,3 +279,20 @@ html.lsn-bigmap, html.lsn-bigmap body { height: 100%; overflow: hidden; }
 /* fix L12: the phase 3 layout shows the scale bar in the map's bottom-left corner; on a phone the 320 px
    map keeps its corners as they were */
 @media (max-width: 640px) { .app:not(.is-bigmap) .map-scale { display: none; } }
+
+/* the route profile on the left (mapview.js profileDock): beside the tool rail, above the time dock */
+.profile-dock { display: none; }
+.is-bigmap .profile-dock {
+  display: block; position: fixed; z-index: 30; top: 72px; left: calc(16px + var(--left-w, 0px) + var(--left-gap, 0px) + 58px);
+  width: min(380px, calc(100vw - 520px)); max-height: calc(100vh - 72px - 128px); overflow: auto;
+  background: var(--glass-panel); -webkit-backdrop-filter: var(--glass-fx); backdrop-filter: var(--glass-fx);
+  border: 1px solid var(--hair); box-shadow: var(--glass-shadow); border-radius: var(--r1, 12px);
+  --faint: #bebebe; --muted: #c6c6c6;
+}
+.is-bigmap .profile-dock:has(> .card-route[hidden]) { display: none; }
+.is-bigmap .profile-dock > .card { background: none; border-radius: 0; padding: 12px 14px; }
+.profile-dock-toggle { position: absolute; top: 10px; right: 10px; z-index: 1; font: inherit; font-size: var(--fs-small); color: var(--text); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--hair); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.profile-dock-toggle:hover { background: rgba(255, 255, 255, 0.14); }
+.is-bigmap .profile-dock.is-collapsed { width: auto; overflow: visible; }
+.is-bigmap .profile-dock.is-collapsed > .card-route { display: none; }
+.is-bigmap .profile-dock.is-collapsed .profile-dock-toggle { position: static; margin: 6px; }
