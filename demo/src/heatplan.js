@@ -324,6 +324,8 @@ export function createHeatPlan({ eph, coarse }) {
     coarse,
     configure, step, layers, infoAt, fineOn: () => fineFits(fine, cfg.viewport, cfg.bounds ?? null), passShare, shareAtLeast, best, region, routeResult, nowLayer, nowAt,
     fullDone, visibleDone, allDone,
+    // share of the 2 km map of the stay computed so far (0–1; 1 when it is not needed): the loading screen's bar
+    get fullProgress() { return full.planned ? (full.planned.done ? 1 : full.planned.progress) : 1; },
     get full() { return full; },
     get viewJob() { return view.planned; },
     get config() { return cfg; },

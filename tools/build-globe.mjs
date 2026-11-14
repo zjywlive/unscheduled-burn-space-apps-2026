@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { bundle, LOADER_STUB } from './build.mjs';
+import { bootMarkup, BOOT_CSS } from '../demo/src/boot.js';
 
 export const GLOBE_STARTUP_PACKS = ['globe_g0', 'globe_n480', 'dem_480m'];
 
@@ -23,6 +24,8 @@ export function buildGlobe(demo = join(dirname(fileURLToPath(import.meta.url)), 
   for (const mark of ['<!--STUB-->', '<!--DATA-->', '<!--JS-->']) if (!template.includes(mark)) throw new Error(`globe.template.html is missing ${mark}`);
   const html = template
     .replace('<!--STUB-->', () => LOADER_STUB)
+    .replace('</head>', () => `<style>${BOOT_CSS}</style>\n</head>`)
+    .replace('<body>', () => `<body>\n${bootMarkup('Lunar Terrain Globe', 'Real LOLA elevation, whole Moon', 'Loading the global terrain…')}`)
     .replace('<!--DATA-->', () => data)
     .replace('<!--JS-->', () => `<script>\n${js}\n</script>`);
   const out = join(demo, 'globe.html');

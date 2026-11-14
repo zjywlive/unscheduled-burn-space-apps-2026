@@ -521,6 +521,8 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     },
     get camera() { return { ...cam }; },
     get stats() { return stats; },
+    // nothing left to build or animate: the render loop has gone quiet
+    get idle() { return !dirty && !fly; },
     get perf() { return { ...perf, msPerBuild: +(perf.buildMs / Math.max(1, perf.builds)).toFixed(2), msPerRender: +(perf.renderMs / Math.max(1, perf.frames)).toFixed(2) }; },
     kmPerPx,
     setExaggeration(v) { state.exaggeration = v; rebuildAll(); },

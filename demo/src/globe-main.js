@@ -7,6 +7,7 @@ import { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } from 
 import { createRouteLayer } from './globe-route.js';
 import { createHiresSet } from './hires.js';
 import { stageBar, readMission } from './mission-flow.js';
+import { bootScreen } from './boot.js';
 
 function readJson(id) {
   const el = document.getElementById(id);
@@ -139,6 +140,8 @@ export function startGlobe() {
         pyramid.add(createDem({ data: new Int16Array(b.buffer), size: meta.dem.size, kmPerPixel: meta.dem.kmPerPixel, dnToMeters: meta.dem.dnToMeters }));
         for (const l of meta.levels ?? []) if (l.tiled) pyramid.add(createTiledDem(l));
       }
+      const boot = bootScreen(document);
+      boot.set(0.15, 'Global terrain in; building the view…');
       await terrain.init();
       let hashTimer = 0;
       const routeMode = /(^|[#&])route=1(&|$)/.test(location.hash);
@@ -155,6 +158,17 @@ export function startGlobe() {
       window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
       if (routeMode) startRoute(view, cameraFromHash(location.hash));
       document.body.classList.add('ready');
+      // the loading screen lifts once the first view has no tiles left to build (or after 15 s)
+      const bootT0 = performance.now();
+      let quiet = 0;
+      view.onFrame(() => {
+        if (!boot.active) return;
+        const st = view.stats ?? {}, total = (st.drawn ?? 0) + (st.queued ?? 0);
+        const p = total ? st.drawn / total : 0;
+        boot.set(0.2 + 0.8 * p, `Building the terrain · ${st.drawn ?? 0} tiles${inflight ? ` · loading ${inflight} data packs` : ''}`);
+        quiet = view.idle && !inflight && st.drawn > 0 ? quiet + 1 : 0;   // quiet for a few frames in a row
+        if (quiet >= 5 || performance.now() - bootT0 > 15000) boot.done();
+      });
     } catch (e) {
       $('loading').textContent = `Could not load the terrain: ${e.message}`;
     }

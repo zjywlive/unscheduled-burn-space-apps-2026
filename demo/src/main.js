@@ -1,6 +1,7 @@
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
 import { writeMission } from './mission-flow.js';
+import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
 import { summarize, summarizePair, sampleSeries } from './windows.js';
 import { formatCoords } from './sites.js';
@@ -1624,6 +1625,16 @@ function start() {
     if (!rp.points) routePlanCard.update({ points: [toXY(state.site.latDeg, state.site.lonDeg)] });
   }
   if (planOnLoad) openPlanAtSite();
+  // the loading screen (boot.js): terrain is in; it lifts when the 2 km map of the stay is done (or after 20 s)
+  const boot = bootScreen(document);
+  const bootT0 = performance.now();
+  (function bootPoll() {
+    if (!boot.active) return;
+    const p = plan ? plan.fullProgress : 1;
+    boot.set(0.25 + 0.75 * p, plan ? `Sun and Earth above the skyline over the ${state.stayDays}-day stay · ${Math.round(p * 100)}%` : 'Terrain unavailable: showing the map without it');
+    if (!plan || plan.fullDone() || performance.now() - bootT0 > 20000) { boot.done(); return; }
+    requestAnimationFrame(bootPoll);
+  })();
   // an old #view=navigator link, or sheet= in the hash: the map with the detail sheet open
   if (state.sheet && mapView) openSheet(state.sheet);
 }

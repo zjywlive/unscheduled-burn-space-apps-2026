@@ -2,6 +2,7 @@
 // and writes each demo/data/<name>.bin as a classic-script data pack demo/data/js/<name>.js (spec phase 3 §5.1).
 // Module convention (enforced): `export function` / `export const` only; `import { a, b as c } from './x.js'` only.
 import { readFileSync, writeFileSync, statSync, existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
+import { bootMarkup, BOOT_CSS } from '../demo/src/boot.js';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -180,7 +181,8 @@ export function build(demo = join(dirname(fileURLToPath(import.meta.url)), '..',
   }
   const html = template
     .replace('<!--STUB-->', () => LOADER_STUB)
-    .replace('<!--CSS-->', () => `<style>\n${css}\n</style>`)
+    .replace('<!--CSS-->', () => `<style>\n${BOOT_CSS}\n${css}\n</style>`)
+    .replace('<body>', () => `<body>\n${bootMarkup('Lunar Site Navigator', 'South-pole terrain, Sun and Earth over the stay', 'Loading the south-pole terrain…')}`)
     .replace('<!--DATA-->', () => dataTags)
     .replace('<!--JS-->', () => `<script>\n${js}\n</script>`);
   const out = join(demo, 'index.html');
