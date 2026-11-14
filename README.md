@@ -64,7 +64,22 @@ time chosen for the landing (in the lander, or checked in the navigator's site a
 with the landing site as the start, then to the 3D globe.
 
 **3D (`demo/globe.html`).** A globe of the whole Moon from LOLA elevation at several levels of detail, down to
-20 m at the south pole and 5–20 m around the landing sites. "Fly along in 3D" puts the planned route on it and plays the simulated rover along it.
+20 m at the south pole and 5–20 m around the landing sites, with contour lines on request and on-screen camera
+controls (pan, zoom, turn, tilt, north up; keys too). "Fly along in 3D" puts the planned route on it and plays the
+simulated rover along it: a six-wheeled model that tilts with the ground (pitch, roll and yaw shown on the left,
+its coordinate frames on request), a minimap with shaded terrain and contours, the elevation profile along the
+bottom (click it to move the rover), the route coloured by drive state or by slope, no-go ground as red volumes,
+leg distances and times, the self-driving planner's search, and a follow camera. The rover's motion can be
+recorded and saved with the route. Waypoints placed on the globe go back to the navigator to be planned, and a
+"Mapped" layer shows which terrain the app already has at each resolution, the ground saved drives covered, and
+the areas the team marks to map next.
+
+**Saving.** A mission (route, settings, drive simulation, terrain profile, recorded motion) is kept in the
+browser and downloads as JSON, GeoJSON or CSV; saved missions load back into the navigator.
+
+**Self-driving planner.** Besides the A* candidates, a B-RRT* planner grows two random trees per leg under the
+same direction-dependent slope limits, moves a waypoint it cannot reach, and aborts after a few tries; its trees,
+candidate paths and chosen trajectory show on the map and in 3D.
 
 **Lander (`demo/lander.html`).** A generic robotic lander from Earth parking orbit through lunar orbit to a
 powered descent at a south-pole site: Δv and propellant budget, J2/C22 and third-body dynamics, power and

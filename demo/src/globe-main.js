@@ -6,10 +6,16 @@ import { createGlobeView, cameraFromHash, cameraToHash } from './globe-view.js';
 import { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } from './route3d.js';
 import { createRouteLayer } from './globe-route.js';
 import { createAttitudePanel, createMinimap } from './globe-route-hud.js';
+import { createRouteProfile } from './globe-profile.js';
+import { createCameraControls, CONTROLS_CSS } from './globe-controls.js';
+import { createWaypointTool } from './globe-waypoints.js';
+import { createMappedLayer } from './globe-mapped.js';
 import { attitudeAt, bearingDeg } from './rover-attitude.js';
 import { createHiresSet } from './hires.js';
 import { stageBar, readMission, landedFor } from './mission-flow.js';
 import { bootScreen } from './boot.js';
+import { slopeColour, SLOPE_BANDS } from './slope-colours.js';
+import { buildRecord, saveRecord, RECORDING_FIELDS, recordingCSV, fileName, downloadText } from './mission-save.js';
 
 function readJson(id) {
   const el = document.getElementById(id);
@@ -24,14 +30,19 @@ const PRESETS = [
   { id: 'tycho', label: 'Tycho', lat: -43.31, lon: 348.64, dist: 260, tilt: 45 },
   { id: 'apollo11', label: 'Apollo 11', lat: 0.674, lon: 23.473, dist: 90, tilt: 35 },
 ];
+const hashFlag = (name) => new RegExp(`(^|[#&])${name}=1(&|$)`).test(location.hash);
 
 export function startGlobe() {
   const $ = (id) => document.getElementById(id);
   const canvas = $('globe');
   const meta = readJson('data-terrain');
   const sites = readJson('data-sites') ?? [];
+  const hiresMeta = readJson('data-hires');
+  const embed = hashFlag('embed');
+  if (embed) document.body.classList.add('embed');
+  document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CONTROLS_CSS }));
   // high-resolution patches around the sites (5 / 10 / 20 m), loaded as the camera comes close
-  const hires = createHiresSet(readJson('data-hires'), (name) => load(name), { onLoad: () => invalidateSouth() });
+  const hires = createHiresSet(hiresMeta, (name) => load(name), { onLoad: () => invalidateSouth() });
   // the mission's steps (mission-flow.js): this page is step 3
   const stagesSlot = document.getElementById('stages');
   if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, '3d'));
@@ -88,6 +99,8 @@ export function startGlobe() {
   const ex = $('exaggeration'), exOut = $('exaggeration-out');
   ex.addEventListener('input', () => { exOut.textContent = `${ex.value}×`; view?.setExaggeration(Number(ex.value)); });
   for (const r of document.querySelectorAll('input[name="colour"]')) r.addEventListener('change', () => view?.setColour(r.value));
+  const contours = $('contours'), contourOut = $('contour-out');
+  contours?.addEventListener('change', () => { view?.setContours(contours.checked); });
 
   const labels = $('labels');
   const labelEls = sites.filter((s) => Number.isFinite(s.latDeg)).map((s) => {
@@ -127,9 +140,10 @@ export function startGlobe() {
     $('scale-text').textContent = km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`;
     const c = view.camera;
     $('centre-src').textContent = `Data at centre: LOLA ${terrain.sample(c.lat, c.lon)[1]}`;
+    if (contourOut) contourOut.textContent = view.contourInterval ? `every ${view.contourInterval} m` : '';
     const showLabels = c.dist < 4000;
-    for (const { s, el } of labelEls) {
-      const p = showLabels ? view.project(s.latDeg, s.lonDeg) : null;
+    for (const { s, el, always } of labelEls) {
+      const p = showLabels || always ? view.project(s.latDeg, s.lonDeg) : null;
       el.hidden = !p;
       if (p) el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
     }
@@ -146,47 +160,31 @@ export function startGlobe() {
       boot.set(0.15, 'Global terrain in; building the view…');
       await terrain.init();
       let hashTimer = 0;
-      const routeMode = /(^|[#&])route=1(&|$)/.test(location.hash);
-      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + (routeMode ? '&route=1' : '')), 300); };
+      const routeMode = hashFlag('route');
+      const keep = `${routeMode ? '&route=1' : ''}${embed ? '&embed=1' : ''}`;
+      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + keep), 300); };
       // tiles over a high-resolution patch may refine to its pixel size (5 m: depth 12, 10 m: 11), elsewhere 20 m (10)
       const capDepth = (b) => { const k = hires.finestKmAt(b); return k === null ? 10 : k <= 0.0051 ? 12 : k <= 0.0101 ? 11 : 10; };
       const fromHash = cameraFromHash(location.hash);
       // opened from the stage bar without a camera: start over the mission's site
       const mission = readMission();
       const touch = landedFor(mission);   // where the lander came down, if it has
-      const startAt = fromHash.lat === undefined && mission && !/(^|[#&])route=1/.test(location.hash) ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
+      const startAt = fromHash.lat === undefined && mission && !routeMode ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
       view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
       view.onFrame(frame);
       window.__globe = { view, terrain, pyramid, hires };   // for debugging from the console
-      // where the lander touched down (written by the lander page): a lander on its legs, sized to the zoom
-      const landed = landedFor(readMission());
-      if (landed) {
-        const T = view.THREE, lander = new T.Group(), gold = new T.MeshBasicMaterial({ color: 0xffd23d });
-        const body = new T.Mesh(new T.CylinderGeometry(0.7, 0.9, 0.9, 8), gold); body.position.y = 1.35; lander.add(body);
-        for (let k = 0; k < 4; k++) {
-          const a = (k / 4) * Math.PI * 2 + Math.PI / 4, leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 1.5, 6), gold);
-          leg.position.set(Math.cos(a) * 0.95, 0.6, Math.sin(a) * 0.95); leg.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); lander.add(leg);
-        }
-        view.addObject(lander);
-        view.onFrame(() => {
-          const [x, y, z] = view.surface(landed.latDeg, landed.lonDeg, 0);
-          lander.position.set(x, y, z);
-          lander.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), lander.position.clone().normalize());
-          lander.scale.setScalar(view.kmPerPx() * 6);
-        });
-        const el = document.createElement('button');
-        el.type = 'button'; el.className = 'site site-lander'; el.textContent = landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander';
-        el.title = `Touchdown ${landed.latDeg.toFixed(4)}°, ${landed.lonDeg.toFixed(4)}°E`;
-        el.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
-        labels.appendChild(el);
-        labelEls.push({ s: { latDeg: landed.latDeg, lonDeg: landed.lonDeg }, el });
-        PRESETS.push({ id: 'lander', label: 'Lander', lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 });
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = 'Lander';
-        b.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
-        chips.appendChild(b);
+      showLanding(view, mission, labels, labelEls, chips);
+      // camera buttons; using them (other than zoom and tilt) leaves the route's follow mode
+      const controls = embed ? null : createCameraControls(view, { onUser: (a) => { if (!['in', 'out', 'tiltUp', 'tiltDown'].includes(a)) window.__globe.route?.stopFollow?.(); } });
+      window.__globe.controls = controls;
+      window.addEventListener('hashchange', () => { if (!hashFlag('route') || cameraFromHash(location.hash).lat !== undefined) view.jumpTo(cameraFromHash(location.hash)); });
+      if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission });
+      if (!embed) {
+        window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), mission, terrain, payload: window.__globe.route?.payload ?? null });
+        window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), meta, hires: hiresMeta });
       }
-      window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
-      if (routeMode) startRoute(view, cameraFromHash(location.hash));
+      // the small 3D window in the navigator: reload when the navigator writes a new route
+      if (embed) window.addEventListener('storage', (e) => { if (e.key === ROUTE3D_KEY) location.reload(); });
       document.body.classList.add('ready');
       // the loading screen lifts once the first view has no tiles left to build (or after 15 s)
       const bootT0 = performance.now();
@@ -205,78 +203,302 @@ export function startGlobe() {
   })();
 }
 
+// Where the craft lands: the touchdown written by the lander page (a lander on its legs), else the mission's
+// planned landing site (a ring on the ground). Both carry a label that stays on screen at every zoom.
+function showLanding(view, mission, labels, labelEls, chips) {
+  const landed = landedFor(mission);
+  const at = landed ?? (mission ? { latDeg: mission.latDeg, lonDeg: mission.lonDeg, planned: true } : null);
+  if (!at) return;
+  const T = view.THREE, gold = new T.MeshBasicMaterial({ color: 0xffd23d });
+  const obj = new T.Group();
+  if (landed) {
+    const body = new T.Mesh(new T.CylinderGeometry(0.7, 0.9, 0.9, 8), gold); body.position.y = 1.35; obj.add(body);
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4, leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 1.5, 6), gold);
+      leg.position.set(Math.cos(a) * 0.95, 0.6, Math.sin(a) * 0.95); leg.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); obj.add(leg);
+    }
+  }
+  // a ring and a dot on the ground, drawn over the terrain so the spot reads from any angle
+  const ring = new T.Mesh(new T.RingGeometry(2.2, 2.8, 48), new T.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.9, side: T.DoubleSide, depthTest: false }));
+  ring.rotation.x = -Math.PI / 2; ring.renderOrder = 6; obj.add(ring);
+  const dot = new T.Mesh(new T.CircleGeometry(0.7, 24), new T.MeshBasicMaterial({ color: 0xffd23d, side: T.DoubleSide, depthTest: false }));
+  dot.rotation.x = -Math.PI / 2; dot.position.y = 0.01; dot.renderOrder = 6; obj.add(dot);
+  view.addObject(obj);
+  view.onFrame(() => {
+    const [x, y, z] = view.surface(at.latDeg, at.lonDeg, 0.002 * view.exaggeration);
+    obj.position.set(x, y, z);
+    obj.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), obj.position.clone().normalize());
+    obj.scale.setScalar(view.kmPerPx() * 6);
+    obj.visible = view.camera.dist < 3000;
+  });
+  const name = landed ? (landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander') : 'Landing site';
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'site site-lander'; el.textContent = name;
+  el.title = `${landed ? 'Touchdown' : 'Planned landing site'} ${at.latDeg.toFixed(4)}°, ${at.lonDeg.toFixed(4)}°E`;
+  el.addEventListener('click', () => view.flyTo({ lat: at.latDeg, lon: at.lonDeg, dist: 3, tilt: 55 }));
+  labels.appendChild(el);
+  labelEls.push({ s: { latDeg: at.latDeg, lonDeg: at.lonDeg }, el, always: true });
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip chip-lander'; b.textContent = name;
+  b.addEventListener('click', () => view.flyTo({ lat: at.latDeg, lon: at.lonDeg, dist: 3, tilt: 55 }));
+  chips.prepend(b);
+}
+
 // phase 6: the route handed over by the navigator (route3d.js payload in localStorage), with playback
-function startRoute(view, camFromHash) {
+function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   const $ = (id) => document.getElementById(id);
   let payload = null;
   try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; }
   if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
   document.body.classList.add('route-mode');
-  const layer = createRouteLayer(view, payload);
-  // the rover's live panels on the left: attitude (pitch, roll, yaw) and a minimap of the area around it
-  const left = $('route-left');
+  const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : 90 });
   const terrain = window.__globe.terrain;
   const heightAt = (lat, lon) => terrain.heightAt(lat, lon);
-  const attitude = createAttitudePanel(left);
-  const minimap = createMinimap(left, payload, heightAt, { landed: landedFor(readMission()) });
+  const landed = landedFor(mission);
   const ribbonColour = (q) => (q[5] & FLAGS.oneWay ? '#ff9f43' : q[4] !== null && q[4] < (payload.reserve ?? 0.2) ? '#ff5252' : !Number.isFinite(q[3]) && payload.pts.some((p) => Number.isFinite(p[3])) ? '#5a5a5a' : q[5] & FLAGS.lit ? '#f5f5f5' : '#5c73a8');
-  let lastHeading = 0;
-  window.__globe.route = { payload, layer };
+  const pts = payload.pts, total = pts[pts.length - 1][2];
   if (camFromHash.lat === undefined) view.flyTo({ ...frameRoute(payload), ms: 1500 });
+  if (embed) {
+    // the navigator's small 3D window: the route and the rover, nothing else; play on a loop
+    let t = 0, last = performance.now(), stamp = '';
+    view.onFrame(() => {
+      const now = performance.now(); t = (t + (now - last) / 14000) % 1; last = now;
+      const s = `${window.__globe?.terrain?.version ?? 0}:${window.__globe?.pyramid?.version ?? 0}`;
+      layer.frame(s); if (s !== stamp) { stamp = s; view.redraw(); }
+      const r = roverAtKm(t * total);
+      layer.setRover(r, 0xffd23d, { headingDeg: headingAhead(r.km, 0.05) ?? 0, pitchDeg: 0, rollDeg: 0 });
+    });
+    return;
+  }
+
+  // ---- panels: attitude and minimap on the left, the route view options on the right ----
+  const left = $('route-left');
+  const attitude = createAttitudePanel(left);
+  const minimap = createMinimap(left, payload, heightAt, { landed, site: mission ? { latDeg: mission.latDeg, lonDeg: mission.lonDeg } : null, slopeColour });
+  let colourBy = 'state';
+  const keyState = $('rh-key-state'), keySlope = $('rh-key-slope');
+  keySlope.innerHTML = SLOPE_BANDS.map((b) => `<span><i style="background:${b.colour}"></i>${b.label}</span>`).join('') + '<span class="muted">grade along the way</span>';
+  for (const r of document.querySelectorAll('input[name="rcolour"]')) r.addEventListener('change', () => {
+    if (!r.checked) return;
+    colourBy = r.value; layer.setColourBy(colourBy);
+    keyState.hidden = colourBy === 'slope'; keySlope.hidden = colourBy !== 'slope';
+    dirtyHud = true;
+  });
+  const opt = (id, on, enabled = true) => { const c = $(id); c.checked = on; c.disabled = !enabled; c.closest('label').classList.toggle('off', !enabled); return c; };
+  const optTraps = opt('rv-traps', layer.hasTraps, layer.hasTraps), optLegs = opt('rv-legs', true, (payload.wps ?? []).length > 1);
+  const optFrames = opt('rv-frames', false), optSearch = opt('rv-search', layer.hasSearch, layer.hasSearch);
+  if (!layer.hasTraps) $('rv-traps').closest('label').title = 'This route has no trap cells (the plan found no dips the rover could not climb out of, or mobility limits were off).';
+  if (!layer.hasSearch) optSearch.closest('label').title = 'Run the self-driving planner in the navigator to show its search here.';
+  optTraps.addEventListener('change', () => layer.setVisible('traps', optTraps.checked));
+  optSearch.addEventListener('change', () => layer.setVisible('search', optSearch.checked));
+  optFrames.addEventListener('change', () => { layer.setVisible('frames', optFrames.checked); framesBox.hidden = !optFrames.checked; });
+
+  // ---- where along the route: by time when the drive was simulated, else by distance ----
   const span = timeSpan(payload);
   const fmt = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
-  $('rh-name').textContent = `${payload.label} route · ${payload.lengthKm.toFixed(1)} km`;
-  const slider = $('rh-t'), play = $('rh-play'), speed = $('rh-speed'), follow = $('rh-follow');
-  let t = span ? span[0] : null, playing = false, lastReal = 0;
-  if (!span) { slider.disabled = true; play.disabled = true; }
+  $('rh-name').textContent = `${payload.label} route · ${total.toFixed(1)} km`;
+  const slider = $('rh-t'), play = $('rh-play'), speed = $('rh-speed'), follow = $('rh-follow'), skip = $('rh-skip');
+  let t = span ? span[0] : null, kmPos = 0, playing = false, lastReal = performance.now();
+  function roverAtKm(k) {
+    let i = 0; while (i + 2 < pts.length && pts[i + 1][2] < k) i++;
+    const a = pts[i], b = pts[i + 1], f = b[2] > a[2] ? Math.max(0, Math.min(1, (k - a[2]) / (b[2] - a[2]))) : 0;
+    let dl = b[1] - a[1]; if (dl > 180) dl -= 360; else if (dl < -180) dl += 360;
+    return { latDeg: a[0] + (b[0] - a[0]) * f, lonDeg: (a[1] + dl * f + 360) % 360, km: a[2] + (b[2] - a[2]) * f, soc: a[4], flags: f < 0.5 ? a[5] : b[5], state: k >= total ? 'arrived' : k > 0 ? 'driving' : 'ready', i };
+  }
+  // the bearing from the point at km k to the point lookKm further along (null at the end)
+  function headingAhead(k, lookKm) {
+    if (k + 1e-6 >= total) return null;
+    const a = roverAtKm(k), b = roverAtKm(Math.min(total, k + lookKm));
+    return Math.hypot(b.latDeg - a.latDeg, (b.lonDeg - a.lonDeg) * Math.cos(a.latDeg * Math.PI / 180)) < 1e-9 ? null : bearingDeg(a.latDeg, a.lonDeg, b.latDeg, b.lonDeg);
+  }
+  function tAtKm(k) {
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (b[2] >= k && Number.isFinite(a[3]) && Number.isFinite(b[3])) return a[3] + (b[3] - a[3]) * (b[2] > a[2] ? Math.max(0, (k - a[2]) / (b[2] - a[2])) : 0);
+    }
+    return span ? span[1] : null;
+  }
+  const roverNow = () => (span ? roverAt(payload, t) : roverAtKm(kmPos));
+  function seekKm(k) { if (span) t = Math.max(span[0], Math.min(span[1], tAtKm(k))); else kmPos = Math.max(0, Math.min(total, k)); dirtyHud = true; }
+
+  // playback speeds: pick the one that plays the driving in about 25 seconds
+  const SPEEDS = [[1 / 60, '1 min/s'], [1 / 6, '10 min/s'], [1, '1 h/s'], [6, '6 h/s'], [24, '1 day/s']];
+  const stopH = (payload.stops ?? []).reduce((a, st) => a + (st.toMs - st.fromMs) / 3600e3, 0);
+  const driveH = span ? Math.max(0.05, (span[1] - span[0]) / 3600e3 - stopH) : total / 0.8;
+  const pick = SPEEDS.reduce((best, s) => (Math.abs(Math.log(s[0] / (driveH / 25))) < Math.abs(Math.log(best[0] / (driveH / 25))) ? s : best));
+  speed.innerHTML = SPEEDS.map(([v, l]) => `<option value="${v}"${v === pick[0] ? ' selected' : ''}>${l}</option>`).join('');
+  if (!span) { slider.title = 'No simulated drive: playing by distance at 0.8 km/h'; }
+
   const colour = { ready: 0xffd23d, driving: 0xffd23d, parked: 0x8ab4f8, arrived: 0x7ee08a, empty: 0xff5252 };
   const label = { ready: 'Ready to leave', driving: 'Driving', parked: 'Parked, charging', arrived: 'Arrived', empty: 'Battery empty' };
-  function show() {
-    const r = span ? roverAt(payload, t) : roverAt(payload, -Infinity);
-    layer.setRover(r, colour[r.state]);
-    // heading of travel: towards the next point (kept while parked or at the end)
-    const cur = payload.pts[r.i], nxt = payload.pts[Math.min(payload.pts.length - 1, r.i + 1)];
-    if (nxt !== cur) lastHeading = bearingDeg(r.latDeg, r.lonDeg, nxt[0], nxt[1]);
-    const kpp = terrain.sample(r.latDeg, r.lonDeg)[2] ?? 0.24, baseKm = Math.max(0.01, 2 * kpp);
-    attitude.update({ att: attitudeAt(heightAt, r.latDeg, r.lonDeg, lastHeading, baseKm), limits: payload.limits, baselineM: baseKm * 1000, stateText: label[r.state] });
-    minimap.draw({ latDeg: r.latDeg, lonDeg: r.lonDeg, headingDeg: lastHeading, headingUp: follow.checked, colourOf: ribbonColour });
+  const profile = createRouteProfile($('rh-profile'), payload, { heightAt, slopeColour, onSeek: (k) => seekKm(k) });
+
+  // ---- the rover's heading eases towards the way ahead, so the model, the panels and the camera turn smoothly ----
+  let cur = roverNow(), head = headingAhead(cur.km, 0.06) ?? 0, att = null, dirtyHud = true, lastHudHead = null;
+  function updateHud() {
+    const kpp = terrain.sample(cur.latDeg, cur.lonDeg)[2] ?? 0.24, baseKm = Math.max(0.01, 2 * kpp);
+    att = attitudeAt(heightAt, cur.latDeg, cur.lonDeg, head, baseKm);
+    layer.setRover(cur, colour[cur.state], { headingDeg: head, pitchDeg: att?.pitchDeg ?? 0, rollDeg: att?.rollDeg ?? 0 });
+    attitude.update({ att, limits: payload.limits, baselineM: baseKm * 1000, stateText: label[cur.state] });
+    minimap.draw({ latDeg: cur.latDeg, lonDeg: cur.lonDeg, headingDeg: head, headingUp: follow.checked, colourOf: ribbonColour, km: cur.km, colourBy });
+    profile.update(cur.km);
     if (span) { slider.value = String(Math.round(((t - span[0]) / (span[1] - span[0])) * 1000)); $('rh-when').textContent = fmt(t); }
+    else { slider.value = String(Math.round((kmPos / total) * 1000)); $('rh-when').textContent = `${kmPos.toFixed(2)} km of ${total.toFixed(2)} km`; }
     const chip = (text, on, bad = false) => `<span class="${bad ? 'bad' : on ? 'on' : ''}">${text}</span>`;
-    const f = r.flags ?? 0;
+    const f = cur.flags ?? 0;
     $('rh-chips').innerHTML = [
-      chip(label[r.state], r.state === 'driving' || r.state === 'arrived', r.state === 'empty'),
-      chip(`km ${r.km.toFixed(1)}`, true),
-      r.soc !== null && r.soc !== undefined ? chip(`battery ${Math.round(r.soc * 100)}%`, true, r.soc < (payload.reserve ?? 0.2)) : '',
+      chip(label[cur.state], cur.state === 'driving' || cur.state === 'arrived', cur.state === 'empty'),
+      chip(`km ${cur.km.toFixed(2)}`, true),
+      cur.soc !== null && cur.soc !== undefined ? chip(`battery ${Math.round(cur.soc * 100)}%`, true, cur.soc < (payload.reserve ?? 0.2)) : '',
       span ? chip(f & FLAGS.lit ? 'Sunlit' : 'In shadow', !!(f & FLAGS.lit)) : '',
       span ? chip(f & FLAGS.earth ? 'Earth in view' : 'No Earth link', !!(f & FLAGS.earth)) : '',
       chip(f & FLAGS.station ? 'Station link' : 'No station link', !!(f & FLAGS.station)),
       f & FLAGS.oneWay ? chip('One-way stretch', false, true) : '',
     ].join('');
-    if (follow.checked) {
-      const nxt = payload.pts[Math.min(payload.pts.length - 1, r.i + 1)], cur = payload.pts[r.i];
-      const heading = Math.atan2(Math.sin((nxt[1] - cur[1]) * Math.PI / 180) * Math.cos(nxt[0] * Math.PI / 180),
-        Math.cos(cur[0] * Math.PI / 180) * Math.sin(nxt[0] * Math.PI / 180) - Math.sin(cur[0] * Math.PI / 180) * Math.cos(nxt[0] * Math.PI / 180) * Math.cos((nxt[1] - cur[1]) * Math.PI / 180)) * 180 / Math.PI;
-      const c = view.camera;
-      view.jumpTo({ lat: r.latDeg, lon: r.lonDeg, heading: Number.isFinite(heading) && (nxt !== cur) ? (heading + 360) % 360 : c.heading, dist: Math.min(c.dist, 12), tilt: Math.max(c.tilt, 55) });
-    }
+    lastHudHead = head;
+    dirtyHud = false;
   }
-  slider.addEventListener('input', () => { if (!span) return; t = span[0] + (Number(slider.value) / 1000) * (span[1] - span[0]); show(); });
-  play.addEventListener('click', () => { if (!span) return; if (t >= span[1]) t = span[0]; playing = !playing; play.textContent = playing ? '❚❚' : '▶'; play.setAttribute('aria-label', playing ? 'Pause' : 'Play'); lastReal = performance.now(); });
-  follow.addEventListener('change', show);
-  let stamp = '';
+
+  // ---- follow: the camera rides behind the rover; position exact, heading eased, zoom and tilt left to the user ----
+  let followHead = null, followFrom = 0;
+  function startFollow() {
+    const c = view.camera, h = headingAhead(cur.km, 0.2) ?? head;
+    followHead = h; followFrom = performance.now() + 950;
+    view.flyTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: h, dist: Math.min(c.dist, 2.5), tilt: Math.max(c.tilt, 55), ms: 900 });
+  }
+  function stopFollow() { if (follow.checked) { follow.checked = false; dirtyHud = true; } }
+  follow.addEventListener('change', () => { if (follow.checked) startFollow(); dirtyHud = true; });
+  // dragging the map takes the camera back from follow mode (scrolling to zoom does not)
+  let downAt = null;
+  view.canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+  view.canvas.addEventListener('pointermove', (e) => { if (downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) { stopFollow(); downAt = null; } });
+  view.canvas.addEventListener('pointerup', () => { downAt = null; });
+
+  slider.addEventListener('input', () => { const f = Number(slider.value) / 1000; if (span) t = span[0] + f * (span[1] - span[0]); else kmPos = f * total; dirtyHud = true; });
+  play.addEventListener('click', () => {
+    const atEnd = span ? t >= span[1] : kmPos >= total;
+    if (atEnd) { if (span) t = span[0]; else kmPos = 0; }
+    playing = !playing; play.textContent = playing ? '❚❚' : '▶'; play.setAttribute('aria-label', playing ? 'Pause' : 'Play'); lastReal = performance.now();
+  });
+
+  // ---- labels on the 3D view: legs between waypoints (distance, time, steepest grade) and the rover's frames ----
+  const labelsEl = $('labels');
+  const legs = [];
+  const wpIdx = (payload.wps ?? []).map((w) => {
+    let best = 0, bd = Infinity;
+    pts.forEach((q, i) => { const d = (q[0] - w.latDeg) ** 2 + ((q[1] - w.lonDeg) * Math.cos((w.latDeg * Math.PI) / 180)) ** 2; if (d < bd) { bd = d; best = i; } });
+    return best;
+  });
+  const dur = (ms) => { const m = Math.round(ms / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`; };
+  for (let k = 0; k + 1 < wpIdx.length; k++) {
+    const a = wpIdx[k], b = wpIdx[k + 1];
+    if (b <= a) continue;
+    const mid = pts[Math.round((a + b) / 2)], km = pts[b][2] - pts[a][2];
+    const ms = Number.isFinite(pts[a][3]) && Number.isFinite(pts[b][3]) ? pts[b][3] - pts[a][3] : null;
+    let steep = 0; for (let i = a; i <= b; i++) if (Number.isFinite(pts[i][6]) && Math.abs(pts[i][6]) > Math.abs(steep)) steep = pts[i][6];
+    const el = document.createElement('div');
+    el.className = 'leg-label';
+    el.innerHTML = `<b>Leg ${k + 1}</b> ${km.toFixed(2)} km${ms !== null ? ` · ${dur(ms)}` : ''}${steep ? ` · max ${Math.abs(steep).toFixed(0)}°` : ''}`;
+    labelsEl.appendChild(el);
+    legs.push({ el, lat: mid[0], lon: mid[1] });
+  }
+  (payload.wps ?? []).forEach((w, i) => {
+    const el = document.createElement('div');
+    el.className = 'wp-label'; el.textContent = i === 0 ? 'Start' : i === payload.wps.length - 1 ? 'End' : `WP ${i}`;
+    labelsEl.appendChild(el);
+    legs.push({ el, lat: w.latDeg, lon: w.lonDeg, wp: true });
+  });
+  const framesBox = document.createElement('div');
+  framesBox.className = 'frames-box'; framesBox.hidden = true;
+  labelsEl.appendChild(framesBox);
+  const frameEls = new Map();
+  function placeLabels() {
+    for (const L of legs) {
+      const p = optLegs.checked ? view.project(L.lat, L.lon) : null;
+      L.el.hidden = !p;
+      if (p) L.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+    }
+    if (!optFrames.checked) return;
+    for (const { name, p } of layer.frames()) {
+      let el = frameEls.get(name);
+      if (!el) { el = document.createElement('div'); el.className = 'frame-label'; el.textContent = name; framesBox.appendChild(el); frameEls.set(name, el); }
+      const s = view.projectWorld(p.x, p.y, p.z);
+      el.hidden = !s;
+      if (s) el.style.transform = `translate(${Math.round(s.x)}px, ${Math.round(s.y)}px)`;
+    }
+    const up = layer.scaleUp;
+    let note = frameEls.get('_note');
+    if (!note) { note = document.createElement('div'); note.className = 'frame-note'; framesBox.appendChild(note); frameEls.set('_note', note); }
+    note.textContent = up > 1.5 ? `Rover drawn ${Math.round(up)}× its real size (2.2 m) to stay visible; frames: x forward (red), y left (green), z up (blue)` : 'Rover at real size (2.2 m); frames: x forward (red), y left (green), z up (blue)';
+  }
+
+  // ---- recording the motion during playback, and saving it with the route ----
+  const recBtn = $('rh-rec'), recOut = $('rh-rec-out'), recSave = $('rh-rec-save'), recCsv = $('rh-rec-csv');
+  let rec = null, lastSample = null;
+  // a sample every 30 s of drive time (2 m by distance), at most about 3000 over the whole drive
+  const recEvery = span ? Math.max(30e3, (span[1] - span[0]) / 3000) : Math.max(0.002, total / 3000);
+  recBtn.addEventListener('click', () => {
+    if (rec?.on) { rec.on = false; recBtn.classList.remove('on'); recBtn.textContent = '● Record'; showRec(); return; }
+    rec = { on: true, startedMs: Date.now(), fields: [...RECORDING_FIELDS], samples: [] }; lastSample = null;
+    recBtn.classList.add('on'); recBtn.textContent = '■ Stop';
+    if (!playing) play.click();
+    showRec();
+  });
+  function sample() {
+    if (!rec?.on || !att) return;
+    const key = span ? t : kmPos;
+    if (lastSample !== null && Math.abs(key - lastSample) < recEvery) return;
+    lastSample = key;
+    const hM = heightAt(cur.latDeg, cur.lonDeg);
+    rec.samples.push([span ? Math.round(t) : null, +cur.latDeg.toFixed(6), +cur.lonDeg.toFixed(6), +cur.km.toFixed(4), Number.isFinite(hM) ? +hM.toFixed(1) : null, +att.pitchDeg.toFixed(2), +att.rollDeg.toFixed(2), +att.yawDeg.toFixed(1), cur.soc ?? null, cur.flags ?? 0]);
+    if (rec.samples.length % 10 === 0) showRec();
+  }
+  function showRec() {
+    const n = rec?.samples.length ?? 0;
+    recOut.textContent = rec ? `${n} samples${rec.on ? ' · recording' : ''}` : '';
+    recSave.disabled = recCsv.disabled = !n;
+  }
+  const record = () => buildRecord({ mission, settings: { limits: payload.limits }, summary: { routeId: payload.routeId, label: payload.label, lengthKm: payload.lengthKm, arriveMs: payload.arriveMs, socMin: Math.min(...pts.map((q) => q[4]).filter(Number.isFinite)) }, route: payload, recording: rec?.samples.length ? { startedMs: rec.startedMs, fields: rec.fields, samples: rec.samples } : null });
+  recSave.addEventListener('click', () => {
+    const r = record(), res = saveRecord(r);
+    recOut.textContent = res.ok ? `Saved, ${r.recording?.samples.length ?? 0} samples · in the navigator's Mission file` : res.reason;
+    recOut.title = r.name;
+    if (res.ok) { downloadText(document, fileName(r, 'json'), JSON.stringify(r), 'application/json'); window.__globe.mapped?.refresh(); }
+  });
+  recCsv.addEventListener('click', () => { const r = record(); downloadText(document, fileName(r, 'motion.csv'), recordingCSV(r.recording), 'text/csv'); });
+  showRec();
+
+  // ---- every frame ----
+  let stamp = '', lastFrame = performance.now();
   view.onFrame(() => {
+    const now = performance.now(), dt = Math.min(0.25, (now - lastFrame) / 1000); lastFrame = now;
     const p = window.__globe?.pyramid;
     const s = `${window.__globe?.terrain?.version ?? 0}:${p?.version ?? 0}`;
     layer.frame(s);
     if (s !== stamp) { stamp = s; view.redraw(); }
-    if (playing && span) {
-      const now = performance.now(), dt = (now - lastReal) / 1000; lastReal = now;
-      t = Math.min(span[1], t + dt * Number(speed.value) * 3600e3);
-      if (t >= span[1]) { playing = false; play.textContent = '▶'; }
-      show();
+    if (playing) {
+      const fast = skip.checked && cur.state === 'parked' ? 40 : 1;
+      const rate = Number(speed.value) * fast;   // drive hours per real second
+      if (span) { t = Math.min(span[1], t + dt * rate * 3600e3); if (t >= span[1]) stopPlay(); }
+      else { kmPos = Math.min(total, kmPos + dt * rate * 0.8); if (kmPos >= total) stopPlay(); }
+      dirtyHud = true;
     }
+    cur = roverNow();
+    const want = headingAhead(cur.km, 0.06);
+    if (want !== null) { const d = ((want - head + 540) % 360) - 180; head = (head + d * (1 - Math.exp(-dt / 0.35)) + 360) % 360; }
+    if (dirtyHud || lastHudHead === null || Math.abs(((head - lastHudHead + 540) % 360) - 180) > 0.3) updateHud();
+    if (follow.checked && now >= followFrom) {
+      const target = headingAhead(cur.km, Math.max(0.08, Math.min(0.6, view.kmPerPx() * 120)));
+      if (followHead === null) followHead = target ?? head;
+      if (target !== null) { const d = ((target - followHead + 540) % 360) - 180; followHead = (followHead + d * (1 - Math.exp(-dt / 0.9)) + 360) % 360; }
+      const c = view.camera;
+      view.jumpTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: followHead, dist: c.dist, tilt: c.tilt });
+    }
+    placeLabels();
+    sample();
   });
-  show();
+  function stopPlay() { playing = false; play.textContent = '▶'; play.setAttribute('aria-label', 'Play'); if (rec?.on) recBtn.click(); }
+  window.__globe.route = { payload, layer, stopFollow, seekKm, get rover() { return cur; }, get recording() { return rec; } };
+  updateHud();
 }
 
 startGlobe();

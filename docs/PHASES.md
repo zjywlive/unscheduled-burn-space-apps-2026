@@ -193,3 +193,55 @@ down".
 - **Globe**: tiles over a patch refine to its pixel size (depth 12 at 5 m); "Data at centre" reads "LOLA 5 m" at
   Shackleton ridge. **Lander**: the descent scene uses the site's patch (lander session).
 - Tests: the window arithmetic, the sampler, despiking, agreement with the 20 m and 120 m levels, the mission links.
+
+## Self-driving planner (14 Nov)
+
+Asked by the team: "self-driving smarts to navigate toughest route for rover path planning", with a flowchart
+(initialize trees, select waypoints, B-RRT*, path exists? add it, else adjust waypoints and try again, abort after
+a number of tries) and Perseverance AutoNav's candidate paths (blue) with the chosen one (cyan).
+
+- **Planner** (`demo/src/route-rrt.js`, pure): bidirectional RRT* leg by leg on the same 240 m corridor, limits and
+  drive profile as the A* planner. Two trees in continuous map km, one from the leg start (edges driven parent →
+  child), one from the leg end (child → parent), so ground the rover can go down but not up is handled by direction.
+  An edge is checked every quarter node (on the terrain, slope, grade along, slope across); its cost is drive time.
+  Choose-parent and rewire within a shrinking radius; a new node connects to the other tree in the driving
+  direction; every strictly better connection is a candidate path (8 kept per leg); the best is shortcut-smoothed
+  with the same check. A leg with no path moves its end waypoint to a nearby passable spot the start tree can reach
+  and tries again; after the tries it aborts and returns the trajectory so far with the reason. Delay is the extra
+  time spent on retries. Seeded, so the same inputs give the same trajectory.
+- **Navigator**: "Self-driving planner (B-RRT*)" in the route card (Run, Cancel, progress, the flowchart steps, the
+  figures, "Use this path" adds a fourth candidate, "Show search trees"). On the map: trees faint blue, candidates
+  blue, trajectory cyan, moved waypoints as ghost → marker. The 3D payload carries `autonav` (`autonavPayload`).
+- Tests: `tests/route-rrt.test.mjs` (flat plane, wall with a gap, one-way ramp, unreachable pit with adjustment and
+  with abort, same seed, directed check of every edge, payload caps).
+- Not done: a start waypoint on ground the rover cannot stand on aborts instead of moving; sunlight is not part of
+  the cost.
+
+## Phase 8: 3D route tools, saving, mapped areas (14 Nov, evening)
+
+Asked by the team with reference pictures (a robot 3D view with waypoints and frames, routing with no-go volumes and
+leg callouts, a slope-coloured hiking route, a drone app's 3D preview and elevation profile), plus "record and save
+all the planned route and path and all of the terrain and motion data" and "add the already mapped phase so we can
+map more of the Moon"; later: a smoother follow camera, camera controls, the landing site always shown, a sharper
+minimap.
+
+- **Shared:** `slope-colours.js` (one slope scale for 2D and 3D: 0–2, 2–5, 5–8, 8–12, 12–15, over 15°);
+  the route payload carries grade and terrain height per point, the waypoints and the trap cells (`route3d.js`).
+- **Saving** (`mission-save.js`): records of route, settings, summary and recorded motion in localStorage (newest
+  20; the oldest dropped when storage is full; search trees thinned) and as JSON, GeoJSON and CSV. Navigator:
+  "Mission file" in the route card (save, downloads, saved list with load / delete, import) (`ui/mission-records.js`).
+- **Navigator:** the selected route coloured by slope with a legend; a 3D preview window (the globe in embed mode,
+  reloaded when the route changes) (`ui/inset3d.js`); the planned landing site drawn when there is no touchdown.
+- **Globe:** camera buttons and keys (`globe-controls.js`); the camera's target height and ground clearance ease
+  between frames, and the follow camera keeps the rover's exact position while its heading eases towards the way
+  ahead (no more snapping at every route vertex); playback speeds chosen so the driving lasts about 25 s, parked time
+  40× faster; contour lines in the terrain shader (interval follows the zoom); route coloured by drive or slope;
+  trap cells as red volumes; leg labels (distance, time, steepest grade); a rover model (x forward, y left, z up)
+  pitched and rolled by the terrain, with labelled frames; the elevation profile along the bottom, synced to
+  playback, click or drag to seek (`globe-profile.js`); the minimap redrawn from ~160 × 160 height samples with
+  shading, height tint and contours, numbered waypoints, the landing site (on the rim with its distance when off the
+  map), a scale bar; motion recording and saving; waypoints placed by click or typed, sent to the navigator as `rp=`
+  points (`globe-waypoints.js`); the "Mapped" layer (`globe-mapped.js`); `embed=1` for the navigator's window.
+- Checked in headless Chrome: route handoff (171 points, 3 waypoints, 89 trap cells), follow, contours, the
+  self-driving search in 3D, record → save (record listed, trees thinned), waypoints → navigator link, mapped areas,
+  the navigator's preview window. Tests: `mission-save`, `mission-records`, `route3d` (new payload fields).

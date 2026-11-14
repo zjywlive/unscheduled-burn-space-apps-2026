@@ -31,6 +31,11 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Max leg length | km | assumed (160 km) | ✅ | `route-plan.js` `MAX_LEG_KM` | |
 | Route cost weights | — | assumed | ✅ | `route-plan.js` `COSTS`, `SUNNY_WEIGHTS` | short / flat / sunny |
 | Rover speed | km/h | assumed (default 0.8) | ✅ | `route-plan.js` `speedFactor` | card: Speed; drive time per route, half speed at the climb limit, 70 % at the descent limit (assumed) |
+| Self-driving planner: step size | km | assumed (leg length / 20, 0.3–1 km) | ✅ | `route-rrt.js` `RRT_DEFAULTS` | B-RRT*: how far a tree grows toward a sample |
+| Self-driving planner: iterations, tries | — | assumed (4000 per try, 5 tries per leg) | ✅ | `route-rrt.js` `RRT_DEFAULTS` | after the tries it aborts and returns the trajectory so far |
+| Self-driving planner: goal bias, link bias | share | assumed (10 % toward the other tree's root, 20 % toward one of its nodes) | ✅ | `route-rrt.js` `RRT_DEFAULTS` | sampling |
+| Self-driving planner: rewire radius | km | assumed (shrinks with the tree, 1.2–4 steps; 16 nearest nodes) | ✅ | `route-rrt.js` `RRT_DEFAULTS` | RRT* choose-parent and rewire |
+| Self-driving planner: waypoint adjustment | km | assumed (rings of 0.25, 0.5, 1, 2 km) | ✅ | `route-rrt.js` `ADJUST_RINGS_KM` | an unreachable end waypoint moves to the gentlest ground the start tree can reach |
 | 3D route view (2D topo → 3D) | — | derived from DEM | ✅ | `globe-view.js`, `globe-route.js`, `route3d.js` | the route draped on the 3D terrain, coloured by sunlight, one-way and battery; "Fly along in 3D" from the navigator |
 
 ## 2. Sunlight and thermal
@@ -87,6 +92,9 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Position accuracy | m (3σ) | assumed | ⬜ | | [JPL-SS]: ≤10 m with a surface station and ≥3 orbiters |
 | **Comms-denied navigation (stars / Sun / Earth)** | deg | derived: bearing to the haven, Sun and Earth azimuth relative to it, only when above the local skyline | ✅ | `contingency.js` `bearing`, `relAngle` | stars are not modelled (named as the fallback when neither body is up) |
 | Dead-reckoning drift | % of distance | assumed (2 %) | ✅ | `contingency.js` `HAVEN_DEFAULTS` | arrival uncertainty on the haven drive | |
+| Rover attitude (pitch, roll, yaw) | deg | derived from the DEM gradient under the rover, over 2 pixels of the finest terrain loaded | ✅ | `rover-attitude.js` `attitudeAt` | the 3D rover model tilts with it; panels on the left of the globe |
+| Recorded motion | samples | simulated playback | ✅ | `globe-main.js`, `mission-save.js` `RECORDING_FIELDS` | time, lat/lon, km, height, pitch, roll, yaw, battery, flags; one sample per 30 s of drive time (at most ~3000), saved with the route |
+| Rover model size | m | assumed (2.2 m long) | ✅ | `globe-route.js` `ROVER_LEN_M` | drawn larger when zoomed out so it stays visible (the frames label says how much) |
 
 ## 6. Time and scenario
 
@@ -115,6 +123,10 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Variable | Unit | Source | Status | Code | Notes |
 |---|---|---|---|---|---|
 | **Stitched base maps** | — | data | 🟡 | `tools/build-global.mjs`, `tools/build-*.mjs` | Global LOLA levels and both polar caps stitched into one model, plus NASA PSR and illumination averages; still to add: rock abundance, temperature, imagery |
+| Mapped areas (data on hand) | km² | derived from the terrain packs in this repo | ✅ | `globe-mapped.js` | 120 m polar square, 40 m and 20 m tiles, 5–20 m site patches; share of the 80°S cap at 20 m or finer |
+| Ground covered by rover drives | km² | derived: saved routes and recorded tracks × swath | ✅ | `globe-mapped.js` `SWATH_KM` | swath assumed 0.1 km (navigation cameras ±50 m) |
+| Areas to map next | boxes | input (team marks 10 × 10 km boxes) | ✅ | `globe-mapped.js` | kept in the browser, exported as JSON |
+| Saved missions | records | input | ✅ | `mission-save.js` | route, settings, summary, recorded motion; browser storage (newest 20) and JSON / GeoJSON / CSV files |
 
 ---
 

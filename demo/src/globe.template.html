@@ -20,7 +20,48 @@
   .brand h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
   .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
   .brand a { color: var(--accent); text-decoration: none; }
-  .panel { top: 16px; right: 16px; width: 248px; padding: 12px; display: grid; gap: 12px; }
+  .panel { top: 16px; right: 16px; width: 260px; padding: 12px; display: grid; gap: 12px; max-height: calc(100vh - 32px - 236px); overflow-y: auto; scrollbar-width: thin; }
+  body.route-mode .panel { max-height: calc(100vh - 32px - 160px); }
+  .panel section + section { border-top: 1px solid var(--line); padding-top: 10px; }
+  .panel label.row { gap: 6px; color: var(--text); cursor: pointer; }
+  .panel label.off { color: var(--muted); opacity: 0.55; cursor: not-allowed; }
+  .opts { display: grid; gap: 4px; margin-top: 6px; }
+  .route-only { display: none; }
+  body.route-mode .route-only { display: block; }
+  .chip-lander { color: #ffd23d; border-color: rgba(255, 210, 61, 0.5); }
+  .muted { color: var(--muted); }
+  #globe.adding { cursor: crosshair; }
+  /* waypoints and mapped (globe-waypoints.js, globe-mapped.js) */
+  .wp-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip[aria-pressed="true"] { background: rgba(138,180,248,0.25); border-color: rgba(138,180,248,0.6); }
+  .wp-type { display: flex; gap: 6px; margin-top: 6px; }
+  .wp-type input { flex: 1; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.3); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  .wp-list, .mp-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+  .wp-list li, .mp-list li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; background: rgba(255,255,255,0.04); }
+  .wp-list .n { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: #111; font-size: 10px; font-weight: 700; flex: none; }
+  .wp-pos { flex: 1; cursor: pointer; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .wp-pos small { display: block; color: var(--muted); font-size: 11px; }
+  .wp-x { font: inherit; color: var(--muted); background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+  .wp-x:hover { color: #ff8a80; }
+  .wp-plan { display: block; margin-top: 8px; color: var(--accent); text-decoration: none; font-weight: 500; }
+  .wp-plan[hidden] { display: none; }
+  .wp-hint, .mp-hint { margin: 6px 0 0; }
+  .mp-key { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+  .mp-key li { display: flex; gap: 8px; align-items: flex-start; }
+  .mp-key i { flex: none; width: 14px; height: 10px; margin-top: 3px; border: 2px solid; border-radius: 2px; }
+  .mp-key small { display: block; color: var(--muted); font-size: 11px; }
+  .wp-pin { position: absolute; left: 0; top: 0; margin: -11px 0 0 -11px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #111; font: 700 11px Inter, system-ui, sans-serif; border: 2px solid #111; box-shadow: 0 1px 6px rgba(0,0,0,0.5); pointer-events: none; }
+  .wp-pin[hidden] { display: none; }
+  /* route labels on the 3D view */
+  .leg-label, .wp-label, .frame-label { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; font: 500 11px Inter, system-ui, sans-serif; }
+  .leg-label { margin: -30px 0 0 -60px; padding: 3px 8px; border-radius: 6px; color: #fff; background: rgba(10,12,16,0.78); border: 1px solid rgba(255,255,255,0.22); font-variant-numeric: tabular-nums; }
+  .leg-label b { color: #8ab4f8; font-weight: 600; margin-right: 2px; }
+  .wp-label { margin: 8px 0 0 8px; padding: 1px 6px; border-radius: 999px; color: #111; background: #fff; font-weight: 600; font-size: 10.5px; }
+  .frame-label { margin: -8px 0 0 6px; padding: 1px 5px; border-radius: 4px; color: #d7f3ff; background: rgba(0,0,0,0.65); font: 500 10px ui-monospace, Menlo, monospace; }
+  .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 16px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
+  .leg-label[hidden], .wp-label[hidden], .frame-label[hidden], .frames-box[hidden] { display: none; }
+  /* the small 3D window in the navigator (embed=1): the view only */
+  body.embed .brand, body.embed .panel, body.embed .readout, body.embed .status, body.embed #route-left, body.embed .route-hud, body.embed #labels, body.embed .cam-ctl { display: none !important; }
   .panel h2 { margin: 0 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
   #presets { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { font: inherit; color: var(--text); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
@@ -50,7 +91,17 @@
   .site-lander::before { background: #ffd23d; border-radius: 2px; }
   body:not(.ready) .panel, body:not(.ready) .readout { opacity: 0.5; }
   /* phase 6: route playback */
-  .route-hud { left: 50%; transform: translateX(-50%); bottom: 16px; width: min(640px, calc(100vw - 600px)); min-width: 420px; padding: 10px 14px; display: none; gap: 8px; }
+  .route-hud { left: 332px; right: 216px; bottom: 16px; padding: 10px 14px; display: none; gap: 8px; }
+  .rp-wrap { position: relative; }
+  .rp-canvas { display: block; width: 100%; height: 108px; cursor: ew-resize; border-radius: 8px; background: rgba(0,0,0,0.22); }
+  .rp-canvas:focus-visible { outline: 2px solid var(--accent); }
+  .rp-tip { position: absolute; top: 4px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,0.75); color: var(--text); font-size: 11px; pointer-events: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rp-tip[hidden] { display: none; }
+  .route-hud .rec { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .route-hud .rec span { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .route-hud .ctl .chips { flex: 1; min-width: 0; }
+  .route-hud button.on { color: #ff8a80; border-color: rgba(255,82,82,0.6); }
+  .route-hud .key[hidden] { display: none; }
   body.route-mode .route-hud { display: grid; }
   body.route-mode .status { display: none; }
   .route-hud .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -65,9 +116,9 @@
   .route-hud .chips span.bad { color: #ff8a80; border-color: rgba(255,82,82,0.5); }
   .route-hud .key { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 11px; }
   .route-hud .key i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
-  @media (max-width: 1100px) { .route-hud { width: calc(100vw - 32px); min-width: 0; bottom: 120px; } }
+  @media (max-width: 1100px) { .route-hud { left: 16px; right: 16px; bottom: 190px; } }
   /* the rover's live panels on the left (globe-route-hud.js) */
-  #route-left { position: fixed; left: 16px; top: 140px; display: none; flex-direction: column; gap: 10px; width: 300px; }
+  #route-left { position: fixed; left: 16px; top: 140px; bottom: 16px; display: none; flex-direction: column; gap: 10px; width: 300px; overflow-y: auto; scrollbar-width: none; }
   body.route-mode #route-left { display: flex; }
   #route-left .glass { position: static; }
   .att-panel { padding: 10px 12px; }
@@ -95,6 +146,17 @@
   .mm-btns { position: absolute; right: -2px; bottom: 6px; display: grid; gap: 4px; }
   .mm-btn { font: 600 14px/1 Inter, system-ui, sans-serif; width: 26px; height: 26px; border-radius: 50%; color: var(--text); background: rgba(0,0,0,0.6); border: 1px solid var(--line); cursor: pointer; }
   .mm-scale { color: var(--muted); font-size: 11px; }
+  .mm-scalebar { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 10.5px; font-weight: 600; margin-top: -2px; }
+  .mm-bar { height: 5px; border: 1.5px solid var(--text); border-top: none; }
+  .mm-key { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; max-width: 250px; color: var(--muted); font-size: 10.5px; }
+  .mm-key span { display: inline-flex; align-items: center; gap: 4px; }
+  .mm-key i { display: inline-grid; place-items: center; width: 10px; height: 10px; }
+  .mm-key .k-land { background: #ffd23d; transform: rotate(45deg) scale(0.8); outline: 1.5px solid #111; }
+  .mm-key .k-wp { border-radius: 50%; background: #fff; color: #111; font: 700 7px/1 Inter, sans-serif; font-style: normal; }
+  .mm-key .k-haven { border-radius: 50%; background: #7ee08a; }
+  .mm-key .k-trap { background: rgba(255,72,72,0.6); }
+  .mm-key .k-cont { height: 2px; background: rgba(255,236,190,0.7); }
+  .mm-key b { font-weight: 400; }
   body.route-mode .readout { display: none; }
   @media (max-height: 760px) { #route-left { top: 130px; } .att-note { display: none; } }
 </style>
@@ -122,8 +184,24 @@
       <label><input type="radio" name="colour" value="shade" checked><span>Shaded</span></label>
       <label><input type="radio" name="colour" value="height"><span>Height colours</span></label>
     </div>
+    <label class="row" style="margin-top:8px"><input type="checkbox" id="contours"> Contour lines <span id="contour-out" class="muted"></span></label>
   </section>
-  <p class="hint">Drag to move · scroll to zoom · right-drag or shift-drag to tilt and turn · double-click to zoom in</p>
+  <section class="route-only">
+    <h2>Route view</h2>
+    <div class="seg" role="radiogroup" aria-label="Route colour">
+      <label><input type="radio" name="rcolour" value="state" checked><span>Drive</span></label>
+      <label><input type="radio" name="rcolour" value="slope"><span>Slope</span></label>
+    </div>
+    <div class="opts">
+      <label class="row"><input type="checkbox" id="rv-traps"> No-go zones (traps)</label>
+      <label class="row"><input type="checkbox" id="rv-legs"> Leg distances and times</label>
+      <label class="row"><input type="checkbox" id="rv-search"> Self-driving search</label>
+      <label class="row"><input type="checkbox" id="rv-frames"> Rover model frames</label>
+    </div>
+  </section>
+  <section id="wp-slot"></section>
+  <section id="mapped-slot"></section>
+  <p class="hint">Drag to move · scroll to zoom · right-drag or shift-drag to tilt and turn · double-click to zoom in · or use the buttons and keys at the bottom right</p>
 </aside>
 <footer class="glass readout" aria-live="polite">
   <div id="readout-pos">Point at the Moon</div>
@@ -134,14 +212,20 @@
 <div id="route-left" aria-label="The rover now"></div>
 <section class="glass route-hud" aria-label="Route playback">
   <div class="top"><span class="name" id="rh-name">Route</span><span class="when" id="rh-when"></span></div>
+  <div id="rh-profile"></div>
   <div class="ctl">
     <button type="button" id="rh-play" aria-label="Play">▶</button>
     <input type="range" id="rh-t" min="0" max="1000" value="0" aria-label="Time along the drive">
-    <select id="rh-speed" aria-label="Playback speed"><option value="1">1 h/s</option><option value="6" selected>6 h/s</option><option value="24">1 day/s</option></select>
+    <select id="rh-speed" aria-label="Playback speed"></select>
+    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px" title="Play parked (charging) time 40 times faster"><input type="checkbox" id="rh-skip" checked> Fast parking</label>
     <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px"><input type="checkbox" id="rh-follow"> Follow</label>
   </div>
-  <div class="chips" id="rh-chips"></div>
-  <div class="key"><span><i style="background:#f5f5f5"></i>sunlit</span><span><i style="background:#5c73a8"></i>shadow</span><span><i style="background:#ff9f43"></i>one-way</span><span><i style="background:#ff5252"></i>battery under reserve</span><span><i style="background:#7ee08a;border-radius:50%;width:8px;height:8px"></i>haven</span><span><i style="background:#8ab4f8;border-radius:50%;width:8px;height:8px"></i>parked</span></div>
+  <div class="ctl">
+    <div class="chips" id="rh-chips"></div>
+    <div class="rec"><button type="button" id="rh-rec" title="Record the rover's position, attitude and battery during playback">● Record</button><span id="rh-rec-out"></span><button type="button" id="rh-rec-save" title="Save the route with the recorded motion (also downloads it as JSON)">Save</button><button type="button" id="rh-rec-csv" title="Download the recorded motion as CSV">CSV</button></div>
+  </div>
+  <div class="key" id="rh-key-slope" hidden></div>
+  <div class="key" id="rh-key-state"><span><i style="background:#f5f5f5"></i>sunlit</span><span><i style="background:#5c73a8"></i>shadow</span><span><i style="background:#ff9f43"></i>one-way</span><span><i style="background:#ff5252"></i>battery under reserve</span><span><i style="background:#7ee08a;border-radius:50%;width:8px;height:8px"></i>haven</span><span><i style="background:#8ab4f8;border-radius:50%;width:8px;height:8px"></i>parked</span></div>
 </section>
 <div class="glass status">
   <div id="centre-src">Loading…</div>

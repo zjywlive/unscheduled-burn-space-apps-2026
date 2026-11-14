@@ -20,7 +20,48 @@
   .brand h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
   .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
   .brand a { color: var(--accent); text-decoration: none; }
-  .panel { top: 16px; right: 16px; width: 248px; padding: 12px; display: grid; gap: 12px; }
+  .panel { top: 16px; right: 16px; width: 260px; padding: 12px; display: grid; gap: 12px; max-height: calc(100vh - 32px - 236px); overflow-y: auto; scrollbar-width: thin; }
+  body.route-mode .panel { max-height: calc(100vh - 32px - 160px); }
+  .panel section + section { border-top: 1px solid var(--line); padding-top: 10px; }
+  .panel label.row { gap: 6px; color: var(--text); cursor: pointer; }
+  .panel label.off { color: var(--muted); opacity: 0.55; cursor: not-allowed; }
+  .opts { display: grid; gap: 4px; margin-top: 6px; }
+  .route-only { display: none; }
+  body.route-mode .route-only { display: block; }
+  .chip-lander { color: #ffd23d; border-color: rgba(255, 210, 61, 0.5); }
+  .muted { color: var(--muted); }
+  #globe.adding { cursor: crosshair; }
+  /* waypoints and mapped (globe-waypoints.js, globe-mapped.js) */
+  .wp-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip[aria-pressed="true"] { background: rgba(138,180,248,0.25); border-color: rgba(138,180,248,0.6); }
+  .wp-type { display: flex; gap: 6px; margin-top: 6px; }
+  .wp-type input { flex: 1; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.3); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  .wp-list, .mp-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+  .wp-list li, .mp-list li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; background: rgba(255,255,255,0.04); }
+  .wp-list .n { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: #111; font-size: 10px; font-weight: 700; flex: none; }
+  .wp-pos { flex: 1; cursor: pointer; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .wp-pos small { display: block; color: var(--muted); font-size: 11px; }
+  .wp-x { font: inherit; color: var(--muted); background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+  .wp-x:hover { color: #ff8a80; }
+  .wp-plan { display: block; margin-top: 8px; color: var(--accent); text-decoration: none; font-weight: 500; }
+  .wp-plan[hidden] { display: none; }
+  .wp-hint, .mp-hint { margin: 6px 0 0; }
+  .mp-key { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+  .mp-key li { display: flex; gap: 8px; align-items: flex-start; }
+  .mp-key i { flex: none; width: 14px; height: 10px; margin-top: 3px; border: 2px solid; border-radius: 2px; }
+  .mp-key small { display: block; color: var(--muted); font-size: 11px; }
+  .wp-pin { position: absolute; left: 0; top: 0; margin: -11px 0 0 -11px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #111; font: 700 11px Inter, system-ui, sans-serif; border: 2px solid #111; box-shadow: 0 1px 6px rgba(0,0,0,0.5); pointer-events: none; }
+  .wp-pin[hidden] { display: none; }
+  /* route labels on the 3D view */
+  .leg-label, .wp-label, .frame-label { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; font: 500 11px Inter, system-ui, sans-serif; }
+  .leg-label { margin: -30px 0 0 -60px; padding: 3px 8px; border-radius: 6px; color: #fff; background: rgba(10,12,16,0.78); border: 1px solid rgba(255,255,255,0.22); font-variant-numeric: tabular-nums; }
+  .leg-label b { color: #8ab4f8; font-weight: 600; margin-right: 2px; }
+  .wp-label { margin: 8px 0 0 8px; padding: 1px 6px; border-radius: 999px; color: #111; background: #fff; font-weight: 600; font-size: 10.5px; }
+  .frame-label { margin: -8px 0 0 6px; padding: 1px 5px; border-radius: 4px; color: #d7f3ff; background: rgba(0,0,0,0.65); font: 500 10px ui-monospace, Menlo, monospace; }
+  .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 16px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
+  .leg-label[hidden], .wp-label[hidden], .frame-label[hidden], .frames-box[hidden] { display: none; }
+  /* the small 3D window in the navigator (embed=1): the view only */
+  body.embed .brand, body.embed .panel, body.embed .readout, body.embed .status, body.embed #route-left, body.embed .route-hud, body.embed #labels, body.embed .cam-ctl { display: none !important; }
   .panel h2 { margin: 0 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
   #presets { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { font: inherit; color: var(--text); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
@@ -50,7 +91,17 @@
   .site-lander::before { background: #ffd23d; border-radius: 2px; }
   body:not(.ready) .panel, body:not(.ready) .readout { opacity: 0.5; }
   /* phase 6: route playback */
-  .route-hud { left: 50%; transform: translateX(-50%); bottom: 16px; width: min(640px, calc(100vw - 600px)); min-width: 420px; padding: 10px 14px; display: none; gap: 8px; }
+  .route-hud { left: 332px; right: 216px; bottom: 16px; padding: 10px 14px; display: none; gap: 8px; }
+  .rp-wrap { position: relative; }
+  .rp-canvas { display: block; width: 100%; height: 108px; cursor: ew-resize; border-radius: 8px; background: rgba(0,0,0,0.22); }
+  .rp-canvas:focus-visible { outline: 2px solid var(--accent); }
+  .rp-tip { position: absolute; top: 4px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,0.75); color: var(--text); font-size: 11px; pointer-events: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rp-tip[hidden] { display: none; }
+  .route-hud .rec { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .route-hud .rec span { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .route-hud .ctl .chips { flex: 1; min-width: 0; }
+  .route-hud button.on { color: #ff8a80; border-color: rgba(255,82,82,0.6); }
+  .route-hud .key[hidden] { display: none; }
   body.route-mode .route-hud { display: grid; }
   body.route-mode .status { display: none; }
   .route-hud .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -65,9 +116,9 @@
   .route-hud .chips span.bad { color: #ff8a80; border-color: rgba(255,82,82,0.5); }
   .route-hud .key { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 11px; }
   .route-hud .key i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
-  @media (max-width: 1100px) { .route-hud { width: calc(100vw - 32px); min-width: 0; bottom: 120px; } }
+  @media (max-width: 1100px) { .route-hud { left: 16px; right: 16px; bottom: 190px; } }
   /* the rover's live panels on the left (globe-route-hud.js) */
-  #route-left { position: fixed; left: 16px; top: 140px; display: none; flex-direction: column; gap: 10px; width: 300px; }
+  #route-left { position: fixed; left: 16px; top: 140px; bottom: 16px; display: none; flex-direction: column; gap: 10px; width: 300px; overflow-y: auto; scrollbar-width: none; }
   body.route-mode #route-left { display: flex; }
   #route-left .glass { position: static; }
   .att-panel { padding: 10px 12px; }
@@ -95,6 +146,17 @@
   .mm-btns { position: absolute; right: -2px; bottom: 6px; display: grid; gap: 4px; }
   .mm-btn { font: 600 14px/1 Inter, system-ui, sans-serif; width: 26px; height: 26px; border-radius: 50%; color: var(--text); background: rgba(0,0,0,0.6); border: 1px solid var(--line); cursor: pointer; }
   .mm-scale { color: var(--muted); font-size: 11px; }
+  .mm-scalebar { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 10.5px; font-weight: 600; margin-top: -2px; }
+  .mm-bar { height: 5px; border: 1.5px solid var(--text); border-top: none; }
+  .mm-key { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; max-width: 250px; color: var(--muted); font-size: 10.5px; }
+  .mm-key span { display: inline-flex; align-items: center; gap: 4px; }
+  .mm-key i { display: inline-grid; place-items: center; width: 10px; height: 10px; }
+  .mm-key .k-land { background: #ffd23d; transform: rotate(45deg) scale(0.8); outline: 1.5px solid #111; }
+  .mm-key .k-wp { border-radius: 50%; background: #fff; color: #111; font: 700 7px/1 Inter, sans-serif; font-style: normal; }
+  .mm-key .k-haven { border-radius: 50%; background: #7ee08a; }
+  .mm-key .k-trap { background: rgba(255,72,72,0.6); }
+  .mm-key .k-cont { height: 2px; background: rgba(255,236,190,0.7); }
+  .mm-key b { font-weight: 400; }
   body.route-mode .readout { display: none; }
   @media (max-height: 760px) { #route-left { top: 130px; } .att-note { display: none; } }
 </style>
@@ -143,8 +205,24 @@
       <label><input type="radio" name="colour" value="shade" checked><span>Shaded</span></label>
       <label><input type="radio" name="colour" value="height"><span>Height colours</span></label>
     </div>
+    <label class="row" style="margin-top:8px"><input type="checkbox" id="contours"> Contour lines <span id="contour-out" class="muted"></span></label>
   </section>
-  <p class="hint">Drag to move · scroll to zoom · right-drag or shift-drag to tilt and turn · double-click to zoom in</p>
+  <section class="route-only">
+    <h2>Route view</h2>
+    <div class="seg" role="radiogroup" aria-label="Route colour">
+      <label><input type="radio" name="rcolour" value="state" checked><span>Drive</span></label>
+      <label><input type="radio" name="rcolour" value="slope"><span>Slope</span></label>
+    </div>
+    <div class="opts">
+      <label class="row"><input type="checkbox" id="rv-traps"> No-go zones (traps)</label>
+      <label class="row"><input type="checkbox" id="rv-legs"> Leg distances and times</label>
+      <label class="row"><input type="checkbox" id="rv-search"> Self-driving search</label>
+      <label class="row"><input type="checkbox" id="rv-frames"> Rover model frames</label>
+    </div>
+  </section>
+  <section id="wp-slot"></section>
+  <section id="mapped-slot"></section>
+  <p class="hint">Drag to move · scroll to zoom · right-drag or shift-drag to tilt and turn · double-click to zoom in · or use the buttons and keys at the bottom right</p>
 </aside>
 <footer class="glass readout" aria-live="polite">
   <div id="readout-pos">Point at the Moon</div>
@@ -155,14 +233,20 @@
 <div id="route-left" aria-label="The rover now"></div>
 <section class="glass route-hud" aria-label="Route playback">
   <div class="top"><span class="name" id="rh-name">Route</span><span class="when" id="rh-when"></span></div>
+  <div id="rh-profile"></div>
   <div class="ctl">
     <button type="button" id="rh-play" aria-label="Play">▶</button>
     <input type="range" id="rh-t" min="0" max="1000" value="0" aria-label="Time along the drive">
-    <select id="rh-speed" aria-label="Playback speed"><option value="1">1 h/s</option><option value="6" selected>6 h/s</option><option value="24">1 day/s</option></select>
+    <select id="rh-speed" aria-label="Playback speed"></select>
+    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px" title="Play parked (charging) time 40 times faster"><input type="checkbox" id="rh-skip" checked> Fast parking</label>
     <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px"><input type="checkbox" id="rh-follow"> Follow</label>
   </div>
-  <div class="chips" id="rh-chips"></div>
-  <div class="key"><span><i style="background:#f5f5f5"></i>sunlit</span><span><i style="background:#5c73a8"></i>shadow</span><span><i style="background:#ff9f43"></i>one-way</span><span><i style="background:#ff5252"></i>battery under reserve</span><span><i style="background:#7ee08a;border-radius:50%;width:8px;height:8px"></i>haven</span><span><i style="background:#8ab4f8;border-radius:50%;width:8px;height:8px"></i>parked</span></div>
+  <div class="ctl">
+    <div class="chips" id="rh-chips"></div>
+    <div class="rec"><button type="button" id="rh-rec" title="Record the rover's position, attitude and battery during playback">● Record</button><span id="rh-rec-out"></span><button type="button" id="rh-rec-save" title="Save the route with the recorded motion (also downloads it as JSON)">Save</button><button type="button" id="rh-rec-csv" title="Download the recorded motion as CSV">CSV</button></div>
+  </div>
+  <div class="key" id="rh-key-slope" hidden></div>
+  <div class="key" id="rh-key-state"><span><i style="background:#f5f5f5"></i>sunlit</span><span><i style="background:#5c73a8"></i>shadow</span><span><i style="background:#ff9f43"></i>one-way</span><span><i style="background:#ff5252"></i>battery under reserve</span><span><i style="background:#7ee08a;border-radius:50%;width:8px;height:8px"></i>haven</span><span><i style="background:#8ab4f8;border-radius:50%;width:8px;height:8px"></i>parked</span></div>
 </section>
 <div class="glass status">
   <div id="centre-src">Loading…</div>
@@ -1016,8 +1100,28 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
   scene.add(group);
   const matCyl = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
   const matCap = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // contour lines drawn in the fragment shader from the height of each pixel (radius minus the Moon's, without
+  // the exaggeration), every uInterval metres, each fifth one stronger; the interval follows the zoom
+  const contourU = { uContours: { value: 0 }, uInterval: { value: 50 }, uExag: { value: 3 }, uMoonR: { value: MOON_R_KM } };
+  for (const m of [matCyl, matCap]) {
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, contourU);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLsnWorld;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLsnWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;')
+        .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        if (uContours > 0.5) {
+          float hm = (length(vLsnWorld) - uMoonR) * 1000.0 / uExag;
+          float q = hm / uInterval, w = fwidth(q);
+          float d = abs(fract(q + 0.5) - 0.5) / max(w, 1e-5);
+          float major = abs(fract(q / 5.0 + 0.5) - 0.5) * 5.0 / max(w, 1e-5);
+          float line = (1.0 - smoothstep(0.3, 1.1, d)) * 0.4 + (1.0 - smoothstep(0.6, 1.8, major)) * 0.45;
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.86, 0.45), clamp(line, 0.0, 0.85) * step(w, 0.45));
+        }`);
+    };
+  }
 
-  const state = { exaggeration: 3, colour: 'shade' };
+  const state = { exaggeration: 3, colour: 'shade', contours: false };
   const cam = { lat: -20, lon: 20, dist: 6200, heading: 0, tilt: 0, ...initial };
   const cache = new Map();   // node id → { mesh, used, stale }
   const top = roots();
@@ -1179,8 +1283,14 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     return best;
   }
   function surfaceR(lat, lon) { return MOON_R_KM + terrain.heightAt(lat, lon) * state.exaggeration / 1000; }
+  // the target's radius and the ground clearance ease towards their new values over a few frames, so a camera
+  // that follows the rover over rough ground glides instead of stepping with every height sample
+  const ease = { r: null, clear: null };
   function placeCamera() {
-    const T = unit(cam.lat, cam.lon), r = surfaceR(cam.lat, cam.lon);
+    const T = unit(cam.lat, cam.lon), rNow = surfaceR(cam.lat, cam.lon);
+    if (ease.r === null || fly || Math.abs(rNow - ease.r) > Math.max(0.05, cam.dist * 0.2)) ease.r = rNow;
+    else { ease.r += (rNow - ease.r) * 0.18; if (Math.abs(rNow - ease.r) > 1e-5) dirty = true; }
+    const r = ease.r;
     const U = new THREE.Vector3(...T), tgt = U.clone().multiplyScalar(r);
     const N = new THREE.Vector3(-Math.sin(cam.lat * RAD) * Math.cos(cam.lon * RAD), Math.cos(cam.lat * RAD), Math.sin(cam.lat * RAD) * Math.sin(cam.lon * RAD));
     const Ea = new THREE.Vector3(-Math.sin(cam.lon * RAD), 0, -Math.cos(cam.lon * RAD));
@@ -1193,7 +1303,10 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     // keep the camera above the ground: the terrain under it and in a ring around it (so a ridge beside it
     // cannot swallow the near plane), plus a margin that grows with the distance to the target
     const ground = groundAround(camera.position, Math.max(0.08, cam.dist * 0.12));
-    const minR = ground + Math.max(0.03, cam.dist * 0.04);
+    const soft = ground + Math.max(0.03, cam.dist * 0.04), hard = ground + Math.max(0.01, cam.dist * 0.012);
+    if (ease.clear === null || fly || Math.abs(soft - ease.clear) > Math.max(0.2, cam.dist * 0.5)) ease.clear = soft;
+    else { ease.clear += (soft - ease.clear) * 0.12; if (Math.abs(soft - ease.clear) > 1e-5) dirty = true; }
+    const minR = Math.max(hard, ease.clear);
     const camRad = camera.position.length();
     if (camRad < minR) { camera.position.multiplyScalar(minR / camRad); camera.lookAt(tgt); }
     camera.updateMatrixWorld();   // select() culls with this frame's matrices, not the last render's
@@ -1283,6 +1396,12 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     for (const [, e] of cache) e.mesh.visible = shown.has(e.mesh);
     stats = { drawn: draw.length, queued: build.filter((n) => !cache.has(n.id)).length, cached: cache.size, maxDepth: Math.max(0, ...draw.map((n) => n.depth)) };
     if (cache.size > CACHE_MAX) evict();
+    if (state.contours) {
+      // about one line per 14 px on a 20° slope: interval ≈ 14 px × km per px × tan 20°, rounded to 1, 2, 5 × 10ⁿ m
+      const want = kmPerPx() * 1000 * 14 * 0.36, p = Math.pow(10, Math.floor(Math.log10(Math.max(1, want))));
+      contourU.uInterval.value = [1, 2, 5, 10].map((m) => m * p).find((v) => v >= want) ?? 10 * p;
+    }
+    contourU.uContours.value = state.contours ? 1 : 0; contourU.uExag.value = state.exaggeration;
     const tr = performance.now();
     renderer.render(scene, camera);
     perf.renderMs += performance.now() - tr; perf.frames++;
@@ -1339,7 +1458,7 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     const hit = pick(e.clientX, e.clientY);
     if (hit) flyTo({ lat: hit.latDeg, lon: hit.lonDeg, dist: cam.dist * 0.35 });
   });
-  const maxTilt = () => (cam.dist > 2500 ? 0 : cam.dist > 600 ? 40 : 75);
+  const maxTilt = () => (cam.dist > 2500 ? 0 : cam.dist > 600 ? 40 : 80);
 
   // ---- fly-to ----
   function flyTo({ lat, lon, dist = cam.dist, heading = 0, tilt = 0, ms = 1800 }) {
@@ -1403,11 +1522,24 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     return { x: (tmp.x + 1) / 2 * canvas.clientWidth, y: (1 - tmp.y) / 2 * canvas.clientHeight };
   }
 
+  // screen position of a world point (km), for labels on 3D objects; null when behind the camera or off screen
+  function projectWorld(x, y, z) {
+    tmp.set(x, y, z);
+    const toP = tmp.clone().sub(camera.position);
+    if (toP.dot(camera.getWorldDirection(new THREE.Vector3())) <= 0) return null;
+    // hidden behind the Moon's limb: the point is on the far side of the horizon from the camera
+    const pr = tmp.length(), cr = camera.position.length();
+    if (tmp.dot(camera.position) / (pr * cr) < Math.min(MOON_R_KM, pr) / cr - 1e-4 && cr > MOON_R_KM * 1.02) return null;
+    tmp.project(camera);
+    if (tmp.z > 1 || Math.abs(tmp.x) > 1.05 || Math.abs(tmp.y) > 1.05) return null;
+    return { x: (tmp.x + 1) / 2 * canvas.clientWidth, y: (1 - tmp.y) / 2 * canvas.clientHeight };
+  }
+
   frameLoop();
   window.addEventListener('resize', () => { dirty = true; });
 
   return {
-    flyTo, pick, project, invalidate,
+    flyTo, pick, project, projectWorld, invalidate,
     jumpTo(c) { fly = null; Object.assign(cam, c); dirty = true; },
     // phase 6: extra objects in the scene, and points on the terrain surface (km, world frame)
     THREE,
@@ -1431,6 +1563,10 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     kmPerPx,
     setExaggeration(v) { state.exaggeration = v; rebuildAll(); },
     setColour(mode) { state.colour = mode; for (const [, e] of cache) e.stale = true; dirty = true; },
+    setContours(on) { state.contours = !!on; dirty = true; },
+    get contourInterval() { return state.contours ? contourU.uInterval.value : null; },
+    maxTilt,
+    get canvas() { return canvas; },
     redraw() { dirty = true; },
     onFrame(fn) { const loop = () => { fn(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); },
     destroy() { cancelAnimationFrame(raf); renderer.dispose(); },
@@ -1446,9 +1582,13 @@ __m['route3d.js'] = (() => {
 //
 // Payload v1 = {
 //   v: 1, label, routeId, lengthKm, departMs, arriveMs | null, reserve (0–1),
-//   pts: [[latDeg, lonDeg, km, tMs | null, soc (0–1) | null, flags], …]   flags: 1 lit, 2 Earth in view,
-//        4 station link, 8 one-way stretch (going down more steeply than the climb limit)
+//   pts: [[latDeg, lonDeg, km, tMs | null, soc (0–1) | null, flags, gradeDeg | null, heightM | null], …]
+//        flags: 1 lit, 2 Earth in view, 4 station link, 8 one-way stretch (going down more steeply than the
+//        climb limit); gradeDeg: grade along the way (+ uphill), heightM: terrain height (both optional; older
+//        payloads stop at flags)
 //   stops: [{ latDeg, lonDeg, km, fromMs, toMs }], havens: [{ latDeg, lonDeg }], emptyAt: { latDeg, lonDeg, km, tMs } | null
+//   wps: [{ latDeg, lonDeg }]   the planned start, waypoints and end (optional)
+//   traps: { cellKm, cells: [[latDeg, lonDeg], …] } | null   ground the rover could drive into but not out of
 // }
 const { fromXY, toXY } = __m['terrain.js'];
 
@@ -1457,7 +1597,9 @@ const FLAGS = Object.freeze({ lit: 1, earth: 2, station: 4, oneWay: 8 });
 
 // The payload from a planned route (route-plan.js), its drive (route-energy.js), station links (comms.js),
 // havens (contingency.js). Keeps at most maxPts points (every k-th sample, plus the last one reached).
-function buildPayload({ route, drive = null, links = null, havens = null, power = null, mobility = null, maxPts = 400 }) {
+// heightAtXY(xKm, yKm) → metres adds the terrain height per point; waypoints ([[x, y], …]) and traps (the plan's
+// { cellKm, cells: [[x, y], …] }, thinned to maxTrapCells) go along for the 3D view and saved missions.
+function buildPayload({ route, drive = null, links = null, havens = null, power = null, mobility = null, heightAtXY = null, waypoints = null, traps = null, maxPts = 400, maxTrapCells = 2500 }) {
   const p = route.profile, n = p.km.length, per = drive?.perSample ?? null;
   const cap = power?.batteryWh ?? null;
   const onWay = new Uint8Array(n);
@@ -1477,7 +1619,9 @@ function buildPayload({ route, drive = null, links = null, havens = null, power 
     if (i % step === 0 || i === n - 1 || (per && reached && !Number.isFinite(per.tMs[i + 1] ?? NaN))) {
       const { latDeg, lonDeg } = fromXY(p.x[i], p.y[i]);
       const flags = (per?.lit[i] ? FLAGS.lit : 0) | (per?.earth[i] ? FLAGS.earth : 0) | (links?.ok[i] ? FLAGS.station : 0) | (onWay[i] ? FLAGS.oneWay : 0);
-      pts.push([+latDeg.toFixed(6), +lonDeg.toFixed(6), +km.toFixed(4), reached && per ? Math.round(per.tMs[i]) : null, per && cap && reached ? +(per.socWh[i] / cap).toFixed(4) : null, flags]);
+      const grade = Number.isFinite(p.pitch?.[i]) ? +(Math.atan(p.pitch[i]) * 180 / Math.PI).toFixed(2) : null;
+      const h = heightAtXY ? heightAtXY(p.x[i], p.y[i]) : null;
+      pts.push([+latDeg.toFixed(6), +lonDeg.toFixed(6), +km.toFixed(4), reached && per ? Math.round(per.tMs[i]) : null, per && cap && reached ? +(per.socWh[i] / cap).toFixed(4) : null, flags, grade, Number.isFinite(h) ? Math.round(h * 10) / 10 : null]);
     }
     km += p.km[i];
   }
@@ -1496,8 +1640,13 @@ function buildPayload({ route, drive = null, links = null, havens = null, power 
     stops: (drive?.stops ?? []).map((st) => ({ ...ll(st.x, st.y), km: st.km, fromMs: st.fromMs, toMs: st.toMs })),
     havens: hv,
     emptyAt: drive?.emptyAt ? { ...ll(drive.emptyAt.x, drive.emptyAt.y), km: drive.emptyAt.km, tMs: drive.emptyAt.tMs } : null,
+    wps: (waypoints ?? []).map(([x, y]) => ll(x, y)),
+    traps: traps?.cells?.length ? { cellKm: traps.cellKm, cells: thin(traps.cells, maxTrapCells).map(([x, y]) => { const q = ll(x, y); return [+q.latDeg.toFixed(5), +q.lonDeg.toFixed(5)]; }) } : null,
   };
 }
+
+// Every k-th item so that at most max remain.
+const thin = (a, max) => (a.length <= max ? a : a.filter((_, i) => i % Math.ceil(a.length / max) === 0));
 
 // A payload read back (from JSON); null when it is not one.
 function parsePayload(text) {
@@ -1562,32 +1711,66 @@ function frameRoute(p) {
 
 return { ROUTE3D_KEY, FLAGS, buildPayload, parsePayload, timeSpan, roverAt, frameRoute };
 })();
+__m['slope-colours.js'] = (() => {
+// The slope colour scale shared by the 2D map and the 3D globe: a route coloured by the grade along the way
+// (its absolute value, uphill or downhill), in the bands a rover driver reads at a glance. Pure; no DOM.
+const SLOPE_BANDS = Object.freeze([
+  { maxDeg: 2, colour: '#22d3ee', label: '0–2°' },
+  { maxDeg: 5, colour: '#4ade80', label: '2–5°' },
+  { maxDeg: 8, colour: '#facc15', label: '5–8°' },
+  { maxDeg: 12, colour: '#fb923c', label: '8–12°' },
+  { maxDeg: 15, colour: '#ef4444', label: '12–15°' },
+  { maxDeg: Infinity, colour: '#d946ef', label: 'over 15°' },
+]);
+const SLOPE_UNKNOWN = '#9aa0a6';
+
+// The band of a grade in degrees (sign ignored); null or NaN → the unknown colour.
+function slopeBand(deg) {
+  if (!Number.isFinite(deg)) return null;
+  const a = Math.abs(deg);
+  return SLOPE_BANDS.find((b) => a < b.maxDeg) ?? SLOPE_BANDS[SLOPE_BANDS.length - 1];
+}
+const slopeColour = (deg) => slopeBand(deg)?.colour ?? SLOPE_UNKNOWN;
+
+// '#rrggbb' → [r, g, b] in 0–1 (for three.js vertex colours).
+const rgb01 = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+
+return { SLOPE_BANDS, SLOPE_UNKNOWN, slopeBand, slopeColour, rgb01 };
+})();
 __m['globe-route.js'] = (() => {
-// Phase 6: a planned route on the 3D globe (route3d.js payload): a ribbon draped on the terrain, coloured
-// by what the drive met (sunlit, in shadow, one-way, battery under the reserve, not reached), markers for the
-// havens, parking stops and where the battery ran out, and the rover itself. Sizes follow the zoom.
+// Phase 6: a planned route on the 3D globe (route3d.js payload): a ribbon draped on the terrain, coloured by
+// what the drive met (sunlit, in shadow, one-way, battery under the reserve, not reached) or by slope,
+// markers for the havens, parking stops and where the battery ran out, the no-go ground (traps) as
+// translucent red volumes, the self-driving planner's search (trees, candidates, chosen path) when the payload
+// has one, and the rover: a six-wheeled model standing on the terrain with its pitch and roll, with its
+// coordinate frames (base_link, mast_cam, wheels) for the labels. Sizes follow the zoom.
 const { FLAGS } = __m['route3d.js'];
+const { slopeColour, rgb01 } = __m['slope-colours.js'];
 
 const COLORS = { lit: [0.96, 0.96, 0.96], dark: [0.36, 0.45, 0.66], oneWay: [1, 0.62, 0.26], low: [1, 0.32, 0.32], unreached: [0.35, 0.35, 0.35] };
+const RAD = Math.PI / 180;
+const ROVER_LEN_M = 2.2;   // model length in metres
 
-function createRouteLayer(view, payload) {
+function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
   const THREE = view.THREE;
   const group = new THREE.Group();
   view.addObject(group);
-  let ribbon = null, built = null;
+  let ribbon = null, built = null, colourBy = 'state';
   const reserve = payload.reserve ?? 0.2, timed = payload.pts.some((q) => Number.isFinite(q[3]));
+  const show = { traps: true, search: true, frames: false };
 
   function colourOf(q) {
+    if (colourBy === 'slope') return rgb01(slopeColour(q[6]));
     if (timed && !Number.isFinite(q[3])) return COLORS.unreached;
     if (q[5] & FLAGS.oneWay) return COLORS.oneWay;
     if (q[4] !== null && q[4] < reserve) return COLORS.low;
     return !timed || q[5] & FLAGS.lit ? COLORS.lit : COLORS.dark;
   }
 
-  // ribbon: a strip of width w km, lifted above the terrain, vertices relative to the first point
-  function buildRibbon(w) {
-    const pts = payload.pts, n = pts.length, lift = 0.012 * view.exaggeration + w * 0.4;
-    const P = pts.map((q) => new THREE.Vector3(...view.surface(q[0], q[1], lift)));
+  // a strip of width w km through lat/lon points, lifted above the terrain, vertices relative to the first point
+  function strip(ll, w, colours, lift, opacity = 0.95) {
+    const n = ll.length;
+    const P = ll.map(([la, lo]) => new THREE.Vector3(...view.surface(la, lo, lift)));
     const o = P[0].clone();
     const pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3), idx = [];
     for (let i = 0; i < n; i++) {
@@ -1596,7 +1779,7 @@ function createRouteLayer(view, payload) {
       const side = new THREE.Vector3().crossVectors(t, up).normalize().multiplyScalar(w / 2);
       const L = P[i].clone().sub(side).sub(o), R = P[i].clone().add(side).sub(o);
       pos.set([L.x, L.y, L.z, R.x, R.y, R.z], i * 6);
-      const c = colourOf(pts[i]);
+      const c = colours(i);
       col.set([...c, ...c], i * 6);
       if (i + 1 < n) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
     }
@@ -1604,13 +1787,64 @@ function createRouteLayer(view, payload) {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setIndex(idx);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.95 }));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false }));
     m.position.copy(o);
-    m.renderOrder = 2;
+    m.renderOrder = 3;
     return m;
   }
+  const buildRibbon = (w) => strip(payload.pts.map((q) => [q[0], q[1]]), w, (i) => colourOf(payload.pts[i]), 0.012 * view.exaggeration + w * 0.4);
+  const dispose = (o) => { if (!o) return; group.remove(o); o.traverse?.((c) => { c.geometry?.dispose(); c.material?.dispose(); }); };
 
-  // markers: spheres scaled with the zoom
+  // ---- no-go volumes: each trap cell a translucent red box standing on the ground ----
+  let traps = null;
+  function buildTraps() {
+    const cells = payload.traps?.cells ?? [];
+    if (!cells.length) return null;
+    const c = payload.traps.cellKm ?? 0.24, hKm = 0.035 * view.exaggeration;
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(c * 0.96, hKm, c * 0.96), new THREE.MeshBasicMaterial({ color: 0xff3b3b, transparent: true, opacity: 0.3, depthWrite: false }), cells.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1);
+    const o = new THREE.Vector3(...view.surface(cells[0][0], cells[0][1], 0));
+    cells.forEach(([la, lo], i) => {
+      const p = new THREE.Vector3(...view.surface(la, lo, hKm / 2 - 0.004));
+      q.setFromUnitVectors(up, p.clone().normalize());
+      m.compose(p.sub(o), q, s);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.position.copy(o);
+    mesh.renderOrder = 4;
+    const g = new THREE.Group(); g.add(mesh);
+    return g;
+  }
+
+  // ---- the self-driving planner's search (payload.autonav from route-rrt.js) ----
+  let search = null;
+  function buildSearch(w) {
+    const a = payload.autonav;
+    if (!a) return null;
+    const g = new THREE.Group(), lift = 0.01 * view.exaggeration + w * 0.5;
+    const o = new THREE.Vector3(...view.surface(payload.pts[0][0], payload.pts[0][1], 0));
+    const V = (la, lo, extra = 0) => new THREE.Vector3(...view.surface(la, lo, lift + extra)).sub(o);
+    if (a.trees?.length) {
+      const pos = new Float32Array(a.trees.length * 6);
+      a.trees.forEach(([la1, lo1, la2, lo2], i) => { const p = V(la1, lo1), q = V(la2, lo2); pos.set([p.x, p.y, p.z, q.x, q.y, q.z], i * 6); });
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x5b7cfa, transparent: true, opacity: 0.35, depthWrite: false }));
+      lines.position.copy(o); lines.renderOrder = 2; g.add(lines);
+    }
+    for (const c of a.candidates ?? []) {
+      if (c.length < 2) continue;
+      const geo = new THREE.BufferGeometry().setFromPoints(c.map(([la, lo]) => V(la, lo, w * 0.2)));
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x3b5bdb, transparent: true, opacity: 0.85, depthWrite: false }));
+      line.position.copy(o); line.renderOrder = 3; g.add(line);
+    }
+    if (a.trajectory?.length > 1) {
+      const t = strip(a.trajectory, w * 0.7, () => [0.13, 0.83, 0.93], lift + w * 0.5, 0.95);
+      g.add(t);
+    }
+    return g;
+  }
+
+  // ---- markers: spheres scaled with the zoom ----
   const markers = [];
   function marker(lat, lon, color, r = 1, cls = '') {
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color }));
@@ -1624,45 +1858,114 @@ function createRouteLayer(view, payload) {
   for (const h of payload.havens ?? []) marker(h.latDeg, h.lonDeg, 0x7ee08a, 0.8, 'haven');
   for (const st of payload.stops ?? []) marker(st.latDeg, st.lonDeg, 0x8ab4f8, 1, 'stop');
   if (payload.emptyAt) marker(payload.emptyAt.latDeg, payload.emptyAt.lonDeg, 0xff5252, 1.3, 'empty');
+  for (const w of payload.wps ?? []) marker(w.latDeg, w.lonDeg, 0xffffff, 0.75, 'waypoint');
 
-  // the rover: a bright sphere on a mast
+  // ---- the rover model, in its own frame: x forward, y left, z up (ROS base_link), metres ----
   const rover = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffd23d }));
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1, 8), new THREE.MeshBasicMaterial({ color: 0xffd23d }));
-  rover.add(body, mast);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: 0.6, metalness: 0.2 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2b2f, roughness: 0.9 });
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0x3a62d0, roughness: 0.4, metalness: 0.25, emissive: 0x0b1a44 });
+  const accent = new THREE.MeshBasicMaterial({ color: 0xffd23d });
+  const box = (x, y, z, sx, sy, sz, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); m.position.set(x, y, z); rover.add(m); return m; };
+  box(0, 0, 0.72, 1.9, 1.25, 0.42, bodyMat);                     // chassis
+  box(-0.1, 0, 0.97, 1.7, 1.45, 0.04, panelMat);                 // solar deck
+  box(0.98, 0, 0.72, 0.06, 1.0, 0.18, accent);                   // front bumper (shows which way it faces)
+  const wheels = {};
+  for (const [name, x, y] of [['wheel_fl', 0.75, 0.82], ['wheel_fr', 0.75, -0.82], ['wheel_ml', 0, 0.86], ['wheel_mr', 0, -0.86], ['wheel_rl', -0.75, 0.82], ['wheel_rr', -0.75, -0.82]]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.2, 18), darkMat);
+    w.position.set(x, y, 0.26); rover.add(w); wheels[name] = w;   // a cylinder's axis is its y: the axle, left–right
+    box(x, y * 0.86, 0.5, 0.08, 0.08, 0.42, darkMat);              // suspension leg
+  }
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.0, 10), bodyMat);
+  mast.rotation.x = Math.PI / 2; mast.position.set(0.62, 0.38, 1.45); rover.add(mast);
+  box(0.66, 0.38, 2.0, 0.22, 0.42, 0.16, bodyMat);                // mast camera head
+  box(0.78, 0.30, 2.0, 0.02, 0.07, 0.07, darkMat); box(0.78, 0.46, 2.0, 0.02, 0.07, 0.07, darkMat);   // camera eyes
+  const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.06, 0.08, 20), bodyMat);
+  dish.rotation.x = Math.PI / 2; dish.position.set(-0.7, -0.35, 1.3); rover.add(dish);
+  box(-0.7, -0.35, 1.12, 0.04, 0.04, 0.3, darkMat);
+  // frame axes (x red, y green, z blue), shown with the labels
+  const axes = new THREE.Group();
+  const axis = (x, y, z, dir, color, len) => {
+    const a = new THREE.ArrowHelper(new THREE.Vector3(...dir), new THREE.Vector3(x, y, z), len, color, len * 0.22, len * 0.12);
+    axes.add(a);
+  };
+  for (const [x, y, z, len] of [[0, 0, 0.72, 1.6], [0.78, 0.38, 2.0, 0.7]]) {
+    axis(x, y, z, [1, 0, 0], 0xff5252, len); axis(x, y, z, [0, 1, 0], 0x7ee08a, len); axis(x, y, z, [0, 0, 1], 0x5b9bff, len);
+  }
+  axes.visible = false;
+  rover.add(axes);
+  const FRAMES = { base_link: [0, 0, 0.72], mast_cam: [0.78, 0.38, 2.0], wheel_fl: [0.75, 0.82, 0.26], wheel_rr: [-0.75, -0.82, 0.26] };
   group.add(rover);
-  let roverAt = { latDeg: first[0], lonDeg: first[1] };
+  let roverAt = { latDeg: first[0], lonDeg: first[1] }, att = { headingDeg: 0, pitchDeg: 0, rollDeg: 0 }, roverScale = 0.001;
 
   function place(obj, lat, lon, size, lift = 0) {
     const [x, y, z] = view.surface(lat, lon, lift);
     obj.position.set(x, y, z);
     obj.scale.setScalar(size);
   }
+  // the rover's basis: forward along the heading, up along the local vertical, then pitched and rolled
+  const basis = new THREE.Matrix4();
+  function orientRover() {
+    const la = roverAt.latDeg * RAD, lo = roverAt.lonDeg * RAD;
+    const U = new THREE.Vector3(Math.cos(la) * Math.cos(lo), Math.sin(la), -Math.cos(la) * Math.sin(lo));
+    const N = new THREE.Vector3(-Math.sin(la) * Math.cos(lo), Math.cos(la), Math.sin(la) * Math.sin(lo));
+    const E = new THREE.Vector3(-Math.sin(lo), 0, -Math.cos(lo));
+    const h = att.headingDeg * RAD;
+    let f = N.clone().multiplyScalar(Math.cos(h)).addScaledVector(E, Math.sin(h)).normalize();
+    let right = f.clone().cross(U).normalize();
+    let up = U.clone();
+    const p = (att.pitchDeg || 0) * RAD, r = (att.rollDeg || 0) * RAD;
+    f.applyAxisAngle(right, p); up.applyAxisAngle(right, p);            // nose up
+    right.applyAxisAngle(f, -r); up.applyAxisAngle(f, -r);              // right side up
+    const left = right.clone().negate();
+    basis.makeBasis(f, left, up);
+    rover.quaternion.setFromRotationMatrix(basis);
+  }
 
-  // per frame: keep sizes in step with the zoom, rebuild the ribbon when the zoom, exaggeration or terrain changes
+  // per frame: keep sizes in step with the zoom, rebuild what is draped when the zoom, exaggeration or terrain changes
   function frame(terrainStamp) {
     const kpp = view.kmPerPx(), w = Math.min(3, Math.max(0.02, kpp * 5));
-    const key = `${terrainStamp}:${view.exaggeration}`;
+    const key = `${terrainStamp}:${view.exaggeration}:${colourBy}`;
     if (!built || built.key !== key || w / built.w > 1.35 || built.w / w > 1.35) {
-      if (ribbon) { group.remove(ribbon); ribbon.geometry.dispose(); ribbon.material.dispose(); }
-      ribbon = buildRibbon(w);
-      group.add(ribbon);
+      dispose(ribbon); ribbon = buildRibbon(w); group.add(ribbon);
+      dispose(search); search = buildSearch(w); if (search) { search.visible = show.search; group.add(search); }
+      if (!built || built.key !== key) { dispose(traps); traps = buildTraps(); if (traps) { traps.visible = show.traps; group.add(traps); } }
       built = { key, w };
     }
     const s = kpp * 5;
     for (const m of markers) place(m, m.userData.lat, m.userData.lon, s * m.userData.r, s * m.userData.r);
-    const rs = kpp * 7;
-    place(rover, roverAt.latDeg, roverAt.lonDeg, 1, 0);
-    // the mast stands along the local vertical: body at the top
-    const up = rover.position.clone().normalize();
-    body.scale.setScalar(rs); body.position.copy(up.clone().multiplyScalar(rs * 3.2));
-    mast.scale.set(rs * 0.6, rs * 3.2, rs * 0.6); mast.position.copy(up.clone().multiplyScalar(rs * 1.6));
-    mast.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+    // real size (2.2 m) when the camera is close enough, else roverPx pixels long so it stays visible
+    roverScale = Math.max(0.001, (kpp * roverPx) / ROVER_LEN_M);
+    place(rover, roverAt.latDeg, roverAt.lonDeg, roverScale, 0.004 * view.exaggeration * 0.25);
+    orientRover();
   }
 
+  const colours = { state: 0xffd23d };
   return {
     frame,
-    setRover(r, color = 0xffd23d) { roverAt = r; body.material.color.setHex(color); mast.material.color.setHex(color); view.redraw(); },
+    setRover(r, color = 0xffd23d, attitude = null) {
+      roverAt = r;
+      if (attitude) att = attitude;
+      accent.color.setHex(color);
+      colours.state = color;
+      view.redraw();
+    },
+    setColourBy(mode) { colourBy = mode === 'slope' ? 'slope' : 'state'; built = null; view.redraw(); },
+    setVisible(what, on) {
+      show[what] = !!on;
+      if (what === 'traps' && traps) traps.visible = !!on;
+      if (what === 'search' && search) search.visible = !!on;
+      if (what === 'frames') axes.visible = !!on;
+      view.redraw();
+    },
+    // world positions (km) of the rover's frames, for their labels
+    frames() {
+      rover.updateMatrixWorld(true);
+      return Object.entries(FRAMES).map(([name, [x, y, z]]) => ({ name, p: new THREE.Vector3(x, y, z).applyMatrix4(rover.matrixWorld) }));
+    },
+    get scaleUp() { return roverScale / 0.001; },
+    hasTraps: !!payload.traps?.cells?.length,
+    hasSearch: !!payload.autonav,
     dispose() { view.removeObject(group); },
   };
 }
@@ -1779,155 +2082,520 @@ function createAttitudePanel(parent) {
 }
 
 // ---------- minimap ----------
-const RADII = [0.5, 1, 2, 5, 10, 25];
-function createMinimap(parent, payload, heightAt, { landed = null } = {}) {
-  const size = 200, dpr = Math.min(2, window.devicePixelRatio || 1);
+// A round map centred on the rover: the terrain shaded and tinted by height with contour lines (sampled
+// about 160 × 160 over the area, finer than the 3D view's tiles at this scale), the route (driven part solid,
+// the rest faded; coloured like the ribbon or by slope), traps, havens, parking stops, numbered waypoints, the
+// landing site (on the rim with its distance when it is off the map), the rover with its field of view, north
+// and a scale bar below. The terrain image is redrawn when the rover has moved a quarter of the radius.
+const RADII = [0.25, 0.5, 1, 2, 5, 10, 25];
+const TINT = [[0, [46, 58, 82]], [0.3, [86, 98, 112]], [0.6, [150, 146, 136]], [1, [222, 205, 165]]];
+function tintAt(t) {
+  let i = 0; while (i < TINT.length - 2 && t > TINT[i + 1][0]) i++;
+  const [t0, a] = TINT[i], [t1, b] = TINT[i + 1], f = Math.max(0, Math.min(1, (t - t0) / (t1 - t0)));
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+const niceStep = (v) => { const p = Math.pow(10, Math.floor(Math.log10(v))); return [1, 2, 5, 10].map((m) => m * p).find((x) => x >= v); };
+const kmText = (km) => (km >= 1 ? `${+km.toFixed(km >= 10 ? 0 : 1)} km` : `${Math.round(km * 1000)} m`);
+
+function createMinimap(parent, payload, heightAt, { landed = null, site = null, slopeColour = null } = {}) {
+  const size = 240, dpr = Math.min(2, window.devicePixelRatio || 1);
   const cv = el('canvas', { width: size * dpr, height: size * dpr, class: 'mm-canvas', 'aria-label': 'Minimap around the rover' });
   cv.style.width = `${size}px`; cv.style.height = `${size}px`;
-  const scale = el('div', { class: 'mm-scale' });
-  const plus = el('button', { type: 'button', class: 'mm-btn', 'aria-label': 'Zoom the minimap in' }, '+');
-  const minus = el('button', { type: 'button', class: 'mm-btn', 'aria-label': 'Zoom the minimap out' }, '−');
-  const box = el('section', { class: 'glass mm-panel', 'aria-label': 'Minimap' }, el('div', { class: 'mm-wrap' }, cv, el('div', { class: 'mm-btns' }, plus, minus)), scale);
+  const scale = el('div', { class: 'mm-scale' }), bar = el('span', { class: 'mm-bar' }), barText = el('span', {});
+  const scaleRow = el('div', { class: 'mm-scalebar' }, bar, barText);
+  const plus = el('button', { type: 'button', class: 'mm-btn', 'aria-label': 'Zoom the minimap in', title: 'Zoom in' }, '+');
+  const minus = el('button', { type: 'button', class: 'mm-btn', 'aria-label': 'Zoom the minimap out', title: 'Zoom out' }, '−');
+  const fit = el('button', { type: 'button', class: 'mm-btn mm-fit', 'aria-label': 'Fit the whole route', title: 'Fit the whole route' }, '⤢');
+  const key = el('div', { class: 'mm-key' });
+  const box = el('section', { class: 'glass mm-panel', 'aria-label': 'Minimap' }, el('div', { class: 'mm-wrap' }, cv, el('div', { class: 'mm-btns' }, plus, minus, fit)), scaleRow, scale, key);
   parent.append(box);
   const ctx = cv.getContext('2d');
-  let ri = 2, last = null, relief = null;
-  plus.addEventListener('click', () => { ri = Math.max(0, ri - 1); relief = null; if (last) draw(last); });
-  minus.addEventListener('click', () => { ri = Math.min(RADII.length - 1, ri + 1); relief = null; if (last) draw(last); });
   const routeXY = payload.pts.map((q) => toXY(q[0], q[1]));
   const havensXY = (payload.havens ?? []).map((h) => toXY(h.latDeg, h.lonDeg));
-  const landedXY = landed ? toXY(landed.latDeg, landed.lonDeg) : null;
+  const stopsXY = (payload.stops ?? []).map((h) => toXY(h.latDeg, h.lonDeg));
+  const wpsXY = (payload.wps ?? []).map((w) => toXY(w.latDeg, w.lonDeg));
+  const trapXY = (payload.traps?.cells ?? []).map(([la, lo]) => toXY(la, lo));
+  const landing = landed ?? site;
+  const landXY = landing ? toXY(landing.latDeg, landing.lonDeg) : null;
+  const landLabel = landed ? 'Lander' : 'Landing site';
+  key.innerHTML = `<span><i class="k-land"></i>${landLabel}</span>${wpsXY.length ? '<span><i class="k-wp">1</i>waypoint</span>' : ''}${havensXY.length ? '<span><i class="k-haven"></i>haven</span>' : ''}${trapXY.length ? '<span><i class="k-trap"></i>trap</span>' : ''}<span><i class="k-cont"></i><b class="mm-cint"></b></span>`;
+  const cint = key.querySelector('.mm-cint');
 
-  // shaded relief of the square around (cx, cy), 72 × 72 samples, recomputed when the rover has moved a fifth of the radius
+  // the smallest radius that shows the whole route from its middle
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of routeXY) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  // start at most 5 km out: close enough to read the ground around the rover (zoom out for the whole route)
+  const fitIndex = () => { const need = Math.min(5, 0.5 * Math.hypot(x1 - x0, y1 - y0) + 0.1); const i = RADII.findIndex((r) => r >= need); return i < 0 ? RADII.length - 1 : i; };
+  let ri = fitIndex(), last = null, relief = null;
+  const redraw = () => { relief = relief && relief.R === RADII[ri] ? relief : null; if (last) draw(last); };
+  plus.addEventListener('click', () => { ri = Math.max(0, ri - 1); redraw(); });
+  minus.addEventListener('click', () => { ri = Math.min(RADII.length - 1, ri + 1); redraw(); });
+  fit.addEventListener('click', () => { ri = fitIndex(); redraw(); });
+
+  // the terrain image of the square ±1.35 R around (cx, cy): shading × height tint, contour lines on top
   function reliefFor(cx, cy, R) {
-    if (relief && relief.R === R && Math.hypot(relief.cx - cx, relief.cy - cy) < R / 5) return relief;
-    const n = 72, img = ctx.createImageData(n, n), hs = new Float32Array(n * n), step = (2 * R) / n;
+    if (relief && relief.R === R && Math.hypot(relief.cx - cx, relief.cy - cy) < R * 0.25) return relief;
+    const n = 160, H = 1.35 * R, step = (2 * H) / n, hs = new Float32Array(n * n);
+    let lo = Infinity, hi = -Infinity;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const { latDeg, lonDeg } = fromXY(cx - R + (i + 0.5) * step, cy + R - (j + 0.5) * step);
-      const v = heightAt(latDeg, lonDeg); hs[j * n + i] = Number.isFinite(v) ? v : NaN;
+      const { latDeg, lonDeg } = fromXY(cx - H + (i + 0.5) * step, cy + H - (j + 0.5) * step);
+      const v = heightAt(latDeg, lonDeg), k = j * n + i;
+      hs[k] = Number.isFinite(v) ? v : NaN;
+      if (hs[k] < lo) lo = hs[k];
+      if (hs[k] > hi) hi = hs[k];
     }
+    const img = new ImageData(n, n), span = Math.max(1, hi - lo), m = step * 1000;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const k = j * n + i, l = hs[j * n + Math.max(0, i - 1)], r = hs[j * n + Math.min(n - 1, i + 1)], u = hs[Math.max(0, j - 1) * n + i], d = hs[Math.min(n - 1, j + 1) * n + i];
-      const gx = (r - l) / (2 * step * 1000), gy = (u - d) / (2 * step * 1000);
-      // light from the north-west, 35° up
-      const shade = Number.isFinite(gx + gy) ? Math.max(0, Math.min(1, 0.55 + (-gx * 0.6 + gy * 0.6) * 1.6)) : 0;
-      const g = Math.round(40 + shade * 150);
-      img.data.set([g, g, g * 0.97, 255], k * 4);
+      const k = j * n + i, h = hs[k];
+      const l = hs[j * n + Math.max(0, i - 1)], r = hs[j * n + Math.min(n - 1, i + 1)], u = hs[Math.max(0, j - 1) * n + i], d = hs[Math.min(n - 1, j + 1) * n + i];
+      const gx = (r - l) / (2 * m), gy = (u - d) / (2 * m);   // rise per metre to the east of the image and to its top
+      if (!Number.isFinite(gx + gy + h)) { img.data.set([18, 18, 20, 255], k * 4); continue; }
+      // light from the image's upper left, 40° up, plus a little from above; steep ground darkens
+      const len = Math.hypot(gx, gy, 1), nx = -gx / len, ny = -gy / len, nz = 1 / len;
+      const lam = Math.max(0, nx * -0.54 + ny * 0.54 + nz * 0.64), sh = 0.25 + 0.95 * lam;
+      const [tr, tg, tb] = tintAt((h - lo) / span);
+      img.data.set([Math.min(255, tr * sh), Math.min(255, tg * sh), Math.min(255, tb * sh), 255], k * 4);
     }
-    const off = document.createElement('canvas'); off.width = n; off.height = n; off.getContext('2d').putImageData(img, 0, 0);
-    relief = { cx, cy, R, off };
+    const small = document.createElement('canvas'); small.width = n; small.height = n; small.getContext('2d').putImageData(img, 0, 0);
+    const M = 512, off = document.createElement('canvas'); off.width = M; off.height = M;
+    const o = off.getContext('2d');
+    o.imageSmoothingEnabled = true; o.imageSmoothingQuality = 'high';
+    o.drawImage(small, 0, 0, M, M);
+    // contours by marching squares on the sample grid, about a dozen lines over the local relief
+    const ci = niceStep(span / 12), sc = M / n;
+    const seg = (lev, major) => {
+      o.beginPath();
+      for (let j = 0; j + 1 < n; j++) for (let i = 0; i + 1 < n; i++) {
+        const a = hs[j * n + i], b = hs[j * n + i + 1], c = hs[(j + 1) * n + i + 1], d = hs[(j + 1) * n + i];
+        if (!Number.isFinite(a + b + c + d)) continue;
+        const pts = [];
+        const cross = (p, q, x0, y0, x1, y1) => { if ((p < lev) !== (q < lev)) { const t = (lev - p) / (q - p); pts.push([(x0 + (x1 - x0) * t + 0.5) * sc, (y0 + (y1 - y0) * t + 0.5) * sc]); } };
+        cross(a, b, i, j, i + 1, j); cross(b, c, i + 1, j, i + 1, j + 1); cross(d, c, i, j + 1, i + 1, j + 1); cross(a, d, i, j, i, j + 1);
+        for (let k = 0; k + 1 < pts.length; k += 2) { o.moveTo(pts[k][0], pts[k][1]); o.lineTo(pts[k + 1][0], pts[k + 1][1]); }
+      }
+      o.lineWidth = major ? 1.5 : 0.8; o.strokeStyle = major ? 'rgba(255,236,190,0.55)' : 'rgba(255,255,255,0.2)';
+      o.stroke();
+    };
+    for (let lev = Math.ceil(lo / ci) * ci; lev <= hi; lev += ci) seg(lev, Math.round(lev / ci) % 5 === 0);
+    relief = { cx, cy, R, H, off, ci };
     return relief;
   }
 
-  function draw({ latDeg, lonDeg, headingDeg, headingUp, colourOf }) {
-    last = { latDeg, lonDeg, headingDeg, headingUp, colourOf };
-    const R = RADII[ri], [cx, cy] = toXY(latDeg, lonDeg), W = size * dpr, half = W / 2, px = half / R;
+  function draw({ latDeg, lonDeg, headingDeg, headingUp, colourOf, km = null, colourBy = 'state' }) {
+    last = { latDeg, lonDeg, headingDeg, headingUp, colourOf, km, colourBy };
+    const R = RADII[ri], [cx, cy] = toXY(latDeg, lonDeg), W = size * dpr, half = W / 2, px = (half - 3 * dpr) / R;
     // polar stereographic about the south pole: north (rising latitude) points away from the pole, along (cx, cy);
     // on screen (y down) that is (cx, −cy), at this angle clockwise from up
     const northAng = Math.atan2(cx, cy);
     const rot = headingUp ? -(headingDeg * Math.PI / 180) - northAng : -northAng;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const P = ([x, y]) => [(x - cx) * px, -(y - cy) * px];
+    const S = (q) => { const [x, y] = P(q); return [half + x * cr - y * sr, half + x * sr + y * cr]; };   // upright screen position
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, W);
     ctx.save();
     ctx.beginPath(); ctx.arc(half, half, half - 2 * dpr, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = '#121214'; ctx.fillRect(0, 0, W, W);
     ctx.translate(half, half); ctx.rotate(rot);
     const rf = reliefFor(cx, cy, R);
-    const ox = (rf.cx - cx) * px, oy = -(rf.cy - cy) * px;
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(rf.off, ox - R * px * 1, oy - R * px * 1, 2 * R * px, 2 * R * px);
-    const P = ([x, y]) => [(x - cx) * px, -(y - cy) * px];
-    // route, coloured like the 3D ribbon
-    ctx.lineWidth = 3 * dpr; ctx.lineCap = 'round';
-    for (let k = 1; k < routeXY.length; k++) {
-      const [ax, ay] = P(routeXY[k - 1]), [bx, by] = P(routeXY[k]);
-      if (Math.hypot(ax, ay) > 1.6 * half && Math.hypot(bx, by) > 1.6 * half) continue;
-      ctx.strokeStyle = colourOf(payload.pts[k]);
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(rf.off, (rf.cx - cx) * px - rf.H * px, -(rf.cy - cy) * px - rf.H * px, 2 * rf.H * px, 2 * rf.H * px);
+    // traps: translucent red cells
+    if (trapXY.length) {
+      const c = Math.max(1.5 * dpr, (payload.traps.cellKm ?? 0.24) * px);
+      ctx.fillStyle = 'rgba(255,72,72,0.38)';
+      for (const t of trapXY) { const [x, y] = P(t); if (Math.abs(x) < half * 1.5 && Math.abs(y) < half * 1.5) ctx.fillRect(x - c / 2, y - c / 2, c, c); }
     }
-    ctx.fillStyle = '#7ee08a';
-    for (const h of havensXY) { const [x, y] = P(h); ctx.beginPath(); ctx.arc(x, y, 3 * dpr, 0, Math.PI * 2); ctx.fill(); }
-    if (landedXY) { const [x, y] = P(landedXY); ctx.fillStyle = '#ffd23d'; ctx.fillRect(x - 4 * dpr, y - 4 * dpr, 8 * dpr, 8 * dpr); }
-    // the rover: an arrow along its heading, at the centre
+    // route: a dark casing, then the colour; the part already driven solid, the rest faded
+    const colour = (k) => (colourBy === 'slope' && slopeColour ? slopeColour(payload.pts[k][6]) : colourOf(payload.pts[k]));
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const near = (a, b) => Math.hypot(a[0], a[1]) < 1.6 * half || Math.hypot(b[0], b[1]) < 1.6 * half;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 6 * dpr;
+    ctx.beginPath();
+    for (let k = 1; k < routeXY.length; k++) { const a = P(routeXY[k - 1]), b = P(routeXY[k]); if (near(a, b)) { ctx.moveTo(...a); ctx.lineTo(...b); } }
+    ctx.stroke();
+    ctx.lineWidth = 3.4 * dpr;
+    for (let k = 1; k < routeXY.length; k++) {
+      const a = P(routeXY[k - 1]), b = P(routeXY[k]);
+      if (!near(a, b)) continue;
+      ctx.globalAlpha = km !== null && payload.pts[k][2] > km + 1e-6 ? 0.55 : 1;
+      ctx.strokeStyle = colour(k);
+      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    const dot = (q, r, fill, stroke = '#0b0b0c') => { const [x, y] = P(q); ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = stroke; ctx.stroke(); };
+    for (const h of havensXY) dot(h, 4, '#7ee08a');
+    for (const h of stopsXY) dot(h, 4, '#8ab4f8');
+    // the rover's field of view (60°, a fifth of the radius) and the rover
+    ctx.save();
     ctx.rotate(northAng + headingDeg * Math.PI / 180);
-    ctx.fillStyle = '#ffd23d'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * dpr;
-    ctx.beginPath(); ctx.moveTo(0, -11 * dpr); ctx.lineTo(7 * dpr, 8 * dpr); ctx.lineTo(0, 4 * dpr); ctx.lineTo(-7 * dpr, 8 * dpr); ctx.closePath(); ctx.fill(); ctx.stroke();
+    const fov = Math.min(half * 0.45, Math.max(30 * dpr, 0.2 * R * px));
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, fov);
+    g.addColorStop(0, 'rgba(255,210,61,0.35)'); g.addColorStop(1, 'rgba(255,210,61,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, fov, -Math.PI / 2 - Math.PI / 6, -Math.PI / 2 + Math.PI / 6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffd23d'; ctx.strokeStyle = '#111'; ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.moveTo(0, -13 * dpr); ctx.lineTo(8 * dpr, 9 * dpr); ctx.lineTo(0, 4.5 * dpr); ctx.lineTo(-8 * dpr, 9 * dpr); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.restore();
-    // rim and north marker
+    ctx.restore();
+
+    // upright marks: waypoints, start / end, the landing site
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.lineWidth = 4 * dpr; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.font = `700 ${10 * dpr}px Inter, system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const inside = ([x, y], m = 6) => Math.hypot(x - half, y - half) < half - m * dpr;
+    wpsXY.forEach((w, i) => {
+      const q = S(w); if (!inside(q)) return;
+      ctx.beginPath(); ctx.arc(q[0], q[1], 7.5 * dpr, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = '#111'; ctx.stroke();
+      ctx.fillStyle = '#111'; ctx.fillText(String(i + 1), q[0], q[1] + 0.5 * dpr);
+    });
+    if (landXY) {
+      const q = S(landXY), dKm = Math.hypot(landXY[0] - cx, landXY[1] - cy);
+      if (inside(q, 10)) {
+        ctx.beginPath(); ctx.arc(q[0], q[1], 10 * dpr, 0, Math.PI * 2); ctx.lineWidth = 2 * dpr; ctx.strokeStyle = 'rgba(255,210,61,0.9)'; ctx.stroke();
+        ctx.save(); ctx.translate(q[0], q[1]); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = '#ffd23d'; ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5 * dpr; ctx.fillRect(-4.5 * dpr, -4.5 * dpr, 9 * dpr, 9 * dpr); ctx.strokeRect(-4.5 * dpr, -4.5 * dpr, 9 * dpr, 9 * dpr);
+        ctx.restore();
+        label(landLabel, q[0], q[1] - 18 * dpr, '#ffd23d');
+      } else {
+        // off the map: a pointer on the rim towards it, with its distance
+        const a = Math.atan2(q[1] - half, q[0] - half), rr = half - 16 * dpr, px2 = half + Math.cos(a) * rr, py2 = half + Math.sin(a) * rr;
+        ctx.save(); ctx.translate(px2, py2); ctx.rotate(a);
+        ctx.fillStyle = '#ffd23d'; ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath(); ctx.moveTo(9 * dpr, 0); ctx.lineTo(-5 * dpr, -6 * dpr); ctx.lineTo(-5 * dpr, 6 * dpr); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+        label(`${landLabel} ${kmText(dKm)}`, half + Math.cos(a) * (rr - 26 * dpr), half + Math.sin(a) * (rr - 14 * dpr), '#ffd23d');
+      }
+    }
+    function label(text, x, y, colour) {
+      ctx.font = `600 ${10.5 * dpr}px Inter, system-ui, sans-serif`;
+      const w = ctx.measureText(text).width + 10 * dpr;
+      const lx = Math.max(w / 2 + 4 * dpr, Math.min(W - w / 2 - 4 * dpr, x));
+      ctx.fillStyle = 'rgba(0,0,0,0.72)'; ctx.beginPath(); ctx.roundRect(lx - w / 2, y - 8 * dpr, w, 16 * dpr, 8 * dpr); ctx.fill();
+      ctx.fillStyle = colour; ctx.fillText(text, lx, y + 0.5 * dpr);
+    }
+    // rim, north and a scale bar
+    ctx.lineWidth = 4 * dpr; ctx.strokeStyle = 'rgba(0,0,0,0.9)';
     ctx.beginPath(); ctx.arc(half, half, half - 2 * dpr, 0, Math.PI * 2); ctx.stroke();
-    const na = rot + northAng - Math.PI / 2, nr = half - 13 * dpr;
+    ctx.lineWidth = 1 * dpr; ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath(); ctx.arc(half, half, half - 4.5 * dpr, 0, Math.PI * 2); ctx.stroke();
+    const na = rot - Math.PI / 2 + northAng, nr = half - 13 * dpr;
     const nx = half + Math.cos(na) * nr, ny = half + Math.sin(na) * nr;
     ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(nx, ny, 10 * dpr, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `700 ${12 * dpr}px Inter, system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.font = `700 ${12 * dpr}px Inter, system-ui, sans-serif`;
     ctx.fillText('N', nx, ny + 0.5 * dpr);
-    scale.textContent = `${R < 1 ? `${R * 1000} m` : `${R} km`} to the rim${headingUp ? ' · heading up' : ' · north up'}`;
+    // the scale bar under the map (css px)
+    const barKm = niceStep(R * 0.45) / (niceStep(R * 0.45) > R * 0.6 ? 2 : 1);
+    bar.style.width = `${Math.round((barKm * px) / dpr)}px`; barText.textContent = kmText(barKm);
+    scale.textContent = `${kmText(R)} to the rim${headingUp ? ' · heading up' : ' · north up'}`;
+    cint.textContent = `contours ${rf.ci >= 1 ? Math.round(rf.ci) : rf.ci.toFixed(1)} m`;
   }
-  return { draw };
+  return { draw, get radiusKm() { return RADII[ri]; } };
 }
 
 return { createAttitudePanel, createMinimap };
 })();
-__m['hires.js'] = (() => {
-// High-resolution terrain patches around the landing sites (tools/fetch-hires.mjs, demo/data/hires.json):
-// 5 m, 10 m or 20 m LOLA, 10 × 10 km per site, polar stereographic map km like terrain.js. A patch has the
-// same sampling interface as the terrain.js levels (sample → metres | NaN, heightAtXY → metres | null,
-// kmPerPixel), so it can sit at the fine end of any list of levels.
-const { decodePack } = __m['globe-terrain.js'];
-const { toXY } = __m['terrain.js'];
+__m['globe-profile.js'] = (() => {
+// The route's elevation profile along the bottom of the 3D globe in route mode: height against distance,
+// the line coloured by slope, the area under it shaded, strips for sunlight, Earth in view and one-way
+// stretches, the waypoints and parking stops, and a cursor at the rover. Click or drag to move the rover
+// there; hover to read height and grade. Canvas only; heights come from the payload (pts[i][7]) or from
+// heightAt(lat, lon) for older payloads.
+const { FLAGS } = __m['route3d.js'];
 
-// One patch: n × n Int16 DN, pixel centres at xMin + (i + 0.5)·kpp, yMax − (j + 0.5)·kpp; bilinear.
-function createPatch({ id = null, data, n, kmPerPixel: kpp, xMin, yMax, dnToMeters = 0.5 }) {
-  const xMax = xMin + n * kpp, yMin = yMax - n * kpp;
-  function sample(x, y) {
-    const col = (x - xMin) / kpp - 0.5, row = (yMax - y) / kpp - 0.5;
-    if (!(col >= 0 && row >= 0 && col <= n - 1 && row <= n - 1)) return NaN;
-    const c0 = Math.min(Math.floor(col), n - 2), r0 = Math.min(Math.floor(row), n - 2), fc = col - c0, fr = row - r0, i = r0 * n + c0;
-    const top = data[i] + (data[i + 1] - data[i]) * fc, bottom = data[i + n] + (data[i + n + 1] - data[i + n]) * fc;
-    return (top + (bottom - top) * fr) * dnToMeters;
+const kmText = (km) => (km >= 1 ? `${km.toFixed(2)} km` : `${Math.round(km * 1000)} m`);
+
+function createRouteProfile(parent, payload, { heightAt, slopeColour, onSeek = () => {} } = {}) {
+  const pts = payload.pts, n = pts.length;
+  const km = pts.map((q) => q[2]);
+  const h = pts.map((q) => (Number.isFinite(q[7]) ? q[7] : heightAt(q[0], q[1])));
+  // grade per point: from the payload, else from the heights
+  const grade = pts.map((q, i) => {
+    if (Number.isFinite(q[6])) return q[6];
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), d = (km[b] - km[a]) * 1000;
+    return d > 0 && Number.isFinite(h[a] + h[b]) ? (Math.atan((h[b] - h[a]) / d) * 180) / Math.PI : null;
+  });
+  const finite = h.filter(Number.isFinite);
+  const lo = Math.min(...finite), hi = Math.max(...finite), pad = Math.max(5, (hi - lo) * 0.12);
+  const y0 = lo - pad, y1 = hi + pad, total = km[n - 1] || 1;
+  const timed = pts.some((q) => Number.isFinite(q[3]));
+  // where the waypoints fall along the route: the nearest point to each
+  const wpKm = (payload.wps ?? []).map((w) => {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < n; i++) { const d = (pts[i][0] - w.latDeg) ** 2 + ((pts[i][1] - w.lonDeg) * Math.cos((w.latDeg * Math.PI) / 180)) ** 2; if (d < bd) { bd = d; best = i; } }
+    return km[best];
+  });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'rp-wrap';
+  const cv = document.createElement('canvas');
+  cv.className = 'rp-canvas';
+  cv.setAttribute('role', 'slider');
+  cv.setAttribute('aria-label', 'Elevation profile: click or drag to move the rover along the route');
+  cv.tabIndex = 0;
+  const tip = document.createElement('div');
+  tip.className = 'rp-tip';
+  wrap.append(cv, tip);
+  parent.append(wrap);
+  const ctx = cv.getContext('2d');
+  let cur = 0, hover = null, W = 0, H = 0, dpr = 1;
+  const M = { l: 44, r: 10, t: 8, b: 34 };   // margins (css px): the strips and the distance labels sit in the bottom margin
+
+  const xOf = (k) => M.l + (k / total) * (W - M.l - M.r);
+  const kOf = (x) => Math.max(0, Math.min(total, ((x - M.l) / (W - M.l - M.r)) * total));
+  const yOf = (v) => M.t + (1 - (v - y0) / (y1 - y0)) * (H - M.t - M.b);
+  const at = (k) => {
+    let i = 0; while (i + 1 < n && km[i + 1] < k) i++;
+    const j = Math.min(n - 1, i + 1), f = km[j] > km[i] ? (k - km[i]) / (km[j] - km[i]) : 0;
+    return { i, h: h[i] + ((h[j] ?? h[i]) - h[i]) * f, g: grade[f < 0.5 ? i : j] };
+  };
+
+  function draw() {
+    const r = cv.getBoundingClientRect();
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (Math.round(r.width * dpr) !== cv.width || Math.round(r.height * dpr) !== cv.height) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+    W = r.width; H = r.height;
+    if (!(W > 60 && H > 40)) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    // height grid: three labelled levels
+    ctx.font = '10px Inter, system-ui, sans-serif'; ctx.fillStyle = '#9aa0a6'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+    for (const v of [lo, (lo + hi) / 2, hi]) {
+      const y = Math.round(yOf(v)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(M.l, y); ctx.lineTo(W - M.r, y); ctx.stroke();
+      ctx.fillText(`${Math.round(v)} m`, M.l - 5, y);
+    }
+    // area under the line
+    const base = H - M.b;
+    const grad = ctx.createLinearGradient(0, M.t, 0, base);
+    grad.addColorStop(0, 'rgba(138,180,248,0.28)'); grad.addColorStop(1, 'rgba(138,180,248,0.02)');
+    ctx.beginPath(); ctx.moveTo(xOf(0), base);
+    for (let i = 0; i < n; i++) if (Number.isFinite(h[i])) ctx.lineTo(xOf(km[i]), yOf(h[i]));
+    ctx.lineTo(xOf(total), base); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    // the line, coloured by slope; the part ahead of the rover a little faded
+    ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    for (let i = 1; i < n; i++) {
+      if (!Number.isFinite(h[i - 1] + h[i])) continue;
+      ctx.globalAlpha = km[i] > cur + 1e-6 ? 0.6 : 1;
+      ctx.strokeStyle = slopeColour(grade[i]);
+      ctx.beginPath(); ctx.moveTo(xOf(km[i - 1]), yOf(h[i - 1])); ctx.lineTo(xOf(km[i]), yOf(h[i])); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // strips: sunlit / shadow, Earth in view, one-way
+    const strip = (row, test, on, off) => {
+      const y = base + 3 + row * 5;
+      for (let i = 1; i < n; i++) {
+        const c = test(pts[i]) ? on : off;
+        if (!c) continue;
+        ctx.fillStyle = c; ctx.fillRect(xOf(km[i - 1]), y, Math.max(1, xOf(km[i]) - xOf(km[i - 1])), 4);
+      }
+    };
+    if (timed) {
+      strip(0, (q) => q[5] & FLAGS.lit, '#f5f5f5', '#5c73a8');
+      strip(1, (q) => q[5] & FLAGS.earth, '#8ab4f8', 'rgba(255,255,255,0.08)');
+    }
+    strip(2, (q) => q[5] & FLAGS.oneWay, '#ff9f43', null);
+    // parking stops and waypoints
+    for (const st of payload.stops ?? []) {
+      const x = xOf(st.km);
+      ctx.fillStyle = '#8ab4f8'; ctx.beginPath(); ctx.arc(x, M.t + 6, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.textAlign = 'center'; ctx.font = '700 9.5px Inter, system-ui, sans-serif';
+    wpKm.forEach((k, i) => {
+      const x = xOf(k), v = at(k).h, y = Number.isFinite(v) ? yOf(v) : M.t + 10;
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, base); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y - 9, 6.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.fillText(String(i + 1), x, y - 8.5);
+    });
+    // distance ticks
+    const a = at(cur), x = xOf(cur);
+    ctx.fillStyle = '#9aa0a6'; ctx.font = '10px Inter, system-ui, sans-serif'; ctx.textBaseline = 'top';
+    if (x > M.l + 190) { ctx.textAlign = 'left'; ctx.fillText('0 km', M.l, base + 20); }
+    if (x < W - 200) { ctx.textAlign = 'right'; ctx.fillText(kmText(total), W - M.r, base + 20); }
+    // the rover
+    ctx.strokeStyle = '#ffd23d'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x + 0.5, M.t); ctx.lineTo(x + 0.5, base); ctx.stroke();
+    if (Number.isFinite(a.h)) { ctx.fillStyle = '#ffd23d'; ctx.strokeStyle = '#111'; ctx.beginPath(); ctx.arc(x, yOf(a.h), 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    ctx.textAlign = x > W - 150 ? 'right' : 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#ffd23d'; ctx.font = '600 10.5px Inter, system-ui, sans-serif';
+    ctx.fillText(`${kmText(cur)} · ${Number.isFinite(a.h) ? `${Math.round(a.h)} m` : '—'} · ${Number.isFinite(a.g) ? `${a.g >= 0 ? '+' : '−'}${Math.abs(a.g).toFixed(1)}°` : '—'}`, x + (ctx.textAlign === 'left' ? 6 : -6), base + 20);
+    // hover read-out
+    if (hover !== null) {
+      const b = at(hover), hx = xOf(hover);
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx + 0.5, M.t); ctx.lineTo(hx + 0.5, base); ctx.stroke();
+      tip.hidden = false;
+      tip.textContent = `${kmText(hover)} · ${Number.isFinite(b.h) ? `${Math.round(b.h)} m` : '—'} · grade ${Number.isFinite(b.g) ? `${b.g >= 0 ? '+' : '−'}${Math.abs(b.g).toFixed(1)}°` : '—'}`;
+      tip.style.left = `${Math.min(W - 160, Math.max(0, hx - 70))}px`;
+    } else tip.hidden = true;
   }
+
+  // seeking: click, drag, arrow keys
+  let dragging = false;
+  const kmFrom = (e) => kOf(e.clientX - cv.getBoundingClientRect().left);
+  cv.addEventListener('pointerdown', (e) => { dragging = true; cv.setPointerCapture(e.pointerId); onSeek(kmFrom(e)); });
+  cv.addEventListener('pointermove', (e) => { hover = kmFrom(e); if (dragging) onSeek(hover); else draw(); });
+  cv.addEventListener('pointerup', () => { dragging = false; });
+  cv.addEventListener('pointerleave', () => { hover = null; draw(); });
+  cv.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? total / 10 : total / 100;
+    if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); onSeek(Math.min(total, cur + step)); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); onSeek(Math.max(0, cur - step)); }
+  });
+  window.addEventListener('resize', draw);
+
   return {
-    id, n, kmPerPixel: kpp, xMin, yMax, xMax, yMin, bounds: { x0: xMin, x1: xMax, y0: yMin, y1: yMax },
-    sample,
-    heightAtXY: (x, y) => { const v = sample(x, y); return v === v ? v : null; },
-    heightAt: (latDeg, lonDeg) => { const v = sample(...toXY(latDeg, lonDeg)); return v === v ? v : null; },
+    update(kmNow) { if (Math.abs(kmNow - cur) < 1e-9 && W) return; cur = kmNow; draw(); },
+    draw,
+    heights: h, grades: grade,
   };
 }
 
-const meets = (e, b) => e.xMin < b.x1 && e.xMin + e.n * e.kmPerPixel > b.x0 && e.yMax > b.y0 && e.yMax - e.n * e.kmPerPixel < b.y1;
+return { createRouteProfile };
+})();
+__m['globe-controls.js'] = (() => {
+// On-screen camera controls for the 3D globe: pan (four arrows), zoom, turn, tilt, north up and a compass
+// that shows the heading. A tap moves one step with a short glide; holding a button keeps moving at a steady
+// rate. Keys: arrows pan, shift + arrows turn and tilt, + and − zoom, N north up. DOM only; the view does the
+// rest (globe-view.js camera, jumpTo, flyTo, kmPerPx, maxTilt).
+const RAD = Math.PI / 180, DEG = 180 / Math.PI, MOON_R_KM = 1737.4;
 
-// The manifest's patches as a set that loads on demand. load(pack) → Promise<Uint8Array> (data-loader.js
-// loadData in a page). → { entries, list (loaded patches, coarse to fine), entriesIn(bounds), ensure(bounds),
-// ensureSite(id), sample(x, y), finestKmAt(bounds) }
-function createHiresSet(manifest, load, { onLoad = () => {} } = {}) {
-  const entries = Object.entries(manifest?.sites ?? {}).map(([id, e]) => ({ id, ...e }));
-  const loaded = new Map(), pending = new Map();
-  const list = [];
-  function ensureEntry(e) {
-    if (loaded.has(e.id)) return Promise.resolve(loaded.get(e.id));
-    if (pending.has(e.id)) return pending.get(e.id);
-    const p = load(e.pack).then((b) => decodePack(b, e.n)).then((data) => {
-      const patch = createPatch({ id: e.id, data, n: e.n, kmPerPixel: e.kmPerPixel, xMin: e.xMin, yMax: e.yMax });
-      loaded.set(e.id, patch);
-      list.push(patch);
-      list.sort((a, b) => b.kmPerPixel - a.kmPerPixel);   // coarse to fine, like terrain.js levels
-      onLoad(patch);
-      return patch;
-    }).catch(() => null).finally(() => pending.delete(e.id));
-    pending.set(e.id, p);
-    return p;
+const ICON = {
+  up: 'M12 6l6 8H6z', down: 'M12 18l-6-8h12z', left: 'M6 12l8-6v12z', right: 'M18 12l-8 6V6z',
+  plus: 'M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z', minus: 'M5 11h14v2H5z',
+  ccw: 'M12 5a7 7 0 1 1-6.6 4.7l1.9.6A5 5 0 1 0 12 7v3L7.5 6 12 2z', cw: 'M12 5a7 7 0 1 0 6.6 4.7l-1.9.6A5 5 0 1 1 12 7v3l4.5-4L12 2z',
+  tiltUp: 'M4 17h16l-3-7H7zM12 3l3 4H9z', tiltDown: 'M7 9h10l3 8H4zM12 21l-3-4h6z',
+};
+const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+
+const CONTROLS_CSS = `
+.cam-ctl { position: fixed; right: 16px; bottom: 16px; padding: 8px; display: grid; grid-template-columns: auto auto; gap: 8px; align-items: start; z-index: 5; user-select: none; }
+body:not(.route-mode) .cam-ctl { bottom: 92px; }
+.cam-ctl .pad { display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(3, 30px); gap: 2px; }
+.cam-ctl .side { display: grid; grid-template-columns: 30px 30px; grid-auto-rows: 30px; gap: 2px 4px; }
+.cam-ctl button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; color: var(--text); background: rgba(255,255,255,0.07); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; touch-action: none; }
+.cam-ctl button:hover { background: rgba(255,255,255,0.16); }
+.cam-ctl button:active { background: rgba(138,180,248,0.3); }
+.cam-ctl button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cam-ctl svg { width: 16px; height: 16px; fill: currentColor; }
+.cam-ctl .compass { border-radius: 50%; position: relative; background: rgba(0,0,0,0.35); }
+.cam-ctl .compass .needle { position: absolute; inset: 0; }
+.cam-ctl .compass .needle::before { content: "N"; position: absolute; left: 50%; top: 1px; transform: translateX(-50%); color: #ff6b6b; font: 700 8px/1 Inter, system-ui, sans-serif; }
+.cam-ctl .compass .needle::after { content: ""; position: absolute; left: 50%; top: 10px; width: 2px; height: 10px; margin-left: -1px; background: linear-gradient(#ff6b6b 50%, #e8eaed 50%); border-radius: 1px; }
+.cam-ctl .read { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: center; line-height: 1.3; white-space: pre-line; }
+`;
+
+// → { el, stop() }. onUser() is called when the user moves the camera with these controls (to leave follow mode).
+function createCameraControls(view, { onUser = () => {}, parent = document.body } = {}) {
+  const box = document.createElement('nav');
+  box.className = 'glass cam-ctl';
+  box.setAttribute('aria-label', 'Camera controls');
+  const b = (id, label, icon) => `<button type="button" data-a="${id}" aria-label="${label}" title="${label}">${icon}</button>`;
+  box.innerHTML = `
+    <div class="pad">${'<span></span>'}${b('up', 'Pan forward (↑)', svg(ICON.up))}${'<span></span>'}${b('left', 'Pan left (←)', svg(ICON.left))}<button type="button" class="compass" data-a="north" aria-label="Turn to north up (N)" title="North up (N)"><span class="needle"></span></button>${b('right', 'Pan right (→)', svg(ICON.right))}${'<span></span>'}${b('down', 'Pan back (↓)', svg(ICON.down))}${'<span></span>'}</div>
+    <div class="side">${b('in', 'Zoom in (+)', svg(ICON.plus))}${b('out', 'Zoom out (−)', svg(ICON.minus))}${b('ccw', 'Turn left (shift ←)', svg(ICON.ccw))}${b('cw', 'Turn right (shift →)', svg(ICON.cw))}${b('tiltUp', 'Tilt towards the horizon (shift ↑)', svg(ICON.tiltUp))}${b('tiltDown', 'Tilt towards straight down (shift ↓)', svg(ICON.tiltDown))}</div>
+    <div class="read" aria-live="off"></div>`;
+  parent.appendChild(box);
+  const needle = box.querySelector('.needle'), read = box.querySelector('.read');
+
+  // one step of each action (camera → new camera), and the rate per second while held
+  const viewKm = () => view.kmPerPx() * (view.canvas?.clientHeight ?? 800);
+  function moved(c, fwdKm, rightKm) {
+    const h = c.heading * RAD, north = fwdKm * Math.cos(h) - rightKm * Math.sin(h), east = fwdKm * Math.sin(h) + rightKm * Math.cos(h);
+    const lat = Math.max(-89.999, Math.min(89.999, c.lat + (north / MOON_R_KM) * DEG));
+    return { lat, lon: (c.lon + ((east / MOON_R_KM) * DEG) / Math.max(0.02, Math.cos(lat * RAD)) + 360) % 360 };
   }
-  return {
-    entries, list,
-    entriesIn: (b) => entries.filter((e) => meets(e, b)),
-    ensure: (b) => Promise.all(entries.filter((e) => meets(e, b)).map(ensureEntry)),
-    ensureSite: (id) => { const e = entries.find((q) => q.id === id); return e ? ensureEntry(e) : Promise.resolve(null); },
-    sample(x, y) { for (let i = list.length - 1; i >= 0; i--) { const v = list[i].sample(x, y); if (v === v) return v; } return NaN; },
-    // the finest patch resolution available (loaded or not) over a box, km per pixel, or null
-    finestKmAt: (b) => entries.filter((e) => meets(e, b)).reduce((m, e) => (m === null || e.kmPerPixel < m ? e.kmPerPixel : m), null),
+  const tiltCap = (c) => (view.maxTilt ? view.maxTilt() : 75);
+  const act = {
+    up: (c, k) => ({ ...c, ...moved(c, viewKm() * 0.25 * k, 0) }),
+    down: (c, k) => ({ ...c, ...moved(c, -viewKm() * 0.25 * k, 0) }),
+    left: (c, k) => ({ ...c, ...moved(c, 0, -viewKm() * 0.25 * k) }),
+    right: (c, k) => ({ ...c, ...moved(c, 0, viewKm() * 0.25 * k) }),
+    in: (c, k) => ({ ...c, dist: Math.max(0.4, c.dist * Math.pow(0.6, k)) }),
+    out: (c, k) => ({ ...c, dist: Math.min(14000, c.dist / Math.pow(0.6, k)), tilt: Math.min(c.tilt, 75) }),
+    ccw: (c, k) => ({ ...c, heading: (c.heading - 30 * k + 360) % 360 }),
+    cw: (c, k) => ({ ...c, heading: (c.heading + 30 * k) % 360 }),
+    tiltUp: (c, k) => ({ ...c, tilt: Math.min(tiltCap(c), c.tilt + 12 * k) }),
+    tiltDown: (c, k) => ({ ...c, tilt: Math.max(0, c.tilt - 12 * k) }),
   };
+  const once = {
+    north: (c) => ({ ...c, heading: 0 }),
+  };
+  const glide = (to) => view.flyTo({ ...to, ms: 320 });
+
+  // hold: after the first glide, keep moving at about two steps per second until released
+  let hold = null;
+  function startHold(a) {
+    stopHold();
+    const t0 = performance.now();
+    let last = t0;
+    const tick = () => {
+      if (!hold) return;
+      const now = performance.now();
+      if (now - t0 > 330) view.jumpTo(act[a](view.camera, ((now - last) / 1000) * 2));
+      last = now;
+      hold.raf = requestAnimationFrame(tick);
+    };
+    hold = { a, raf: requestAnimationFrame(tick) };
+  }
+  function stopHold() { if (hold) cancelAnimationFrame(hold.raf); hold = null; }
+
+  box.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest('button[data-a]');
+    if (!btn) return;
+    e.preventDefault();
+    const a = btn.dataset.a;
+    onUser(a);
+    if (once[a]) { glide(once[a](view.camera)); return; }
+    glide(act[a](view.camera, 1));
+    btn.setPointerCapture?.(e.pointerId);
+    startHold(a);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) box.addEventListener(ev, stopHold);
+  // keyboard activation of a focused button (Enter / Space) gives one step
+  box.addEventListener('click', (e) => {
+    if (e.detail !== 0) return;   // real clicks were handled on pointerdown
+    const a = e.target.closest('button[data-a]')?.dataset.a;
+    if (!a) return;
+    onUser(a);
+    glide(once[a] ? once[a](view.camera) : act[a](view.camera, 1));
+  });
+
+  const keyAct = (e) => {
+    if (e.target.closest?.('input, select, textarea, [contenteditable]')) return null;
+    const k = e.key;
+    if (k === '+' || k === '=') return 'in';
+    if (k === '-' || k === '_') return 'out';
+    if (k === 'n' || k === 'N') return 'north';
+    if (k === 'ArrowUp') return e.shiftKey ? 'tiltUp' : 'up';
+    if (k === 'ArrowDown') return e.shiftKey ? 'tiltDown' : 'down';
+    if (k === 'ArrowLeft') return e.shiftKey ? 'ccw' : 'left';
+    if (k === 'ArrowRight') return e.shiftKey ? 'cw' : 'right';
+    return null;
+  };
+  const onKey = (e) => {
+    const a = keyAct(e);
+    if (!a || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    onUser(a);
+    glide(once[a] ? once[a](view.camera) : act[a](view.camera, e.repeat ? 0.5 : 1));
+  };
+  window.addEventListener('keydown', onKey);
+
+  // the compass and the readout follow the camera
+  let lastKey = '';
+  view.onFrame(() => {
+    const c = view.camera, key = `${Math.round(c.heading)}:${Math.round(c.tilt)}:${c.dist.toPrecision(3)}`;
+    if (key === lastKey) return;
+    lastKey = key;
+    needle.style.transform = `rotate(${-c.heading}deg)`;
+    const d = c.dist >= 10 ? `${Math.round(c.dist)} km` : c.dist >= 1 ? `${c.dist.toFixed(1)} km` : `${Math.round(c.dist * 1000)} m`;
+    read.textContent = `${d}\nhdg ${Math.round(c.heading)}° · tilt ${Math.round(c.tilt)}°`;
+  });
+
+  return { el: box, stop() { stopHold(); window.removeEventListener('keydown', onKey); box.remove(); } };
 }
 
-return { createPatch, createHiresSet };
+return { CONTROLS_CSS, createCameraControls };
 })();
 __m['mission-flow.js'] = (() => {
 // One mission across the pages (navigator, lander, 3D globe): the chosen landing site and time travel from
@@ -2092,6 +2760,517 @@ function nextSteps(doc, after, { getMission = () => readMission(), className = '
 
 return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
 })();
+__m['globe-waypoints.js'] = (() => {
+// Waypoints on the 3D globe: click the terrain (or type a latitude and longitude) to place numbered
+// waypoints, see each one's position, height, the heading and length of the leg to the next, and send them
+// to the navigator to plan the rover route through them ("rp=" points on the rover step). Kept in
+// localStorage so they survive a reload. DOM, three.js lines draped on the terrain, labels on screen.
+const { toXY } = __m['terrain.js'];
+const { bearingDeg, compassName } = __m['rover-attitude.js'];
+const { stageUrl } = __m['mission-flow.js'];
+
+const KEY = 'lsn-globe-wps', MAX = 8, R = 1737.4, RAD = Math.PI / 180;
+const gcKm = (a, b) => {
+  const p1 = a.latDeg * RAD, p2 = b.latDeg * RAD, dl = (b.lonDeg - a.lonDeg) * RAD;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2)));
+};
+const ll = (v) => `${Math.abs(v.latDeg).toFixed(4)}°${v.latDeg < 0 ? 'S' : 'N'} ${v.lonDeg > 180 ? `${(360 - v.lonDeg).toFixed(4)}°W` : `${v.lonDeg.toFixed(4)}°E`}`;
+
+// "−89.45, 222.69" or "89.45S 137.31W" → { latDeg, lonDeg } | null
+function parseLatLon(text) {
+  const m = /^\s*(-?\d+(?:\.\d+)?)\s*°?\s*([NS])?\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*°?\s*([EW])?\s*$/i.exec(String(text));
+  if (!m) return null;
+  let lat = Number(m[1]), lon = Number(m[3]);
+  if (m[2] && m[2].toUpperCase() === 'S') lat = -Math.abs(lat);
+  if (m[4] && m[4].toUpperCase() === 'W') lon = -Math.abs(lon);
+  if (!(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 360)) return null;
+  return { latDeg: lat, lonDeg: ((lon % 360) + 360) % 360 };
+}
+
+// the navigator link that plans a rover route through the points (south polar map, 2–8 points)
+function navigatorLink(points, mission) {
+  const rp = points.map((p) => toXY(p.latDeg, p.lonDeg).map((v) => v.toFixed(2)).join(',')).join(';');
+  const base = mission ? stageUrl('rover', mission) : `index.html#view=map&site=${points[0].latDeg.toFixed(4)},${points[0].lonDeg.toFixed(4)}&plan=1`;
+  return `${base}&rp=${rp}`;
+}
+
+function createWaypointTool(view, { parent, mission = null, terrain, payload = null } = {}) {
+  if (!parent) return null;
+  const THREE = view.THREE;
+  let pts = [];
+  try { const a = JSON.parse(localStorage.getItem(KEY) ?? '[]'); if (Array.isArray(a)) pts = a.filter((p) => Number.isFinite(p?.latDeg) && Number.isFinite(p?.lonDeg)).slice(0, MAX); } catch { pts = []; }
+  let adding = false;
+  parent.innerHTML = `
+    <h2>Waypoints</h2>
+    <div class="wp-tools">
+      <button type="button" class="chip wp-add" aria-pressed="false">Click to add</button>
+      ${payload?.wps?.length ? '<button type="button" class="chip wp-from">Use the route\'s</button>' : ''}
+      <button type="button" class="chip wp-clear">Clear</button>
+    </div>
+    <form class="wp-type"><input type="text" placeholder="lat, lon  (e.g. -89.45, 222.69)" aria-label="Add a waypoint by latitude and longitude"><button type="submit" class="chip">Add</button></form>
+    <ol class="wp-list"></ol>
+    <a class="wp-plan" target="_blank" rel="noopener">Plan the rover route through these →</a>
+    <p class="hint wp-hint"></p>`;
+  const $ = (s) => parent.querySelector(s);
+  const addBtn = $('.wp-add'), list = $('.wp-list'), planA = $('.wp-plan'), hint = $('.wp-hint');
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(pts)); } catch { /* storage blocked */ } };
+
+  // the 3D part: a marker per waypoint and the legs between them, draped on the terrain
+  const group = new THREE.Group();
+  view.addObject(group);
+  const labels = document.getElementById('labels');
+  let labelEls = [], built = '';
+  function rebuild() {
+    for (const c of [...group.children]) { group.remove(c); c.geometry?.dispose(); c.material?.dispose(); }
+    for (const el of labelEls) el.remove();
+    labelEls = pts.map((p, i) => {
+      const el = document.createElement('div');
+      el.className = 'wp-pin'; el.textContent = String(i + 1);
+      labels.appendChild(el);
+      return el;
+    });
+    built = '';
+  }
+  function drape() {
+    const kpp = view.kmPerPx(), key = `${pts.length}:${JSON.stringify(pts.at(-1) ?? null)}:${view.exaggeration}:${Math.round(Math.log(kpp) * 3)}:${window.__globe?.pyramid?.version ?? 0}`;
+    if (key === built) return;
+    built = key;
+    for (const c of [...group.children]) { group.remove(c); c.geometry?.dispose(); c.material?.dispose(); }
+    if (pts.length < 2) return;
+    const lift = Math.max(0.01, kpp * 3), o = new THREE.Vector3(...view.surface(pts[0].latDeg, pts[0].lonDeg, 0));
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1], n = Math.max(8, Math.min(200, Math.ceil(gcKm(a, b) / Math.max(0.02, kpp * 4))));
+      let dl = b.lonDeg - a.lonDeg; if (dl > 180) dl -= 360; else if (dl < -180) dl += 360;
+      const line = [];
+      for (let k = 0; k <= n; k++) { const f = k / n; line.push(new THREE.Vector3(...view.surface(a.latDeg + (b.latDeg - a.latDeg) * f, a.lonDeg + dl * f, lift)).sub(o)); }
+      const m = new THREE.Line(new THREE.BufferGeometry().setFromPoints(line), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: kpp * 10, gapSize: kpp * 6, transparent: true, opacity: 0.9, depthTest: false }));
+      m.computeLineDistances(); m.position.copy(o); m.renderOrder = 7;
+      group.add(m);
+    }
+  }
+  view.onFrame(() => {
+    drape();
+    pts.forEach((p, i) => {
+      const s = view.project(p.latDeg, p.lonDeg), el = labelEls[i];
+      if (!el) return;
+      el.hidden = !s;
+      if (s) el.style.transform = `translate(${Math.round(s.x)}px, ${Math.round(s.y)}px)`;
+    });
+  });
+
+  function render() {
+    list.innerHTML = '';
+    pts.forEach((p, i) => {
+      const h = terrain.heightAt(p.latDeg, p.lonDeg), next = pts[i + 1];
+      const leg = next ? `→ ${Math.round(bearingDeg(p.latDeg, p.lonDeg, next.latDeg, next.lonDeg))}° ${compassName(bearingDeg(p.latDeg, p.lonDeg, next.latDeg, next.lonDeg))} · ${gcKm(p, next).toFixed(2)} km` : 'end';
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="n">${i + 1}</span><span class="wp-pos">${ll(p)}<small>${Number.isFinite(h) ? `${Math.round(h)} m` : ''} · ${leg}</small></span><button type="button" class="wp-x" aria-label="Remove waypoint ${i + 1}">×</button>`;
+      li.querySelector('.wp-pos').addEventListener('click', () => view.flyTo({ lat: p.latDeg, lon: p.lonDeg, dist: Math.min(view.camera.dist, 6), tilt: 50, heading: view.camera.heading }));
+      li.querySelector('.wp-x').addEventListener('click', () => { pts.splice(i, 1); changed(); });
+      list.appendChild(li);
+    });
+    const total = pts.slice(1).reduce((a, p, i) => a + gcKm(pts[i], p), 0);
+    const south = pts.every((p) => p.latDeg < -79.5);
+    const ok = pts.length >= 2 && south;
+    planA.hidden = !ok;
+    if (ok) planA.href = navigatorLink(pts, mission);
+    hint.textContent = pts.length < 2 ? `${adding ? 'Click the terrain to place a waypoint' : 'Add a start, any waypoints and an end'} (2–${MAX}).` : !south ? 'The navigator plans rover routes south of 79.5°S; move the points there.' : `${pts.length} points, ${total.toFixed(2)} km in straight legs; the planner finds the drivable way.`;
+  }
+  function changed() { save(); rebuild(); render(); view.redraw(); }
+  function add(p) { if (pts.length >= MAX) { hint.textContent = `At most ${MAX} points.`; return; } pts.push(p); changed(); }
+
+  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Adding: click the map' : 'Click to add'; view.canvas.classList.toggle('adding', adding); render(); });
+  $('.wp-clear').addEventListener('click', () => { pts = []; changed(); });
+  $('.wp-from')?.addEventListener('click', () => { pts = payload.wps.map((w) => ({ latDeg: w.latDeg, lonDeg: w.lonDeg })).slice(0, MAX); changed(); });
+  $('.wp-type').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inp = $('.wp-type input'), p = parseLatLon(inp.value);
+    if (!p) { hint.textContent = 'Type a latitude and longitude, e.g. -89.45, 222.69 or 89.45S 137.31W.'; return; }
+    inp.value = ''; add(p);
+  });
+  // a click (not a drag) on the terrain adds a point while adding is on
+  let down = null;
+  view.canvas.addEventListener('pointerdown', (e) => { down = adding && e.button === 0 ? [e.clientX, e.clientY] : null; });
+  view.canvas.addEventListener('pointerup', (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) { down = null; return; }
+    down = null;
+    const hit = view.pick(e.clientX, e.clientY);
+    if (hit) add({ latDeg: +hit.latDeg.toFixed(6), lonDeg: +hit.lonDeg.toFixed(6) });
+  });
+  rebuild(); render();
+  return { get points() { return pts.map((p) => ({ ...p })); }, add, clear() { pts = []; changed(); } };
+}
+
+return { parseLatLon, navigatorLink, createWaypointTool };
+})();
+__m['mission-save.js'] = (() => {
+// Saved missions: a planned route with everything around it (the route3d.js payload: path, times, battery,
+// sunlight, links, grade and height per point, waypoints, havens, traps, the touchdown; the settings it was
+// planned with; a summary; and, when recorded on the globe, the rover's motion), kept in localStorage and
+// exported as files. Pure apart from downloadText(); no imports.
+//
+// Record v1 = { kind: 'lsn-mission-record', v: 1, id, name, savedMs, mission, settings, summary, route, recording }
+//   mission    mission-flow.js mission (site, landing time, touchdown)
+//   settings   { maxSlopeDeg, mobility, power, station, departMs }
+//   summary    { routeId, label, lengthKm, hours, arriveMs, socMin, oneWayKm, returnable, trapsKm2, stationKm, earthShare }
+//   route      route3d.js payload v1
+//   recording  null | { startedMs, fields: [...], samples: [[…], …] }   motion recorded during 3D playback
+
+const RECORDS_KEY = 'lsn-records';
+const MAX_RECORDS = 20;
+const RECORDING_FIELDS = Object.freeze(['tMs', 'latDeg', 'lonDeg', 'km', 'heightM', 'pitchDeg', 'rollDeg', 'yawDeg', 'soc', 'flags']);
+const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+
+// The self-driving planner's search trees (route.autonav.trees) can be thousands of edges: a saved record keeps
+// at most this many, so twenty records still fit in the browser's storage.
+const SAVED_TREE_EDGES = 600;
+
+function buildRecord({ name = null, mission = null, settings = {}, summary = {}, route: full, recording = null, savedMs = Date.now() }) {
+  const trees = full?.autonav?.trees;
+  const route = trees?.length > SAVED_TREE_EDGES ? { ...full, autonav: { ...full.autonav, trees: trees.filter((_, i) => i % Math.ceil(trees.length / SAVED_TREE_EDGES) === 0) } } : full;
+  const id = `m${savedMs.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+  const label = route?.label ? `${route.label} route` : 'Route';
+  const where = mission?.siteName ?? (route?.pts?.[0] ? `${route.pts[0][0].toFixed(2)}°, ${route.pts[0][1].toFixed(2)}°` : '');
+  return {
+    kind: 'lsn-mission-record', v: 1, id, savedMs,
+    name: name ?? `${label}${where ? ` from ${where}` : ''} · ${new Date(savedMs).toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+    mission, settings, summary, route, recording,
+  };
+}
+
+function parseRecord(text) {
+  try {
+    const r = typeof text === 'string' ? JSON.parse(text) : text;
+    return r && r.kind === 'lsn-mission-record' && r.v === 1 && r.route && Array.isArray(r.route.pts) ? r : null;
+  } catch { return null; }
+}
+
+function readAll(storage) {
+  try { const a = JSON.parse(store(storage)?.getItem(RECORDS_KEY) ?? '[]'); return Array.isArray(a) ? a.filter((r) => parseRecord(r)) : []; } catch { return []; }
+}
+function writeAll(list, storage) {
+  store(storage)?.setItem(RECORDS_KEY, JSON.stringify(list));
+}
+
+// Newest first: { id, name, savedMs, lengthKm, label, recorded }
+function listRecords(storage) {
+  return readAll(storage).sort((a, b) => b.savedMs - a.savedMs).map((r) => ({ id: r.id, name: r.name, savedMs: r.savedMs, lengthKm: r.route.lengthKm, label: r.route.label, recorded: !!r.recording?.samples?.length }));
+}
+
+// Saves (or replaces by id) a record, keeping the newest MAX_RECORDS. When the browser's storage is full the
+// oldest are dropped until it fits. → { ok, dropped, reason }
+function saveRecord(record, storage) {
+  let list = readAll(storage).filter((r) => r.id !== record.id);
+  list.unshift(record);
+  list.sort((a, b) => b.savedMs - a.savedMs);
+  let dropped = Math.max(0, list.length - MAX_RECORDS);
+  list = list.slice(0, MAX_RECORDS);
+  for (;;) {
+    try { writeAll(list, storage); return { ok: true, dropped, reason: null }; } catch (e) {
+      if (list.length <= 1) return { ok: false, dropped, reason: 'The browser storage is full; download the file instead.' };
+      list.pop(); dropped++;
+    }
+  }
+}
+
+const loadRecord = (id, storage) => readAll(storage).find((r) => r.id === id) ?? null;
+function deleteRecord(id, storage) { writeAll(readAll(storage).filter((r) => r.id !== id), storage); }
+
+// Adds a motion recording to a stored record (by id), or returns the record with it for a download.
+function withRecording(record, recording) { return { ...record, recording }; }
+
+// ---------- files ----------
+const lonE = (lon) => (lon > 180 ? lon - 360 : lon);   // GeoJSON wants −180…180
+
+// GeoJSON (selenographic lat/lon, east longitude −180…180): the route line with per-vertex arrays in its
+// properties, the waypoints, havens, stops, the touchdown and the traps.
+function toGeoJSON(r) {
+  const p = r.route, f = [];
+  f.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: p.pts.map((q) => [lonE(q[1]), q[0]]) },
+    properties: { kind: 'route', name: r.name, routeId: p.routeId, label: p.label, lengthKm: p.lengthKm, body: 'Moon (IAU 2015, mean radius 1737.4 km)',
+      km: p.pts.map((q) => q[2]), tMs: p.pts.map((q) => q[3]), soc: p.pts.map((q) => q[4]), flags: p.pts.map((q) => q[5]), gradeDeg: p.pts.map((q) => q[6] ?? null), heightM: p.pts.map((q) => q[7] ?? null),
+      summary: r.summary, settings: r.settings } });
+  (p.wps ?? []).forEach((w, i) => f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(w.lonDeg), w.latDeg] }, properties: { kind: 'waypoint', n: i + 1 } }));
+  (p.havens ?? []).forEach((h) => f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(h.lonDeg), h.latDeg] }, properties: { kind: 'haven' } }));
+  (p.stops ?? []).forEach((s) => f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(s.lonDeg), s.latDeg] }, properties: { kind: 'stop', km: s.km, fromMs: s.fromMs, toMs: s.toMs } }));
+  if (r.mission?.landed) f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lonE(r.mission.landed.lonDeg), r.mission.landed.latDeg] }, properties: { kind: 'touchdown', ...r.mission.landed } });
+  if (p.traps?.cells?.length) f.push({ type: 'Feature', geometry: { type: 'MultiPoint', coordinates: p.traps.cells.map(([la, lo]) => [lonE(lo), la]) }, properties: { kind: 'traps', cellKm: p.traps.cellKm } });
+  if (r.recording?.samples?.length) f.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.recording.samples.map((s) => [lonE(s[2]), s[1]]) }, properties: { kind: 'recorded-track', fields: r.recording.fields } });
+  return { type: 'FeatureCollection', features: f };
+}
+
+const csvCell = (v) => (v === null || v === undefined || (typeof v === 'number' && !Number.isFinite(v)) ? '' : typeof v === 'number' ? String(+v.toFixed(6)) : `"${String(v).replace(/"/g, '""')}"`);
+
+// One row per route point: where, when, battery, sunlight / Earth / station / one-way, grade and height.
+function routeCSV(r) {
+  const head = ['km', 'lat_deg', 'lon_deg_east', 'utc', 'battery_share', 'sunlit', 'earth_in_view', 'station_link', 'one_way', 'grade_deg', 'height_m'];
+  const rows = r.route.pts.map((q) => [q[2], q[0], q[1], Number.isFinite(q[3]) ? new Date(q[3]).toISOString() : null, q[4], q[5] & 1 ? 1 : 0, q[5] & 2 ? 1 : 0, q[5] & 4 ? 1 : 0, q[5] & 8 ? 1 : 0, q[6] ?? null, q[7] ?? null]);
+  return [head.join(','), ...rows.map((row) => row.map(csvCell).join(','))].join('\n') + '\n';
+}
+
+// One row per recorded motion sample.
+function recordingCSV(rec) {
+  if (!rec?.samples?.length) return '';
+  const fields = rec.fields ?? RECORDING_FIELDS;
+  return [fields.join(','), ...rec.samples.map((s) => s.map((v, i) => (fields[i] === 'tMs' && Number.isFinite(v) ? new Date(v).toISOString() : csvCell(v))).join(','))].join('\n') + '\n';
+}
+
+const fileName = (r, ext) => `${(r.name ?? 'mission').replace(/[^A-Za-z0-9._ -]+/g, '').replace(/\s+/g, '_').slice(0, 80)}.${ext}`;
+
+// Offers a text file to save (browser only).
+function downloadText(doc, filename, text, mime = 'application/json') {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = doc.createElement('a');
+  a.href = url; a.download = filename;
+  doc.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+return { RECORDS_KEY, MAX_RECORDS, RECORDING_FIELDS, SAVED_TREE_EDGES, buildRecord, parseRecord, listRecords, saveRecord, loadRecord, deleteRecord, withRecording, toGeoJSON, routeCSV, recordingCSV, fileName, downloadText };
+})();
+__m['globe-mapped.js'] = (() => {
+// "Mapped": what of the Moon this app already has mapped, and where to map next. On the globe, outlines of
+// the terrain on hand by resolution (the 120 m south polar square, the 40 m and 20 m tiles, the 5–20 m site
+// patches), the ground covered by saved rover drives (a camera swath along each route and recorded track),
+// and survey targets the team marks for the next mapping (10 × 10 km boxes, kept in localStorage and
+// exported as JSON for tools/fetch-hires.mjs-style patch downloads). A panel lists the areas.
+const { fromXY, toXY } = __m['terrain.js'];
+const { listRecords, loadRecord, RECORDS_KEY, downloadText } = __m['mission-save.js'];
+
+const TARGETS_KEY = 'lsn-survey-targets';
+const SWATH_KM = 0.1;            // assumption: a rover's navigation cameras map about ±50 m either side
+const R = 1737.4;
+const CAP_KM2 = 2 * Math.PI * R * R * (1 - Math.sin((80 * Math.PI) / 180));   // the 80°S–90°S cap
+const TIERS = [
+  { id: 't120', label: '120 m south polar terrain', colour: 0x5b7cfa, css: '#5b7cfa' },
+  { id: 't40', label: '40 m tiles', colour: 0x22d3ee, css: '#22d3ee' },
+  { id: 't20', label: '20 m tiles', colour: 0x4ade80, css: '#4ade80' },
+  { id: 'hires', label: '5–20 m site patches', colour: 0xffd23d, css: '#ffd23d' },
+  { id: 'driven', label: 'Driven by saved missions', colour: 0xff7ad9, css: '#ff7ad9' },
+  { id: 'targets', label: 'To map next', colour: 0xffffff, css: '#ffffff' },
+];
+
+// squares [x0, y0, x1, y1] (south polar map km) of a tiled level's tiles: keys "rRRcCC", row 0 at the top
+function tileSquares(level) {
+  const T = level.tilePx * level.kmPerPixel;
+  return (level.tiles ?? []).map((k) => {
+    const m = /^r(\d+)c(\d+)$/.exec(k);
+    if (!m) return null;
+    const r = Number(m[1]), c = Number(m[2]), x0 = -level.halfKm + c * T, y1 = level.halfKm - r * T;
+    return [x0, y1 - T, x0 + T, y1];
+  }).filter(Boolean);
+}
+
+function createMappedLayer(view, { parent, meta, hires } = {}) {
+  if (!parent) return null;
+  const THREE = view.THREE;
+  const levels = meta?.levels ?? [];
+  const sq = {
+    t120: levels.filter((l) => !l.tiled && l.kmPerPixel <= 0.12).map((l) => [-l.halfKm, -l.halfKm, l.halfKm, l.halfKm]),
+    t40: tileSquares(levels.find((l) => l.tiled && l.kmPerPixel === 0.04) ?? {}),
+    t20: tileSquares(levels.find((l) => l.tiled && l.kmPerPixel === 0.02) ?? {}),
+    hires: Object.values(hires?.sites ?? {}).map((s) => [s.xMin, s.yMax - s.n * s.kmPerPixel, s.xMin + s.n * s.kmPerPixel, s.yMax]),
+  };
+  let targets = [];
+  try { const a = JSON.parse(localStorage.getItem(TARGETS_KEY) ?? '[]'); if (Array.isArray(a)) targets = a.filter((t) => Number.isFinite(t?.latDeg) && Number.isFinite(t?.lonDeg)); } catch { targets = []; }
+  let drives = [];
+  function readDrives() {
+    drives = listRecords().map((x) => loadRecord(x.id)).filter(Boolean).map((r) => ({
+      name: r.name,
+      lines: [r.route.pts.map((q) => [q[0], q[1]]), ...(r.recording?.samples?.length ? [r.recording.samples.map((s) => [s[1], s[2]])] : [])],
+      km: r.route.lengthKm ?? r.route.pts.at(-1)[2],
+    }));
+  }
+  readDrives();
+
+  parent.innerHTML = `
+    <h2>Mapped</h2>
+    <label class="row"><input type="checkbox" class="mp-on"> Show what is mapped</label>
+    <ul class="mp-key"></ul>
+    <div class="wp-tools"><button type="button" class="chip mp-add" aria-pressed="false">Mark an area to map</button><button type="button" class="chip mp-export">Export targets</button></div>
+    <ol class="mp-list"></ol>
+    <p class="hint mp-hint"></p>`;
+  const $ = (s) => parent.querySelector(s);
+  const on = $('.mp-on'), key = $('.mp-key'), list = $('.mp-list'), hint = $('.mp-hint'), addBtn = $('.mp-add');
+  let adding = false;
+
+  const area = (list) => list.reduce((a, [x0, y0, x1, y1]) => a + (x1 - x0) * (y1 - y0), 0);
+  function renderKey() {
+    const km2 = { t120: area(sq.t120.slice(-1)), t40: area(sq.t40), t20: area(sq.t20), hires: area(sq.hires), driven: drives.reduce((a, d) => a + d.km * SWATH_KM, 0), targets: targets.length * 100 };
+    const fmt = (v) => (v >= 1000 ? `${Math.round(v).toLocaleString('en-GB')} km²` : `${v.toFixed(v >= 10 ? 0 : 1)} km²`);
+    key.innerHTML = TIERS.map((t) => {
+      const n = t.id === 'hires' ? `${sq.hires.length} patches · ` : t.id === 'driven' ? `${drives.length} drives, ${drives.reduce((a, d) => a + d.km, 0).toFixed(1)} km · ` : t.id === 't40' || t.id === 't20' ? `${sq[t.id].length} tiles · ` : t.id === 'targets' ? `${targets.length} · ` : '';
+      const share = t.id === 't20' || t.id === 'hires' ? ` (${((km2[t.id] / CAP_KM2) * 100).toFixed(2)}% of the cap)` : '';
+      return `<li><i style="border-color:${t.css}${t.id === 'driven' || t.id === 'hires' ? `;background:${t.css}44` : ''}${t.id === 'targets' ? ';border-style:dashed' : ''}"></i><span>${t.label}<small>${n}${fmt(km2[t.id])}${share}</small></span></li>`;
+    }).join('');
+    list.innerHTML = '';
+    targets.forEach((t, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="wp-pos">${Math.abs(t.latDeg).toFixed(3)}°${t.latDeg < 0 ? 'S' : 'N'} ${t.lonDeg.toFixed(3)}°E<small>10 × 10 km to map</small></span><button type="button" class="wp-x" aria-label="Remove target ${i + 1}">×</button>`;
+      li.querySelector('.wp-pos').addEventListener('click', () => view.flyTo({ lat: t.latDeg, lon: t.lonDeg, dist: 30, tilt: 40 }));
+      li.querySelector('.wp-x').addEventListener('click', () => { targets.splice(i, 1); changed(); });
+      list.appendChild(li);
+    });
+    hint.textContent = `Rover-scale terrain (20 m or finer) covers ${(((km2.t20 + km2.hires) / CAP_KM2) * 100).toFixed(2)}% of the 80°S cap in this app. ${adding ? 'Click the terrain to mark a 10 km box to map next.' : 'Mark boxes to plan the next mapping.'}`;
+  }
+  const save = () => { try { localStorage.setItem(TARGETS_KEY, JSON.stringify(targets)); } catch { /* storage blocked */ } };
+  function changed() { save(); renderKey(); built = ''; view.redraw(); }
+
+  // ---- the 3D outlines and swaths ----
+  const group = new THREE.Group();
+  group.visible = false;
+  view.addObject(group);
+  let built = '';
+  function outline(squares, colour, lift, dashed = false) {
+    const pos = [], o = new THREE.Vector3(...view.surface(-90, 0, 0));
+    const P = (x, y) => { const q = fromXY(x, y); return new THREE.Vector3(...view.surface(q.latDeg, q.lonDeg, lift)).sub(o); };
+    for (const [x0, y0, x1, y1] of squares) {
+      const n = Math.max(2, Math.min(24, Math.ceil((x1 - x0) / Math.max(0.05, view.kmPerPx() * 20))));
+      const ring = [];
+      for (let k = 0; k < n; k++) ring.push([x0 + ((x1 - x0) * k) / n, y0]);
+      for (let k = 0; k < n; k++) ring.push([x1, y0 + ((y1 - y0) * k) / n]);
+      for (let k = 0; k < n; k++) ring.push([x1 - ((x1 - x0) * k) / n, y1]);
+      for (let k = 0; k < n; k++) ring.push([x0, y1 - ((y1 - y0) * k) / n]);
+      for (let k = 0; k < ring.length; k++) { const a = P(...ring[k]), b = P(...ring[(k + 1) % ring.length]); pos.push(a.x, a.y, a.z, b.x, b.y, b.z); }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const mat = dashed ? new THREE.LineDashedMaterial({ color: colour, dashSize: view.kmPerPx() * 8, gapSize: view.kmPerPx() * 6 }) : new THREE.LineBasicMaterial({ color: colour, transparent: true, opacity: 0.85 });
+    const m = new THREE.LineSegments(g, mat); if (dashed) m.computeLineDistances();
+    m.position.copy(o); m.renderOrder = 5;
+    return m;
+  }
+  function fill(squares, colour, lift, opacity) {
+    const pos = [], o = new THREE.Vector3(...view.surface(-90, 0, 0)), N = 8;
+    const P = (x, y) => { const q = fromXY(x, y); return new THREE.Vector3(...view.surface(q.latDeg, q.lonDeg, lift)).sub(o); };
+    for (const [x0, y0, x1, y1] of squares) {
+      const G = [];
+      for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) G.push(P(x0 + ((x1 - x0) * i) / N, y0 + ((y1 - y0) * j) / N));
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const a = G[j * (N + 1) + i], b = G[j * (N + 1) + i + 1], c = G[(j + 1) * (N + 1) + i + 1], d = G[(j + 1) * (N + 1) + i];
+        pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+      }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+    m.position.copy(o); m.renderOrder = 4;
+    return m;
+  }
+  function swath(line, lift) {
+    // a strip SWATH_KM wide (at least a few pixels) along a lat/lon line
+    const w = Math.max(SWATH_KM, view.kmPerPx() * 3), o = new THREE.Vector3(...view.surface(line[0][0], line[0][1], 0));
+    const P = line.map(([la, lo]) => new THREE.Vector3(...view.surface(la, lo, lift)));
+    const pos = [];
+    for (let i = 0; i + 1 < P.length; i++) {
+      const t = P[i + 1].clone().sub(P[i]); if (t.lengthSq() < 1e-12) continue;
+      const side = t.clone().cross(P[i].clone().normalize()).normalize().multiplyScalar(w / 2);
+      const a = P[i].clone().sub(side).sub(o), b = P[i].clone().add(side).sub(o), c = P[i + 1].clone().add(side).sub(o), d = P[i + 1].clone().sub(side).sub(o);
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xff7ad9, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+    m.position.copy(o); m.renderOrder = 5;
+    return m;
+  }
+  const targetSquares = () => targets.map((t) => { const [x, y] = toXY(t.latDeg, t.lonDeg); return [x - 5, y - 5, x + 5, y + 5]; });
+  view.onFrame(() => {
+    if (!group.visible) return;
+    const kpp = view.kmPerPx(), k = `${Math.round(Math.log(kpp) * 2)}:${view.exaggeration}:${targets.length}:${drives.length}:${window.__globe?.pyramid?.version ?? 0}`;
+    if (k === built) return;
+    built = k;
+    for (const c of [...group.children]) { group.remove(c); c.geometry?.dispose(); c.material?.dispose(); }
+    const lift = Math.max(0.02, kpp * 2.5) + 0.01 * view.exaggeration;
+    group.add(outline(sq.t120, TIERS[0].colour, lift));
+    if (sq.t40.length) group.add(outline(sq.t40, TIERS[1].colour, lift));
+    if (sq.t20.length) group.add(outline(sq.t20, TIERS[2].colour, lift));
+    if (sq.hires.length) { group.add(fill(sq.hires, TIERS[3].colour, lift, 0.07)); group.add(outline(sq.hires, TIERS[3].colour, lift)); }
+    for (const d of drives) for (const line of d.lines) if (line.length > 1) group.add(swath(line, lift));
+    if (targets.length) { const s = targetSquares(); group.add(fill(s, 0xffffff, lift, 0.08)); group.add(outline(s, 0xffffff, lift, true)); }
+  });
+
+  on.addEventListener('change', () => { group.visible = on.checked; built = ''; view.redraw(); if (on.checked && view.camera.dist > 2000) view.flyTo({ lat: -89, lon: 0, dist: 700, tilt: 0 }); });
+  addBtn.addEventListener('click', () => { adding = !adding; addBtn.setAttribute('aria-pressed', String(adding)); addBtn.textContent = adding ? 'Click the terrain…' : 'Mark an area to map'; if (adding && !on.checked) on.click(); renderKey(); });
+  let down = null;
+  view.canvas.addEventListener('pointerdown', (e) => { down = adding && e.button === 0 ? [e.clientX, e.clientY] : null; });
+  view.canvas.addEventListener('pointerup', (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) { down = null; return; }
+    down = null;
+    const hit = view.pick(e.clientX, e.clientY);
+    if (!hit) return;
+    if (hit.latDeg > -79.5) { hint.textContent = 'Targets go on the south polar map (south of 79.5°S) for now.'; return; }
+    targets.push({ latDeg: +hit.latDeg.toFixed(5), lonDeg: +hit.lonDeg.toFixed(5), halfKm: 5, addedMs: Date.now() });
+    adding = false; addBtn.setAttribute('aria-pressed', 'false'); addBtn.textContent = 'Mark an area to map';
+    changed();
+  });
+  $('.mp-export').addEventListener('click', () => downloadText(document, 'survey-targets.json', JSON.stringify({ about: 'Areas to map next, from the Lunar Site Navigator globe. Centres in selenographic degrees (east longitude); 10 × 10 km boxes.', targets }, null, 1)));
+  window.addEventListener('storage', (e) => { if (e.key === RECORDS_KEY) { readDrives(); changed(); } if (e.key === TARGETS_KEY) { try { targets = JSON.parse(e.newValue ?? '[]'); } catch { targets = []; } renderKey(); built = ''; } });
+  renderKey();
+  return { get targets() { return targets.map((t) => ({ ...t })); }, refresh() { readDrives(); changed(); } };
+}
+
+return { tileSquares, createMappedLayer };
+})();
+__m['hires.js'] = (() => {
+// High-resolution terrain patches around the landing sites (tools/fetch-hires.mjs, demo/data/hires.json):
+// 5 m, 10 m or 20 m LOLA, 10 × 10 km per site, polar stereographic map km like terrain.js. A patch has the
+// same sampling interface as the terrain.js levels (sample → metres | NaN, heightAtXY → metres | null,
+// kmPerPixel), so it can sit at the fine end of any list of levels.
+const { decodePack } = __m['globe-terrain.js'];
+const { toXY } = __m['terrain.js'];
+
+// One patch: n × n Int16 DN, pixel centres at xMin + (i + 0.5)·kpp, yMax − (j + 0.5)·kpp; bilinear.
+function createPatch({ id = null, data, n, kmPerPixel: kpp, xMin, yMax, dnToMeters = 0.5 }) {
+  const xMax = xMin + n * kpp, yMin = yMax - n * kpp;
+  function sample(x, y) {
+    const col = (x - xMin) / kpp - 0.5, row = (yMax - y) / kpp - 0.5;
+    if (!(col >= 0 && row >= 0 && col <= n - 1 && row <= n - 1)) return NaN;
+    const c0 = Math.min(Math.floor(col), n - 2), r0 = Math.min(Math.floor(row), n - 2), fc = col - c0, fr = row - r0, i = r0 * n + c0;
+    const top = data[i] + (data[i + 1] - data[i]) * fc, bottom = data[i + n] + (data[i + n + 1] - data[i + n]) * fc;
+    return (top + (bottom - top) * fr) * dnToMeters;
+  }
+  return {
+    id, n, kmPerPixel: kpp, xMin, yMax, xMax, yMin, bounds: { x0: xMin, x1: xMax, y0: yMin, y1: yMax },
+    sample,
+    heightAtXY: (x, y) => { const v = sample(x, y); return v === v ? v : null; },
+    heightAt: (latDeg, lonDeg) => { const v = sample(...toXY(latDeg, lonDeg)); return v === v ? v : null; },
+  };
+}
+
+const meets = (e, b) => e.xMin < b.x1 && e.xMin + e.n * e.kmPerPixel > b.x0 && e.yMax > b.y0 && e.yMax - e.n * e.kmPerPixel < b.y1;
+
+// The manifest's patches as a set that loads on demand. load(pack) → Promise<Uint8Array> (data-loader.js
+// loadData in a page). → { entries, list (loaded patches, coarse to fine), entriesIn(bounds), ensure(bounds),
+// ensureSite(id), sample(x, y), finestKmAt(bounds) }
+function createHiresSet(manifest, load, { onLoad = () => {} } = {}) {
+  const entries = Object.entries(manifest?.sites ?? {}).map(([id, e]) => ({ id, ...e }));
+  const loaded = new Map(), pending = new Map();
+  const list = [];
+  function ensureEntry(e) {
+    if (loaded.has(e.id)) return Promise.resolve(loaded.get(e.id));
+    if (pending.has(e.id)) return pending.get(e.id);
+    const p = load(e.pack).then((b) => decodePack(b, e.n)).then((data) => {
+      const patch = createPatch({ id: e.id, data, n: e.n, kmPerPixel: e.kmPerPixel, xMin: e.xMin, yMax: e.yMax });
+      loaded.set(e.id, patch);
+      list.push(patch);
+      list.sort((a, b) => b.kmPerPixel - a.kmPerPixel);   // coarse to fine, like terrain.js levels
+      onLoad(patch);
+      return patch;
+    }).catch(() => null).finally(() => pending.delete(e.id));
+    pending.set(e.id, p);
+    return p;
+  }
+  return {
+    entries, list,
+    entriesIn: (b) => entries.filter((e) => meets(e, b)),
+    ensure: (b) => Promise.all(entries.filter((e) => meets(e, b)).map(ensureEntry)),
+    ensureSite: (id) => { const e = entries.find((q) => q.id === id); return e ? ensureEntry(e) : Promise.resolve(null); },
+    sample(x, y) { for (let i = list.length - 1; i >= 0; i--) { const v = list[i].sample(x, y); if (v === v) return v; } return NaN; },
+    // the finest patch resolution available (loaded or not) over a box, km per pixel, or null
+    finestKmAt: (b) => entries.filter((e) => meets(e, b)).reduce((m, e) => (m === null || e.kmPerPixel < m ? e.kmPerPixel : m), null),
+  };
+}
+
+return { createPatch, createHiresSet };
+})();
 __m['boot.js'] = (() => {
 // Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
 // page itself, so it shows while the page and its data load, before any script runs; the page's script then
@@ -2162,10 +3341,16 @@ const { createGlobeView, cameraFromHash, cameraToHash } = __m['globe-view.js'];
 const { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } = __m['route3d.js'];
 const { createRouteLayer } = __m['globe-route.js'];
 const { createAttitudePanel, createMinimap } = __m['globe-route-hud.js'];
+const { createRouteProfile } = __m['globe-profile.js'];
+const { createCameraControls, CONTROLS_CSS } = __m['globe-controls.js'];
+const { createWaypointTool } = __m['globe-waypoints.js'];
+const { createMappedLayer } = __m['globe-mapped.js'];
 const { attitudeAt, bearingDeg } = __m['rover-attitude.js'];
 const { createHiresSet } = __m['hires.js'];
 const { stageBar, readMission, landedFor } = __m['mission-flow.js'];
 const { bootScreen } = __m['boot.js'];
+const { slopeColour, SLOPE_BANDS } = __m['slope-colours.js'];
+const { buildRecord, saveRecord, RECORDING_FIELDS, recordingCSV, fileName, downloadText } = __m['mission-save.js'];
 
 function readJson(id) {
   const el = document.getElementById(id);
@@ -2180,14 +3365,19 @@ const PRESETS = [
   { id: 'tycho', label: 'Tycho', lat: -43.31, lon: 348.64, dist: 260, tilt: 45 },
   { id: 'apollo11', label: 'Apollo 11', lat: 0.674, lon: 23.473, dist: 90, tilt: 35 },
 ];
+const hashFlag = (name) => new RegExp(`(^|[#&])${name}=1(&|$)`).test(location.hash);
 
 function startGlobe() {
   const $ = (id) => document.getElementById(id);
   const canvas = $('globe');
   const meta = readJson('data-terrain');
   const sites = readJson('data-sites') ?? [];
+  const hiresMeta = readJson('data-hires');
+  const embed = hashFlag('embed');
+  if (embed) document.body.classList.add('embed');
+  document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CONTROLS_CSS }));
   // high-resolution patches around the sites (5 / 10 / 20 m), loaded as the camera comes close
-  const hires = createHiresSet(readJson('data-hires'), (name) => load(name), { onLoad: () => invalidateSouth() });
+  const hires = createHiresSet(hiresMeta, (name) => load(name), { onLoad: () => invalidateSouth() });
   // the mission's steps (mission-flow.js): this page is step 3
   const stagesSlot = document.getElementById('stages');
   if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, '3d'));
@@ -2244,6 +3434,8 @@ function startGlobe() {
   const ex = $('exaggeration'), exOut = $('exaggeration-out');
   ex.addEventListener('input', () => { exOut.textContent = `${ex.value}×`; view?.setExaggeration(Number(ex.value)); });
   for (const r of document.querySelectorAll('input[name="colour"]')) r.addEventListener('change', () => view?.setColour(r.value));
+  const contours = $('contours'), contourOut = $('contour-out');
+  contours?.addEventListener('change', () => { view?.setContours(contours.checked); });
 
   const labels = $('labels');
   const labelEls = sites.filter((s) => Number.isFinite(s.latDeg)).map((s) => {
@@ -2283,9 +3475,10 @@ function startGlobe() {
     $('scale-text').textContent = km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`;
     const c = view.camera;
     $('centre-src').textContent = `Data at centre: LOLA ${terrain.sample(c.lat, c.lon)[1]}`;
+    if (contourOut) contourOut.textContent = view.contourInterval ? `every ${view.contourInterval} m` : '';
     const showLabels = c.dist < 4000;
-    for (const { s, el } of labelEls) {
-      const p = showLabels ? view.project(s.latDeg, s.lonDeg) : null;
+    for (const { s, el, always } of labelEls) {
+      const p = showLabels || always ? view.project(s.latDeg, s.lonDeg) : null;
       el.hidden = !p;
       if (p) el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
     }
@@ -2302,47 +3495,31 @@ function startGlobe() {
       boot.set(0.15, 'Global terrain in; building the view…');
       await terrain.init();
       let hashTimer = 0;
-      const routeMode = /(^|[#&])route=1(&|$)/.test(location.hash);
-      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + (routeMode ? '&route=1' : '')), 300); };
+      const routeMode = hashFlag('route');
+      const keep = `${routeMode ? '&route=1' : ''}${embed ? '&embed=1' : ''}`;
+      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + keep), 300); };
       // tiles over a high-resolution patch may refine to its pixel size (5 m: depth 12, 10 m: 11), elsewhere 20 m (10)
       const capDepth = (b) => { const k = hires.finestKmAt(b); return k === null ? 10 : k <= 0.0051 ? 12 : k <= 0.0101 ? 11 : 10; };
       const fromHash = cameraFromHash(location.hash);
       // opened from the stage bar without a camera: start over the mission's site
       const mission = readMission();
       const touch = landedFor(mission);   // where the lander came down, if it has
-      const startAt = fromHash.lat === undefined && mission && !/(^|[#&])route=1/.test(location.hash) ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
+      const startAt = fromHash.lat === undefined && mission && !routeMode ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
       view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
       view.onFrame(frame);
       window.__globe = { view, terrain, pyramid, hires };   // for debugging from the console
-      // where the lander touched down (written by the lander page): a lander on its legs, sized to the zoom
-      const landed = landedFor(readMission());
-      if (landed) {
-        const T = view.THREE, lander = new T.Group(), gold = new T.MeshBasicMaterial({ color: 0xffd23d });
-        const body = new T.Mesh(new T.CylinderGeometry(0.7, 0.9, 0.9, 8), gold); body.position.y = 1.35; lander.add(body);
-        for (let k = 0; k < 4; k++) {
-          const a = (k / 4) * Math.PI * 2 + Math.PI / 4, leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 1.5, 6), gold);
-          leg.position.set(Math.cos(a) * 0.95, 0.6, Math.sin(a) * 0.95); leg.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); lander.add(leg);
-        }
-        view.addObject(lander);
-        view.onFrame(() => {
-          const [x, y, z] = view.surface(landed.latDeg, landed.lonDeg, 0);
-          lander.position.set(x, y, z);
-          lander.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), lander.position.clone().normalize());
-          lander.scale.setScalar(view.kmPerPx() * 6);
-        });
-        const el = document.createElement('button');
-        el.type = 'button'; el.className = 'site site-lander'; el.textContent = landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander';
-        el.title = `Touchdown ${landed.latDeg.toFixed(4)}°, ${landed.lonDeg.toFixed(4)}°E`;
-        el.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
-        labels.appendChild(el);
-        labelEls.push({ s: { latDeg: landed.latDeg, lonDeg: landed.lonDeg }, el });
-        PRESETS.push({ id: 'lander', label: 'Lander', lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 });
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = 'Lander';
-        b.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
-        chips.appendChild(b);
+      showLanding(view, mission, labels, labelEls, chips);
+      // camera buttons; using them (other than zoom and tilt) leaves the route's follow mode
+      const controls = embed ? null : createCameraControls(view, { onUser: (a) => { if (!['in', 'out', 'tiltUp', 'tiltDown'].includes(a)) window.__globe.route?.stopFollow?.(); } });
+      window.__globe.controls = controls;
+      window.addEventListener('hashchange', () => { if (!hashFlag('route') || cameraFromHash(location.hash).lat !== undefined) view.jumpTo(cameraFromHash(location.hash)); });
+      if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission });
+      if (!embed) {
+        window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), mission, terrain, payload: window.__globe.route?.payload ?? null });
+        window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), meta, hires: hiresMeta });
       }
-      window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
-      if (routeMode) startRoute(view, cameraFromHash(location.hash));
+      // the small 3D window in the navigator: reload when the navigator writes a new route
+      if (embed) window.addEventListener('storage', (e) => { if (e.key === ROUTE3D_KEY) location.reload(); });
       document.body.classList.add('ready');
       // the loading screen lifts once the first view has no tiles left to build (or after 15 s)
       const bootT0 = performance.now();
@@ -2361,78 +3538,302 @@ function startGlobe() {
   })();
 }
 
+// Where the craft lands: the touchdown written by the lander page (a lander on its legs), else the mission's
+// planned landing site (a ring on the ground). Both carry a label that stays on screen at every zoom.
+function showLanding(view, mission, labels, labelEls, chips) {
+  const landed = landedFor(mission);
+  const at = landed ?? (mission ? { latDeg: mission.latDeg, lonDeg: mission.lonDeg, planned: true } : null);
+  if (!at) return;
+  const T = view.THREE, gold = new T.MeshBasicMaterial({ color: 0xffd23d });
+  const obj = new T.Group();
+  if (landed) {
+    const body = new T.Mesh(new T.CylinderGeometry(0.7, 0.9, 0.9, 8), gold); body.position.y = 1.35; obj.add(body);
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4, leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 1.5, 6), gold);
+      leg.position.set(Math.cos(a) * 0.95, 0.6, Math.sin(a) * 0.95); leg.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); obj.add(leg);
+    }
+  }
+  // a ring and a dot on the ground, drawn over the terrain so the spot reads from any angle
+  const ring = new T.Mesh(new T.RingGeometry(2.2, 2.8, 48), new T.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.9, side: T.DoubleSide, depthTest: false }));
+  ring.rotation.x = -Math.PI / 2; ring.renderOrder = 6; obj.add(ring);
+  const dot = new T.Mesh(new T.CircleGeometry(0.7, 24), new T.MeshBasicMaterial({ color: 0xffd23d, side: T.DoubleSide, depthTest: false }));
+  dot.rotation.x = -Math.PI / 2; dot.position.y = 0.01; dot.renderOrder = 6; obj.add(dot);
+  view.addObject(obj);
+  view.onFrame(() => {
+    const [x, y, z] = view.surface(at.latDeg, at.lonDeg, 0.002 * view.exaggeration);
+    obj.position.set(x, y, z);
+    obj.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), obj.position.clone().normalize());
+    obj.scale.setScalar(view.kmPerPx() * 6);
+    obj.visible = view.camera.dist < 3000;
+  });
+  const name = landed ? (landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander') : 'Landing site';
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'site site-lander'; el.textContent = name;
+  el.title = `${landed ? 'Touchdown' : 'Planned landing site'} ${at.latDeg.toFixed(4)}°, ${at.lonDeg.toFixed(4)}°E`;
+  el.addEventListener('click', () => view.flyTo({ lat: at.latDeg, lon: at.lonDeg, dist: 3, tilt: 55 }));
+  labels.appendChild(el);
+  labelEls.push({ s: { latDeg: at.latDeg, lonDeg: at.lonDeg }, el, always: true });
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip chip-lander'; b.textContent = name;
+  b.addEventListener('click', () => view.flyTo({ lat: at.latDeg, lon: at.lonDeg, dist: 3, tilt: 55 }));
+  chips.prepend(b);
+}
+
 // phase 6: the route handed over by the navigator (route3d.js payload in localStorage), with playback
-function startRoute(view, camFromHash) {
+function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   const $ = (id) => document.getElementById(id);
   let payload = null;
   try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; }
   if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
   document.body.classList.add('route-mode');
-  const layer = createRouteLayer(view, payload);
-  // the rover's live panels on the left: attitude (pitch, roll, yaw) and a minimap of the area around it
-  const left = $('route-left');
+  const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : 90 });
   const terrain = window.__globe.terrain;
   const heightAt = (lat, lon) => terrain.heightAt(lat, lon);
-  const attitude = createAttitudePanel(left);
-  const minimap = createMinimap(left, payload, heightAt, { landed: landedFor(readMission()) });
+  const landed = landedFor(mission);
   const ribbonColour = (q) => (q[5] & FLAGS.oneWay ? '#ff9f43' : q[4] !== null && q[4] < (payload.reserve ?? 0.2) ? '#ff5252' : !Number.isFinite(q[3]) && payload.pts.some((p) => Number.isFinite(p[3])) ? '#5a5a5a' : q[5] & FLAGS.lit ? '#f5f5f5' : '#5c73a8');
-  let lastHeading = 0;
-  window.__globe.route = { payload, layer };
+  const pts = payload.pts, total = pts[pts.length - 1][2];
   if (camFromHash.lat === undefined) view.flyTo({ ...frameRoute(payload), ms: 1500 });
+  if (embed) {
+    // the navigator's small 3D window: the route and the rover, nothing else; play on a loop
+    let t = 0, last = performance.now(), stamp = '';
+    view.onFrame(() => {
+      const now = performance.now(); t = (t + (now - last) / 14000) % 1; last = now;
+      const s = `${window.__globe?.terrain?.version ?? 0}:${window.__globe?.pyramid?.version ?? 0}`;
+      layer.frame(s); if (s !== stamp) { stamp = s; view.redraw(); }
+      const r = roverAtKm(t * total);
+      layer.setRover(r, 0xffd23d, { headingDeg: headingAhead(r.km, 0.05) ?? 0, pitchDeg: 0, rollDeg: 0 });
+    });
+    return;
+  }
+
+  // ---- panels: attitude and minimap on the left, the route view options on the right ----
+  const left = $('route-left');
+  const attitude = createAttitudePanel(left);
+  const minimap = createMinimap(left, payload, heightAt, { landed, site: mission ? { latDeg: mission.latDeg, lonDeg: mission.lonDeg } : null, slopeColour });
+  let colourBy = 'state';
+  const keyState = $('rh-key-state'), keySlope = $('rh-key-slope');
+  keySlope.innerHTML = SLOPE_BANDS.map((b) => `<span><i style="background:${b.colour}"></i>${b.label}</span>`).join('') + '<span class="muted">grade along the way</span>';
+  for (const r of document.querySelectorAll('input[name="rcolour"]')) r.addEventListener('change', () => {
+    if (!r.checked) return;
+    colourBy = r.value; layer.setColourBy(colourBy);
+    keyState.hidden = colourBy === 'slope'; keySlope.hidden = colourBy !== 'slope';
+    dirtyHud = true;
+  });
+  const opt = (id, on, enabled = true) => { const c = $(id); c.checked = on; c.disabled = !enabled; c.closest('label').classList.toggle('off', !enabled); return c; };
+  const optTraps = opt('rv-traps', layer.hasTraps, layer.hasTraps), optLegs = opt('rv-legs', true, (payload.wps ?? []).length > 1);
+  const optFrames = opt('rv-frames', false), optSearch = opt('rv-search', layer.hasSearch, layer.hasSearch);
+  if (!layer.hasTraps) $('rv-traps').closest('label').title = 'This route has no trap cells (the plan found no dips the rover could not climb out of, or mobility limits were off).';
+  if (!layer.hasSearch) optSearch.closest('label').title = 'Run the self-driving planner in the navigator to show its search here.';
+  optTraps.addEventListener('change', () => layer.setVisible('traps', optTraps.checked));
+  optSearch.addEventListener('change', () => layer.setVisible('search', optSearch.checked));
+  optFrames.addEventListener('change', () => { layer.setVisible('frames', optFrames.checked); framesBox.hidden = !optFrames.checked; });
+
+  // ---- where along the route: by time when the drive was simulated, else by distance ----
   const span = timeSpan(payload);
   const fmt = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
-  $('rh-name').textContent = `${payload.label} route · ${payload.lengthKm.toFixed(1)} km`;
-  const slider = $('rh-t'), play = $('rh-play'), speed = $('rh-speed'), follow = $('rh-follow');
-  let t = span ? span[0] : null, playing = false, lastReal = 0;
-  if (!span) { slider.disabled = true; play.disabled = true; }
+  $('rh-name').textContent = `${payload.label} route · ${total.toFixed(1)} km`;
+  const slider = $('rh-t'), play = $('rh-play'), speed = $('rh-speed'), follow = $('rh-follow'), skip = $('rh-skip');
+  let t = span ? span[0] : null, kmPos = 0, playing = false, lastReal = performance.now();
+  function roverAtKm(k) {
+    let i = 0; while (i + 2 < pts.length && pts[i + 1][2] < k) i++;
+    const a = pts[i], b = pts[i + 1], f = b[2] > a[2] ? Math.max(0, Math.min(1, (k - a[2]) / (b[2] - a[2]))) : 0;
+    let dl = b[1] - a[1]; if (dl > 180) dl -= 360; else if (dl < -180) dl += 360;
+    return { latDeg: a[0] + (b[0] - a[0]) * f, lonDeg: (a[1] + dl * f + 360) % 360, km: a[2] + (b[2] - a[2]) * f, soc: a[4], flags: f < 0.5 ? a[5] : b[5], state: k >= total ? 'arrived' : k > 0 ? 'driving' : 'ready', i };
+  }
+  // the bearing from the point at km k to the point lookKm further along (null at the end)
+  function headingAhead(k, lookKm) {
+    if (k + 1e-6 >= total) return null;
+    const a = roverAtKm(k), b = roverAtKm(Math.min(total, k + lookKm));
+    return Math.hypot(b.latDeg - a.latDeg, (b.lonDeg - a.lonDeg) * Math.cos(a.latDeg * Math.PI / 180)) < 1e-9 ? null : bearingDeg(a.latDeg, a.lonDeg, b.latDeg, b.lonDeg);
+  }
+  function tAtKm(k) {
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (b[2] >= k && Number.isFinite(a[3]) && Number.isFinite(b[3])) return a[3] + (b[3] - a[3]) * (b[2] > a[2] ? Math.max(0, (k - a[2]) / (b[2] - a[2])) : 0);
+    }
+    return span ? span[1] : null;
+  }
+  const roverNow = () => (span ? roverAt(payload, t) : roverAtKm(kmPos));
+  function seekKm(k) { if (span) t = Math.max(span[0], Math.min(span[1], tAtKm(k))); else kmPos = Math.max(0, Math.min(total, k)); dirtyHud = true; }
+
+  // playback speeds: pick the one that plays the driving in about 25 seconds
+  const SPEEDS = [[1 / 60, '1 min/s'], [1 / 6, '10 min/s'], [1, '1 h/s'], [6, '6 h/s'], [24, '1 day/s']];
+  const stopH = (payload.stops ?? []).reduce((a, st) => a + (st.toMs - st.fromMs) / 3600e3, 0);
+  const driveH = span ? Math.max(0.05, (span[1] - span[0]) / 3600e3 - stopH) : total / 0.8;
+  const pick = SPEEDS.reduce((best, s) => (Math.abs(Math.log(s[0] / (driveH / 25))) < Math.abs(Math.log(best[0] / (driveH / 25))) ? s : best));
+  speed.innerHTML = SPEEDS.map(([v, l]) => `<option value="${v}"${v === pick[0] ? ' selected' : ''}>${l}</option>`).join('');
+  if (!span) { slider.title = 'No simulated drive: playing by distance at 0.8 km/h'; }
+
   const colour = { ready: 0xffd23d, driving: 0xffd23d, parked: 0x8ab4f8, arrived: 0x7ee08a, empty: 0xff5252 };
   const label = { ready: 'Ready to leave', driving: 'Driving', parked: 'Parked, charging', arrived: 'Arrived', empty: 'Battery empty' };
-  function show() {
-    const r = span ? roverAt(payload, t) : roverAt(payload, -Infinity);
-    layer.setRover(r, colour[r.state]);
-    // heading of travel: towards the next point (kept while parked or at the end)
-    const cur = payload.pts[r.i], nxt = payload.pts[Math.min(payload.pts.length - 1, r.i + 1)];
-    if (nxt !== cur) lastHeading = bearingDeg(r.latDeg, r.lonDeg, nxt[0], nxt[1]);
-    const kpp = terrain.sample(r.latDeg, r.lonDeg)[2] ?? 0.24, baseKm = Math.max(0.01, 2 * kpp);
-    attitude.update({ att: attitudeAt(heightAt, r.latDeg, r.lonDeg, lastHeading, baseKm), limits: payload.limits, baselineM: baseKm * 1000, stateText: label[r.state] });
-    minimap.draw({ latDeg: r.latDeg, lonDeg: r.lonDeg, headingDeg: lastHeading, headingUp: follow.checked, colourOf: ribbonColour });
+  const profile = createRouteProfile($('rh-profile'), payload, { heightAt, slopeColour, onSeek: (k) => seekKm(k) });
+
+  // ---- the rover's heading eases towards the way ahead, so the model, the panels and the camera turn smoothly ----
+  let cur = roverNow(), head = headingAhead(cur.km, 0.06) ?? 0, att = null, dirtyHud = true, lastHudHead = null;
+  function updateHud() {
+    const kpp = terrain.sample(cur.latDeg, cur.lonDeg)[2] ?? 0.24, baseKm = Math.max(0.01, 2 * kpp);
+    att = attitudeAt(heightAt, cur.latDeg, cur.lonDeg, head, baseKm);
+    layer.setRover(cur, colour[cur.state], { headingDeg: head, pitchDeg: att?.pitchDeg ?? 0, rollDeg: att?.rollDeg ?? 0 });
+    attitude.update({ att, limits: payload.limits, baselineM: baseKm * 1000, stateText: label[cur.state] });
+    minimap.draw({ latDeg: cur.latDeg, lonDeg: cur.lonDeg, headingDeg: head, headingUp: follow.checked, colourOf: ribbonColour, km: cur.km, colourBy });
+    profile.update(cur.km);
     if (span) { slider.value = String(Math.round(((t - span[0]) / (span[1] - span[0])) * 1000)); $('rh-when').textContent = fmt(t); }
+    else { slider.value = String(Math.round((kmPos / total) * 1000)); $('rh-when').textContent = `${kmPos.toFixed(2)} km of ${total.toFixed(2)} km`; }
     const chip = (text, on, bad = false) => `<span class="${bad ? 'bad' : on ? 'on' : ''}">${text}</span>`;
-    const f = r.flags ?? 0;
+    const f = cur.flags ?? 0;
     $('rh-chips').innerHTML = [
-      chip(label[r.state], r.state === 'driving' || r.state === 'arrived', r.state === 'empty'),
-      chip(`km ${r.km.toFixed(1)}`, true),
-      r.soc !== null && r.soc !== undefined ? chip(`battery ${Math.round(r.soc * 100)}%`, true, r.soc < (payload.reserve ?? 0.2)) : '',
+      chip(label[cur.state], cur.state === 'driving' || cur.state === 'arrived', cur.state === 'empty'),
+      chip(`km ${cur.km.toFixed(2)}`, true),
+      cur.soc !== null && cur.soc !== undefined ? chip(`battery ${Math.round(cur.soc * 100)}%`, true, cur.soc < (payload.reserve ?? 0.2)) : '',
       span ? chip(f & FLAGS.lit ? 'Sunlit' : 'In shadow', !!(f & FLAGS.lit)) : '',
       span ? chip(f & FLAGS.earth ? 'Earth in view' : 'No Earth link', !!(f & FLAGS.earth)) : '',
       chip(f & FLAGS.station ? 'Station link' : 'No station link', !!(f & FLAGS.station)),
       f & FLAGS.oneWay ? chip('One-way stretch', false, true) : '',
     ].join('');
-    if (follow.checked) {
-      const nxt = payload.pts[Math.min(payload.pts.length - 1, r.i + 1)], cur = payload.pts[r.i];
-      const heading = Math.atan2(Math.sin((nxt[1] - cur[1]) * Math.PI / 180) * Math.cos(nxt[0] * Math.PI / 180),
-        Math.cos(cur[0] * Math.PI / 180) * Math.sin(nxt[0] * Math.PI / 180) - Math.sin(cur[0] * Math.PI / 180) * Math.cos(nxt[0] * Math.PI / 180) * Math.cos((nxt[1] - cur[1]) * Math.PI / 180)) * 180 / Math.PI;
-      const c = view.camera;
-      view.jumpTo({ lat: r.latDeg, lon: r.lonDeg, heading: Number.isFinite(heading) && (nxt !== cur) ? (heading + 360) % 360 : c.heading, dist: Math.min(c.dist, 12), tilt: Math.max(c.tilt, 55) });
-    }
+    lastHudHead = head;
+    dirtyHud = false;
   }
-  slider.addEventListener('input', () => { if (!span) return; t = span[0] + (Number(slider.value) / 1000) * (span[1] - span[0]); show(); });
-  play.addEventListener('click', () => { if (!span) return; if (t >= span[1]) t = span[0]; playing = !playing; play.textContent = playing ? '❚❚' : '▶'; play.setAttribute('aria-label', playing ? 'Pause' : 'Play'); lastReal = performance.now(); });
-  follow.addEventListener('change', show);
-  let stamp = '';
+
+  // ---- follow: the camera rides behind the rover; position exact, heading eased, zoom and tilt left to the user ----
+  let followHead = null, followFrom = 0;
+  function startFollow() {
+    const c = view.camera, h = headingAhead(cur.km, 0.2) ?? head;
+    followHead = h; followFrom = performance.now() + 950;
+    view.flyTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: h, dist: Math.min(c.dist, 2.5), tilt: Math.max(c.tilt, 55), ms: 900 });
+  }
+  function stopFollow() { if (follow.checked) { follow.checked = false; dirtyHud = true; } }
+  follow.addEventListener('change', () => { if (follow.checked) startFollow(); dirtyHud = true; });
+  // dragging the map takes the camera back from follow mode (scrolling to zoom does not)
+  let downAt = null;
+  view.canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+  view.canvas.addEventListener('pointermove', (e) => { if (downAt && e.buttons && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) { stopFollow(); downAt = null; } });
+  view.canvas.addEventListener('pointerup', () => { downAt = null; });
+
+  slider.addEventListener('input', () => { const f = Number(slider.value) / 1000; if (span) t = span[0] + f * (span[1] - span[0]); else kmPos = f * total; dirtyHud = true; });
+  play.addEventListener('click', () => {
+    const atEnd = span ? t >= span[1] : kmPos >= total;
+    if (atEnd) { if (span) t = span[0]; else kmPos = 0; }
+    playing = !playing; play.textContent = playing ? '❚❚' : '▶'; play.setAttribute('aria-label', playing ? 'Pause' : 'Play'); lastReal = performance.now();
+  });
+
+  // ---- labels on the 3D view: legs between waypoints (distance, time, steepest grade) and the rover's frames ----
+  const labelsEl = $('labels');
+  const legs = [];
+  const wpIdx = (payload.wps ?? []).map((w) => {
+    let best = 0, bd = Infinity;
+    pts.forEach((q, i) => { const d = (q[0] - w.latDeg) ** 2 + ((q[1] - w.lonDeg) * Math.cos((w.latDeg * Math.PI) / 180)) ** 2; if (d < bd) { bd = d; best = i; } });
+    return best;
+  });
+  const dur = (ms) => { const m = Math.round(ms / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`; };
+  for (let k = 0; k + 1 < wpIdx.length; k++) {
+    const a = wpIdx[k], b = wpIdx[k + 1];
+    if (b <= a) continue;
+    const mid = pts[Math.round((a + b) / 2)], km = pts[b][2] - pts[a][2];
+    const ms = Number.isFinite(pts[a][3]) && Number.isFinite(pts[b][3]) ? pts[b][3] - pts[a][3] : null;
+    let steep = 0; for (let i = a; i <= b; i++) if (Number.isFinite(pts[i][6]) && Math.abs(pts[i][6]) > Math.abs(steep)) steep = pts[i][6];
+    const el = document.createElement('div');
+    el.className = 'leg-label';
+    el.innerHTML = `<b>Leg ${k + 1}</b> ${km.toFixed(2)} km${ms !== null ? ` · ${dur(ms)}` : ''}${steep ? ` · max ${Math.abs(steep).toFixed(0)}°` : ''}`;
+    labelsEl.appendChild(el);
+    legs.push({ el, lat: mid[0], lon: mid[1] });
+  }
+  (payload.wps ?? []).forEach((w, i) => {
+    const el = document.createElement('div');
+    el.className = 'wp-label'; el.textContent = i === 0 ? 'Start' : i === payload.wps.length - 1 ? 'End' : `WP ${i}`;
+    labelsEl.appendChild(el);
+    legs.push({ el, lat: w.latDeg, lon: w.lonDeg, wp: true });
+  });
+  const framesBox = document.createElement('div');
+  framesBox.className = 'frames-box'; framesBox.hidden = true;
+  labelsEl.appendChild(framesBox);
+  const frameEls = new Map();
+  function placeLabels() {
+    for (const L of legs) {
+      const p = optLegs.checked ? view.project(L.lat, L.lon) : null;
+      L.el.hidden = !p;
+      if (p) L.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+    }
+    if (!optFrames.checked) return;
+    for (const { name, p } of layer.frames()) {
+      let el = frameEls.get(name);
+      if (!el) { el = document.createElement('div'); el.className = 'frame-label'; el.textContent = name; framesBox.appendChild(el); frameEls.set(name, el); }
+      const s = view.projectWorld(p.x, p.y, p.z);
+      el.hidden = !s;
+      if (s) el.style.transform = `translate(${Math.round(s.x)}px, ${Math.round(s.y)}px)`;
+    }
+    const up = layer.scaleUp;
+    let note = frameEls.get('_note');
+    if (!note) { note = document.createElement('div'); note.className = 'frame-note'; framesBox.appendChild(note); frameEls.set('_note', note); }
+    note.textContent = up > 1.5 ? `Rover drawn ${Math.round(up)}× its real size (2.2 m) to stay visible; frames: x forward (red), y left (green), z up (blue)` : 'Rover at real size (2.2 m); frames: x forward (red), y left (green), z up (blue)';
+  }
+
+  // ---- recording the motion during playback, and saving it with the route ----
+  const recBtn = $('rh-rec'), recOut = $('rh-rec-out'), recSave = $('rh-rec-save'), recCsv = $('rh-rec-csv');
+  let rec = null, lastSample = null;
+  // a sample every 30 s of drive time (2 m by distance), at most about 3000 over the whole drive
+  const recEvery = span ? Math.max(30e3, (span[1] - span[0]) / 3000) : Math.max(0.002, total / 3000);
+  recBtn.addEventListener('click', () => {
+    if (rec?.on) { rec.on = false; recBtn.classList.remove('on'); recBtn.textContent = '● Record'; showRec(); return; }
+    rec = { on: true, startedMs: Date.now(), fields: [...RECORDING_FIELDS], samples: [] }; lastSample = null;
+    recBtn.classList.add('on'); recBtn.textContent = '■ Stop';
+    if (!playing) play.click();
+    showRec();
+  });
+  function sample() {
+    if (!rec?.on || !att) return;
+    const key = span ? t : kmPos;
+    if (lastSample !== null && Math.abs(key - lastSample) < recEvery) return;
+    lastSample = key;
+    const hM = heightAt(cur.latDeg, cur.lonDeg);
+    rec.samples.push([span ? Math.round(t) : null, +cur.latDeg.toFixed(6), +cur.lonDeg.toFixed(6), +cur.km.toFixed(4), Number.isFinite(hM) ? +hM.toFixed(1) : null, +att.pitchDeg.toFixed(2), +att.rollDeg.toFixed(2), +att.yawDeg.toFixed(1), cur.soc ?? null, cur.flags ?? 0]);
+    if (rec.samples.length % 10 === 0) showRec();
+  }
+  function showRec() {
+    const n = rec?.samples.length ?? 0;
+    recOut.textContent = rec ? `${n} samples${rec.on ? ' · recording' : ''}` : '';
+    recSave.disabled = recCsv.disabled = !n;
+  }
+  const record = () => buildRecord({ mission, settings: { limits: payload.limits }, summary: { routeId: payload.routeId, label: payload.label, lengthKm: payload.lengthKm, arriveMs: payload.arriveMs, socMin: Math.min(...pts.map((q) => q[4]).filter(Number.isFinite)) }, route: payload, recording: rec?.samples.length ? { startedMs: rec.startedMs, fields: rec.fields, samples: rec.samples } : null });
+  recSave.addEventListener('click', () => {
+    const r = record(), res = saveRecord(r);
+    recOut.textContent = res.ok ? `Saved, ${r.recording?.samples.length ?? 0} samples · in the navigator's Mission file` : res.reason;
+    recOut.title = r.name;
+    if (res.ok) { downloadText(document, fileName(r, 'json'), JSON.stringify(r), 'application/json'); window.__globe.mapped?.refresh(); }
+  });
+  recCsv.addEventListener('click', () => { const r = record(); downloadText(document, fileName(r, 'motion.csv'), recordingCSV(r.recording), 'text/csv'); });
+  showRec();
+
+  // ---- every frame ----
+  let stamp = '', lastFrame = performance.now();
   view.onFrame(() => {
+    const now = performance.now(), dt = Math.min(0.25, (now - lastFrame) / 1000); lastFrame = now;
     const p = window.__globe?.pyramid;
     const s = `${window.__globe?.terrain?.version ?? 0}:${p?.version ?? 0}`;
     layer.frame(s);
     if (s !== stamp) { stamp = s; view.redraw(); }
-    if (playing && span) {
-      const now = performance.now(), dt = (now - lastReal) / 1000; lastReal = now;
-      t = Math.min(span[1], t + dt * Number(speed.value) * 3600e3);
-      if (t >= span[1]) { playing = false; play.textContent = '▶'; }
-      show();
+    if (playing) {
+      const fast = skip.checked && cur.state === 'parked' ? 40 : 1;
+      const rate = Number(speed.value) * fast;   // drive hours per real second
+      if (span) { t = Math.min(span[1], t + dt * rate * 3600e3); if (t >= span[1]) stopPlay(); }
+      else { kmPos = Math.min(total, kmPos + dt * rate * 0.8); if (kmPos >= total) stopPlay(); }
+      dirtyHud = true;
     }
+    cur = roverNow();
+    const want = headingAhead(cur.km, 0.06);
+    if (want !== null) { const d = ((want - head + 540) % 360) - 180; head = (head + d * (1 - Math.exp(-dt / 0.35)) + 360) % 360; }
+    if (dirtyHud || lastHudHead === null || Math.abs(((head - lastHudHead + 540) % 360) - 180) > 0.3) updateHud();
+    if (follow.checked && now >= followFrom) {
+      const target = headingAhead(cur.km, Math.max(0.08, Math.min(0.6, view.kmPerPx() * 120)));
+      if (followHead === null) followHead = target ?? head;
+      if (target !== null) { const d = ((target - followHead + 540) % 360) - 180; followHead = (followHead + d * (1 - Math.exp(-dt / 0.9)) + 360) % 360; }
+      const c = view.camera;
+      view.jumpTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: followHead, dist: c.dist, tilt: c.tilt });
+    }
+    placeLabels();
+    sample();
   });
-  show();
+  function stopPlay() { playing = false; play.textContent = '▶'; play.setAttribute('aria-label', 'Play'); if (rec?.on) recBtn.click(); }
+  window.__globe.route = { payload, layer, stopFollow, seekKm, get rover() { return cur; }, get recording() { return rec; } };
+  updateHud();
 }
 
 startGlobe();

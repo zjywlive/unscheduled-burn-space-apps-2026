@@ -15,7 +15,13 @@ export const MAX_RECORDS = 20;
 export const RECORDING_FIELDS = Object.freeze(['tMs', 'latDeg', 'lonDeg', 'km', 'heightM', 'pitchDeg', 'rollDeg', 'yawDeg', 'soc', 'flags']);
 const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
 
-export function buildRecord({ name = null, mission = null, settings = {}, summary = {}, route, recording = null, savedMs = Date.now() }) {
+// The self-driving planner's search trees (route.autonav.trees) can be thousands of edges: a saved record keeps
+// at most this many, so twenty records still fit in the browser's storage.
+export const SAVED_TREE_EDGES = 600;
+
+export function buildRecord({ name = null, mission = null, settings = {}, summary = {}, route: full, recording = null, savedMs = Date.now() }) {
+  const trees = full?.autonav?.trees;
+  const route = trees?.length > SAVED_TREE_EDGES ? { ...full, autonav: { ...full.autonav, trees: trees.filter((_, i) => i % Math.ceil(trees.length / SAVED_TREE_EDGES) === 0) } } : full;
   const id = `m${savedMs.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
   const label = route?.label ? `${route.label} route` : 'Route';
   const where = mission?.siteName ?? (route?.pts?.[0] ? `${route.pts[0][0].toFixed(2)}°, ${route.pts[0][1].toFixed(2)}°` : '');

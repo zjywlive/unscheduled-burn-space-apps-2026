@@ -112,8 +112,28 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   scene.add(group);
   const matCyl = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
   const matCap = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // contour lines drawn in the fragment shader from the height of each pixel (radius minus the Moon's, without
+  // the exaggeration), every uInterval metres, each fifth one stronger; the interval follows the zoom
+  const contourU = { uContours: { value: 0 }, uInterval: { value: 50 }, uExag: { value: 3 }, uMoonR: { value: MOON_R_KM } };
+  for (const m of [matCyl, matCap]) {
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, contourU);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLsnWorld;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLsnWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;')
+        .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        if (uContours > 0.5) {
+          float hm = (length(vLsnWorld) - uMoonR) * 1000.0 / uExag;
+          float q = hm / uInterval, w = fwidth(q);
+          float d = abs(fract(q + 0.5) - 0.5) / max(w, 1e-5);
+          float major = abs(fract(q / 5.0 + 0.5) - 0.5) * 5.0 / max(w, 1e-5);
+          float line = (1.0 - smoothstep(0.3, 1.1, d)) * 0.4 + (1.0 - smoothstep(0.6, 1.8, major)) * 0.45;
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.86, 0.45), clamp(line, 0.0, 0.85) * step(w, 0.45));
+        }`);
+    };
+  }
 
-  const state = { exaggeration: 3, colour: 'shade' };
+  const state = { exaggeration: 3, colour: 'shade', contours: false };
   const cam = { lat: -20, lon: 20, dist: 6200, heading: 0, tilt: 0, ...initial };
   const cache = new Map();   // node id → { mesh, used, stale }
   const top = roots();
@@ -275,8 +295,14 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     return best;
   }
   function surfaceR(lat, lon) { return MOON_R_KM + terrain.heightAt(lat, lon) * state.exaggeration / 1000; }
+  // the target's radius and the ground clearance ease towards their new values over a few frames, so a camera
+  // that follows the rover over rough ground glides instead of stepping with every height sample
+  const ease = { r: null, clear: null };
   function placeCamera() {
-    const T = unit(cam.lat, cam.lon), r = surfaceR(cam.lat, cam.lon);
+    const T = unit(cam.lat, cam.lon), rNow = surfaceR(cam.lat, cam.lon);
+    if (ease.r === null || fly || Math.abs(rNow - ease.r) > Math.max(0.05, cam.dist * 0.2)) ease.r = rNow;
+    else { ease.r += (rNow - ease.r) * 0.18; if (Math.abs(rNow - ease.r) > 1e-5) dirty = true; }
+    const r = ease.r;
     const U = new THREE.Vector3(...T), tgt = U.clone().multiplyScalar(r);
     const N = new THREE.Vector3(-Math.sin(cam.lat * RAD) * Math.cos(cam.lon * RAD), Math.cos(cam.lat * RAD), Math.sin(cam.lat * RAD) * Math.sin(cam.lon * RAD));
     const Ea = new THREE.Vector3(-Math.sin(cam.lon * RAD), 0, -Math.cos(cam.lon * RAD));
@@ -289,7 +315,10 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     // keep the camera above the ground: the terrain under it and in a ring around it (so a ridge beside it
     // cannot swallow the near plane), plus a margin that grows with the distance to the target
     const ground = groundAround(camera.position, Math.max(0.08, cam.dist * 0.12));
-    const minR = ground + Math.max(0.03, cam.dist * 0.04);
+    const soft = ground + Math.max(0.03, cam.dist * 0.04), hard = ground + Math.max(0.01, cam.dist * 0.012);
+    if (ease.clear === null || fly || Math.abs(soft - ease.clear) > Math.max(0.2, cam.dist * 0.5)) ease.clear = soft;
+    else { ease.clear += (soft - ease.clear) * 0.12; if (Math.abs(soft - ease.clear) > 1e-5) dirty = true; }
+    const minR = Math.max(hard, ease.clear);
     const camRad = camera.position.length();
     if (camRad < minR) { camera.position.multiplyScalar(minR / camRad); camera.lookAt(tgt); }
     camera.updateMatrixWorld();   // select() culls with this frame's matrices, not the last render's
@@ -379,6 +408,12 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     for (const [, e] of cache) e.mesh.visible = shown.has(e.mesh);
     stats = { drawn: draw.length, queued: build.filter((n) => !cache.has(n.id)).length, cached: cache.size, maxDepth: Math.max(0, ...draw.map((n) => n.depth)) };
     if (cache.size > CACHE_MAX) evict();
+    if (state.contours) {
+      // about one line per 14 px on a 20° slope: interval ≈ 14 px × km per px × tan 20°, rounded to 1, 2, 5 × 10ⁿ m
+      const want = kmPerPx() * 1000 * 14 * 0.36, p = Math.pow(10, Math.floor(Math.log10(Math.max(1, want))));
+      contourU.uInterval.value = [1, 2, 5, 10].map((m) => m * p).find((v) => v >= want) ?? 10 * p;
+    }
+    contourU.uContours.value = state.contours ? 1 : 0; contourU.uExag.value = state.exaggeration;
     const tr = performance.now();
     renderer.render(scene, camera);
     perf.renderMs += performance.now() - tr; perf.frames++;
@@ -435,7 +470,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     const hit = pick(e.clientX, e.clientY);
     if (hit) flyTo({ lat: hit.latDeg, lon: hit.lonDeg, dist: cam.dist * 0.35 });
   });
-  const maxTilt = () => (cam.dist > 2500 ? 0 : cam.dist > 600 ? 40 : 75);
+  const maxTilt = () => (cam.dist > 2500 ? 0 : cam.dist > 600 ? 40 : 80);
 
   // ---- fly-to ----
   function flyTo({ lat, lon, dist = cam.dist, heading = 0, tilt = 0, ms = 1800 }) {
@@ -499,11 +534,24 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     return { x: (tmp.x + 1) / 2 * canvas.clientWidth, y: (1 - tmp.y) / 2 * canvas.clientHeight };
   }
 
+  // screen position of a world point (km), for labels on 3D objects; null when behind the camera or off screen
+  function projectWorld(x, y, z) {
+    tmp.set(x, y, z);
+    const toP = tmp.clone().sub(camera.position);
+    if (toP.dot(camera.getWorldDirection(new THREE.Vector3())) <= 0) return null;
+    // hidden behind the Moon's limb: the point is on the far side of the horizon from the camera
+    const pr = tmp.length(), cr = camera.position.length();
+    if (tmp.dot(camera.position) / (pr * cr) < Math.min(MOON_R_KM, pr) / cr - 1e-4 && cr > MOON_R_KM * 1.02) return null;
+    tmp.project(camera);
+    if (tmp.z > 1 || Math.abs(tmp.x) > 1.05 || Math.abs(tmp.y) > 1.05) return null;
+    return { x: (tmp.x + 1) / 2 * canvas.clientWidth, y: (1 - tmp.y) / 2 * canvas.clientHeight };
+  }
+
   frameLoop();
   window.addEventListener('resize', () => { dirty = true; });
 
   return {
-    flyTo, pick, project, invalidate,
+    flyTo, pick, project, projectWorld, invalidate,
     jumpTo(c) { fly = null; Object.assign(cam, c); dirty = true; },
     // phase 6: extra objects in the scene, and points on the terrain surface (km, world frame)
     THREE,
@@ -527,6 +575,10 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     kmPerPx,
     setExaggeration(v) { state.exaggeration = v; rebuildAll(); },
     setColour(mode) { state.colour = mode; for (const [, e] of cache) e.stale = true; dirty = true; },
+    setContours(on) { state.contours = !!on; dirty = true; },
+    get contourInterval() { return state.contours ? contourU.uInterval.value : null; },
+    maxTilt,
+    get canvas() { return canvas; },
     redraw() { dirty = true; },
     onFrame(fn) { const loop = () => { fn(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); },
     destroy() { cancelAnimationFrame(raf); renderer.dispose(); },

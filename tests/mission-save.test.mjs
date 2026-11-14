@@ -85,3 +85,12 @@ test('CSV: one row per route point and per recorded sample', () => {
   assert.equal(recordingCSV(null), '');
   assert.equal(fileName({ name: 'Flattest route · 2027/01' }, 'csv'), 'Flattest_route_202701.csv');
 });
+
+test('a saved record keeps a thinned sample of the self-driving search trees', async () => {
+  const { SAVED_TREE_EDGES } = await import('../demo/src/mission-save.js');
+  const trees = Array.from({ length: 5000 }, (_, i) => [-89.4, 222.7, -89.4 - i * 1e-5, 222.7]);
+  const r = buildRecord({ route: { ...route, autonav: { trajectory: [[-89.4, 222.7], [-89.42, 222.8]], candidates: [], trees } }, savedMs: T });
+  assert.ok(r.route.autonav.trees.length <= SAVED_TREE_EDGES && r.route.autonav.trees.length > SAVED_TREE_EDGES / 2);
+  assert.equal(r.route.autonav.trajectory.length, 2);
+  assert.equal(route.autonav, undefined, 'the input is not changed');
+});
