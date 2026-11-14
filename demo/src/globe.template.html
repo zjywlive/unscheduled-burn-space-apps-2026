@@ -47,6 +47,23 @@
   .site::before { content: ""; position: absolute; left: 5px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #ffb74d; }
   .site[hidden] { display: none; }
   body:not(.ready) .panel, body:not(.ready) .readout { opacity: 0.5; }
+  /* phase 6: route playback */
+  .route-hud { left: 50%; transform: translateX(-50%); bottom: 16px; width: min(640px, calc(100vw - 600px)); min-width: 420px; padding: 10px 14px; display: none; gap: 8px; }
+  body.route-mode .route-hud { display: grid; }
+  body.route-mode .status { display: none; }
+  .route-hud .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .route-hud .name { font-weight: 600; }
+  .route-hud .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .route-hud .ctl { display: flex; align-items: center; gap: 8px; }
+  .route-hud .ctl input[type=range] { flex: 1; accent-color: #ffd23d; }
+  .route-hud button, .route-hud select { font: inherit; color: var(--text); background: rgba(255,255,255,0.08); border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
+  .route-hud .chips { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .route-hud .chips span { padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.07); border: 1px solid var(--line); color: var(--muted); }
+  .route-hud .chips span.on { color: var(--text); border-color: rgba(255,255,255,0.3); }
+  .route-hud .chips span.bad { color: #ff8a80; border-color: rgba(255,82,82,0.5); }
+  .route-hud .key { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 11px; }
+  .route-hud .key i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  @media (max-width: 1100px) { .route-hud { width: calc(100vw - 32px); min-width: 0; bottom: 120px; } }
 </style>
 </head>
 <body>
@@ -80,6 +97,17 @@
   <div id="readout-src"></div>
   <div class="scale"><div id="scale-bar"></div><span id="scale-text"></span></div>
 </footer>
+<section class="glass route-hud" aria-label="Route playback">
+  <div class="top"><span class="name" id="rh-name">Route</span><span class="when" id="rh-when"></span></div>
+  <div class="ctl">
+    <button type="button" id="rh-play" aria-label="Play">▶</button>
+    <input type="range" id="rh-t" min="0" max="1000" value="0" aria-label="Time along the drive">
+    <select id="rh-speed" aria-label="Playback speed"><option value="1">1 h/s</option><option value="6" selected>6 h/s</option><option value="24">1 day/s</option></select>
+    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px"><input type="checkbox" id="rh-follow"> Follow</label>
+  </div>
+  <div class="chips" id="rh-chips"></div>
+  <div class="key"><span><i style="background:#f5f5f5"></i>sunlit</span><span><i style="background:#5c73a8"></i>shadow</span><span><i style="background:#ff9f43"></i>one-way</span><span><i style="background:#ff5252"></i>battery under reserve</span><span><i style="background:#7ee08a;border-radius:50%;width:8px;height:8px"></i>haven</span><span><i style="background:#8ab4f8;border-radius:50%;width:8px;height:8px"></i>parked</span></div>
+</section>
 <div class="glass status">
   <div id="centre-src">Loading…</div>
   <div id="loading"></div>

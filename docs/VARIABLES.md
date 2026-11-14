@@ -31,7 +31,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Max leg length | km | assumed (160 km) | ✅ | `route-plan.js` `MAX_LEG_KM` | |
 | Route cost weights | — | assumed | ✅ | `route-plan.js` `COSTS`, `SUNNY_WEIGHTS` | short / flat / sunny |
 | Rover speed | km/h | assumed (default 0.8) | ✅ | `route-plan.js` `speedFactor` | card: Speed; drive time per route, half speed at the climb limit, 70 % at the descent limit (assumed) |
-| 3D route view (2D topo → 3D) | — | derived from DEM | 🟡 | `globe-view.js`, `map/` | 3D terrain globe built (phase 1); route ribbon on it is phase 6 |
+| 3D route view (2D topo → 3D) | — | derived from DEM | ✅ | `globe-view.js`, `globe-route.js`, `route3d.js` | the route draped on the 3D terrain, coloured by sunlight, one-way and battery; "Fly along in 3D" from the navigator |
 
 ## 2. Sunlight and thermal
 
@@ -83,7 +83,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 
 | Variable | Unit | Source | Status | Code | Notes |
 |---|---|---|---|---|---|
-| **Rover position (real time)** | lat/lon/alt | input (live feed or simulated track) | ⬜ | | time playback exists, but no rover position yet |
+| **Rover position (real time)** | lat/lon | simulated track (no live feed) | 🟡 | `route3d.js` `roverAt` | the simulated drive played back on the globe: position, battery, sunlight, links, parked or driving; a live feed would replace the simulated times |
 | Position accuracy | m (3σ) | assumed | ⬜ | | [JPL-SS]: ≤10 m with a surface station and ≥3 orbiters |
 | **Comms-denied navigation (stars / Sun / Earth)** | deg | derived: bearing to the haven, Sun and Earth azimuth relative to it, only when above the local skyline | ✅ | `contingency.js` `bearing`, `relAngle` | stars are not modelled (named as the fallback when neither body is up) |
 | Dead-reckoning drift | % of distance | assumed (2 %) | ✅ | `contingency.js` `HAVEN_DEFAULTS` | arrival uncertainty on the haven drive | |
@@ -108,7 +108,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 
 | Variable | Unit | Source | Status | Code | Notes |
 |---|---|---|---|---|---|
-| **Local gravity (valleys vs high ground)** | m/s² | data: GRAIL gravity field | ⬜ | | Mean 1.62 m/s². Local anomalies are only a fraction of a percent, so the effect on driving power is tiny next to slope. Low priority unless we show it as a curiosity layer |
+| **Local gravity (valleys vs high ground)** | m/s² | data: GRAIL gravity field | ⬜ | | Mean 1.62 m/s² (used in the climbing power). Local anomalies are a fraction of a percent, tiny next to slope; not built (phase 6 optional) |
 
 ## 9. Data stitching
 

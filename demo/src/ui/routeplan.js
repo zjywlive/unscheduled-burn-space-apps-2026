@@ -16,6 +16,7 @@
 //   onStation(station | null)           phase 4: the surface station's inputs changed (null: switched off)
 //   onDepartNow()                       phase 3: "Leave at the timeline time" pressed
 //   onFindDepartures()                  phase 3: "Find good departure times" pressed
+//   onFly3d()                           phase 6: "Fly along in 3D" pressed
 //   onUseDeparture(ms)                  phase 3: one of the found departures chosen
 //   onLimit(maxSlopeDeg)                the slope limit slider was let go at a new value (for the URL hash);
 //                                       set it back from outside with update({ maxSlopeDeg })
@@ -587,7 +588,8 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       })(),
       drive ? h('div', { class: 'rp-depart-row' },
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
-        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times')) : null,
+        h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onFindDepartures?.() }, 'Find good departure times'),
+        h('button', { type: 'button', class: 'btn btn-primary rp-depart rp-fly3d', onclick: () => callbacks.onFly3d?.() }, 'Fly along in 3D')) : null,
       ...(() => {
         const scan = departures && departures.routeId === r.id ? departures.scan : null;
         if (!scan) return [];

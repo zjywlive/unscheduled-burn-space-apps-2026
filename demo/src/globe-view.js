@@ -482,6 +482,12 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   return {
     flyTo, pick, project, invalidate,
     jumpTo(c) { fly = null; Object.assign(cam, c); dirty = true; },
+    // phase 6: extra objects in the scene, and points on the terrain surface (km, world frame)
+    THREE,
+    addObject(o) { scene.add(o); dirty = true; },
+    removeObject(o) { scene.remove(o); dirty = true; },
+    surface(lat, lon, liftKm = 0) { const [x, y, z] = unit(lat, lon), r = surfaceR(lat, lon) + liftKm; return [x * r, y * r, z * r]; },
+    get exaggeration() { return state.exaggeration; },
     debug() {
       placeCamera();
       const { draw, build } = select();

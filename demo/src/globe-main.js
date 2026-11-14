@@ -3,6 +3,8 @@ import { loadData } from './data-loader.js';
 import { createDem, createPyramid, createTiledDem } from './terrain.js';
 import { createGlobeTerrain, southFrom } from './globe-terrain.js';
 import { createGlobeView, cameraFromHash, cameraToHash } from './globe-view.js';
+import { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } from './route3d.js';
+import { createRouteLayer } from './globe-route.js';
 
 function readJson(id) {
   const el = document.getElementById(id);
@@ -131,16 +133,78 @@ export function startGlobe() {
       }
       await terrain.init();
       let hashTimer = 0;
-      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c)), 300); };
+      const routeMode = /(^|[#&])route=1(&|$)/.test(location.hash);
+      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + (routeMode ? '&route=1' : '')), 300); };
       view = createGlobeView(canvas, terrain, { requestSouth, initial: cameraFromHash(location.hash), onCamera });
       view.onFrame(frame);
       window.__globe = { view, terrain, pyramid };   // for debugging from the console
       window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
+      if (routeMode) startRoute(view, cameraFromHash(location.hash));
       document.body.classList.add('ready');
     } catch (e) {
       $('loading').textContent = `Could not load the terrain: ${e.message}`;
     }
   })();
+}
+
+// phase 6: the route handed over by the navigator (route3d.js payload in localStorage), with playback
+function startRoute(view, camFromHash) {
+  const $ = (id) => document.getElementById(id);
+  let payload = null;
+  try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; }
+  if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
+  document.body.classList.add('route-mode');
+  const layer = createRouteLayer(view, payload);
+  window.__globe.route = { payload, layer };
+  if (camFromHash.lat === undefined) view.flyTo({ ...frameRoute(payload), ms: 1500 });
+  const span = timeSpan(payload);
+  const fmt = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
+  $('rh-name').textContent = `${payload.label} route · ${payload.lengthKm.toFixed(1)} km`;
+  const slider = $('rh-t'), play = $('rh-play'), speed = $('rh-speed'), follow = $('rh-follow');
+  let t = span ? span[0] : null, playing = false, lastReal = 0;
+  if (!span) { slider.disabled = true; play.disabled = true; }
+  const colour = { ready: 0xffd23d, driving: 0xffd23d, parked: 0x8ab4f8, arrived: 0x7ee08a, empty: 0xff5252 };
+  const label = { ready: 'Ready to leave', driving: 'Driving', parked: 'Parked, charging', arrived: 'Arrived', empty: 'Battery empty' };
+  function show() {
+    const r = span ? roverAt(payload, t) : roverAt(payload, -Infinity);
+    layer.setRover(r, colour[r.state]);
+    if (span) { slider.value = String(Math.round(((t - span[0]) / (span[1] - span[0])) * 1000)); $('rh-when').textContent = fmt(t); }
+    const chip = (text, on, bad = false) => `<span class="${bad ? 'bad' : on ? 'on' : ''}">${text}</span>`;
+    const f = r.flags ?? 0;
+    $('rh-chips').innerHTML = [
+      chip(label[r.state], r.state === 'driving' || r.state === 'arrived', r.state === 'empty'),
+      chip(`km ${r.km.toFixed(1)}`, true),
+      r.soc !== null && r.soc !== undefined ? chip(`battery ${Math.round(r.soc * 100)}%`, true, r.soc < (payload.reserve ?? 0.2)) : '',
+      span ? chip(f & FLAGS.lit ? 'Sunlit' : 'In shadow', !!(f & FLAGS.lit)) : '',
+      span ? chip(f & FLAGS.earth ? 'Earth in view' : 'No Earth link', !!(f & FLAGS.earth)) : '',
+      chip(f & FLAGS.station ? 'Station link' : 'No station link', !!(f & FLAGS.station)),
+      f & FLAGS.oneWay ? chip('One-way stretch', false, true) : '',
+    ].join('');
+    if (follow.checked) {
+      const nxt = payload.pts[Math.min(payload.pts.length - 1, r.i + 1)], cur = payload.pts[r.i];
+      const heading = Math.atan2(Math.sin((nxt[1] - cur[1]) * Math.PI / 180) * Math.cos(nxt[0] * Math.PI / 180),
+        Math.cos(cur[0] * Math.PI / 180) * Math.sin(nxt[0] * Math.PI / 180) - Math.sin(cur[0] * Math.PI / 180) * Math.cos(nxt[0] * Math.PI / 180) * Math.cos((nxt[1] - cur[1]) * Math.PI / 180)) * 180 / Math.PI;
+      const c = view.camera;
+      view.jumpTo({ lat: r.latDeg, lon: r.lonDeg, heading: Number.isFinite(heading) && (nxt !== cur) ? (heading + 360) % 360 : c.heading, dist: Math.min(c.dist, 12), tilt: Math.max(c.tilt, 55) });
+    }
+  }
+  slider.addEventListener('input', () => { if (!span) return; t = span[0] + (Number(slider.value) / 1000) * (span[1] - span[0]); show(); });
+  play.addEventListener('click', () => { if (!span) return; if (t >= span[1]) t = span[0]; playing = !playing; play.textContent = playing ? '❚❚' : '▶'; play.setAttribute('aria-label', playing ? 'Pause' : 'Play'); lastReal = performance.now(); });
+  follow.addEventListener('change', show);
+  let stamp = '';
+  view.onFrame(() => {
+    const p = window.__globe?.pyramid;
+    const s = `${window.__globe?.terrain?.version ?? 0}:${p?.version ?? 0}`;
+    layer.frame(s);
+    if (s !== stamp) { stamp = s; view.redraw(); }
+    if (playing && span) {
+      const now = performance.now(), dt = (now - lastReal) / 1000; lastReal = now;
+      t = Math.min(span[1], t + dt * Number(speed.value) * 3600e3);
+      if (t >= span[1]) { playing = false; play.textContent = '▶'; }
+      show();
+    }
+  });
+  show();
 }
 
 startGlobe();

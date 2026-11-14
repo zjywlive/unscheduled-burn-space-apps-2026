@@ -30,6 +30,7 @@ import { planRoutes, sunFromJobs, simplify } from './route-plan.js';
 import { simulateDrive, skyFromGrid, scanDepartures } from './route-energy.js';
 import { coverage as stationCoverage, routeLinks, linkSummary, STATION_DEFAULTS } from './comms.js';
 import { findHavens } from './contingency.js';
+import { buildPayload, ROUTE3D_KEY } from './route3d.js';
 import { renderPanorama, updatePanoramaCursor } from './charts/panorama.js';
 import { renderElevation, updateElevationCursor } from './charts/elevation.js';
 import { renderCompare } from './ui/compare.js';
@@ -390,6 +391,14 @@ function start() {
       routePlanCard.update({ departures: { routeId: r.id, scan } });
     },
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
+    // phase 6: hand the selected route and its drive to the 3D globe
+    onFly3d: () => {
+      const r = rp.plan?.ok ? rp.plan.routes.find((q) => q.id === rp.selected) : null;
+      if (!r?.profile) return;
+      const payload = buildPayload({ route: r, drive: rp.energy?.routeId === r.id ? rp.energy.drive : null, links: rp.comms?.routeId === r.id ? rp.comms.links : null, havens: rp.havens?.routeId === r.id ? rp.havens.result : null, power: { batteryWh: 4000, reserve: 0.2, ...(rp.power ?? {}) } });
+      try { localStorage.setItem(ROUTE3D_KEY, JSON.stringify(payload)); } catch { return; }
+      window.open('globe.html#route=1', '_blank');
+    },
     onStation: (st) => { rp = { ...rp, station: st, stationOff: !st, coverage: null }; updateComms(); },
     onCancel: () => rpAbort?.abort(),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },

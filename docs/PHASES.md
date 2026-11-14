@@ -152,7 +152,22 @@ slope limits). Comms-denied heading from the Sun and Earth position.
 - Checked in headless Chrome on the Flattest route leaving 18 Jan 18:00 UTC: havens from 27 of 27 checkpoints,
   the farthest 1.6 km away (2.5 h, 0.8 kWh).
 
-## Phase 6: 3D route and live position
+## Phase 6: 3D route and live position (done 14 Nov, 20:30 GMT)
 
 The route ribbon drawn on the 3D terrain, a simulated rover moving along it over time, and optionally
 a GRAIL gravity layer.
+
+**Status (14 Nov).** `demo/src/route3d.js`, `demo/src/globe-route.js`:
+- "Fly along in 3D" in the route card stores the selected route and its drive (per-point time, battery,
+  sunlight, Earth and station link, one-way flags; parking stops, havens, where the battery ran out) in
+  localStorage and opens `globe.html#route=1`.
+- The globe draws the route as a ribbon on the terrain (white sunlit, blue in shadow, orange one-way, red under
+  the battery reserve, grey not reached), havens, stops and the empty-battery point, and the rover. Playback:
+  play/pause, 1 h/s, 6 h/s or 1 day/s, a scrubber over the drive, chips for state, km, battery, sunlight and
+  links, and Follow (the camera rides behind the rover along its heading).
+- Tests (`tests/route3d.test.mjs`): the payload and its round trip, the rover interpolated in time, waiting at a
+  parking stop, stopping where the battery ran out, the framing.
+- Checked in headless Chrome: Flattest route to de Gerlache rim 2 leaving 18 Jan 18:00 UTC handed over (299
+  points, 27 havens), framed over the terrain; scrubbed to 20 Jan 04:14 with Follow on: km 23.7, battery 66 %.
+- Not done: the GRAIL gravity layer (optional); a live position feed (the playback uses the simulated times);
+  the surface station is not drawn on the globe.
