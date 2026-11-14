@@ -49,7 +49,7 @@ export function buildEarthScene(plan, labels) {
   const craftLbl = labels.add('Lander', 'craft', () => craft.position);
   labels.add('TLI', 'event', () => geo(t.tliMs));
 
-  function update(st) {
+  function update(st, { dt = 1 / 60 } = {}) {
     const m = moonAt(st.tMs) ?? moon.position;
     moon.position.copy(m);
     const p = st.pos && st.earth ? v3(sub(st.pos, st.earth), K) : craft.position;
@@ -58,11 +58,11 @@ export function buildEarthScene(plan, labels) {
     craftLbl.el.textContent = st.tliStageAttached ? 'Lander + upper stage' : 'Lander';
     // automatic framing by phase: the parking orbit close in, the coast between the bodies, the approach on the Moon
     const dE = norm(sub(st.pos, st.earth)) * K;
-    let target, radius;
-    if (st.phase === 'leo' || st.phase === 'tli') { target = new T.Vector3(0, 0, 0); radius = 40; }
-    else if (dE < 60) { target = p.clone().multiplyScalar(0.5); radius = 60 + dE * 2.2; }
-    else { target = m.clone().multiplyScalar(0.5); radius = 820; }
-    controls.follow(target, radius);
+    let target, radius, key;
+    if (st.phase === 'leo' || st.phase === 'tli') { target = new T.Vector3(0, 0, 0); radius = 40; key = 'earth'; }
+    else if (dE < 60) { target = p.clone().multiplyScalar(0.5); radius = 60 + dE * 2.2; key = 'departure'; }
+    else { target = m.clone().multiplyScalar(0.5); radius = 820; key = 'cruise'; }
+    controls.follow(target, radius, { tau: 0.1, dt, key });
   }
   return { scene, camera, controls, update, name: 'earth' };
 }

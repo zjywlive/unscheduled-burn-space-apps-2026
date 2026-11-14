@@ -93,7 +93,7 @@ export function buildMoonScene(plan, labels) {
 
   const controls = createControls(camera, { radius: 7000, theta: 0.5, phi: 2.2, minRadius: 0.5 });
 
-  function update(st) {
+  function update(st, { dt = 1 / 60 } = {}) {
     moonGroup.rotation.y = (MOON_RATE * (st.tMs - plan.epochMs)) / 1000;
     sun.position.copy(v3(st.sunDir, 1e5));
     if (st.earth) earth.position.copy(v3(st.earth));
@@ -105,22 +105,22 @@ export function buildMoonScene(plan, labels) {
     const r = norm(st.pos);
     const out = p.clone().normalize();
     if (st.phase === 'approach-moon' || st.phase === 'coast') {
-      controls.followView(new T.Vector3(0, 0, 0), Math.max(9000, r * 1.4), out.clone().add(new T.Vector3(0, -0.4, 0)));
+      controls.followView(new T.Vector3(0, 0, 0), Math.max(9000, r * 1.4), out.clone().add(new T.Vector3(0, -0.4, 0)), { tau: 0.2, dt, key: 'approach' });
     } else if (st.phase === 'braking' && activeBranch) {
       // side view across the descent plane, so a branch that climbs away (abort) separates from the nominal path
       const nrm = v3(plan.descentFrame.h2);
       if (nrm.dot(camera.position.clone().sub(p)) < 0) nrm.multiplyScalar(-1);
-      controls.followView(p, 900, nrm.multiplyScalar(0.9).add(out.clone().multiplyScalar(0.35)), 0.06);
+      controls.followView(p, 900, nrm.multiplyScalar(0.9).add(out.clone().multiplyScalar(0.35)), { tau: 0.27, dt, key: 'craft' });
     } else if (st.phase === 'braking') {
       const back = v3(unit(st.vel)).multiplyScalar(-1);
-      controls.followView(p, 420, out.clone().multiplyScalar(0.9).add(back.multiplyScalar(0.6)), 0.06);
+      controls.followView(p, 420, out.clone().multiplyScalar(0.9).add(back.multiplyScalar(0.6)), { tau: 0.27, dt, key: 'craft' });
     } else if (st.scene === 'surface') {
-      controls.followView(p, 60, out, 0.06);
+      controls.followView(p, 60, out, { tau: 0.27, dt, key: 'craft' });
     } else {
       // off the orbit plane (so the ring reads as an ellipse) and from the south, with the lander on the near side
       const nrm = v3(plan.llo.normal);
       if (nrm.dot(camera.position) < 0) nrm.multiplyScalar(-1);
-      controls.followView(new T.Vector3(0, 0, 0), 7600, out.clone().multiplyScalar(0.55).add(nrm.multiplyScalar(0.7)).add(new T.Vector3(0, -0.6, 0)), 0.04);
+      controls.followView(new T.Vector3(0, 0, 0), 7600, out.clone().multiplyScalar(0.55).add(nrm.multiplyScalar(0.7)).add(new T.Vector3(0, -0.6, 0)), { tau: 0.4, dt, key: 'orbit' });
     }
   }
   // contingency branches drawn as dashed alternatives (MCI km point lists)

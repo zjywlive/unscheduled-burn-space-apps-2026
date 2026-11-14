@@ -2136,6 +2136,12 @@ const PHASES = [
   { id: 'landed', name: 'Landed', scene: 'surface' },
 ];
 
+// cubic Hermite between (p0, v0) and (p1, v1) over h seconds, at fraction f (f2 = f², f3 = f³)
+function hermite3(p0, v0, p1, v1, h, f, f2 = f * f, f3 = f2 * f) {
+  const h00 = 2 * f3 - 3 * f2 + 1, h10 = (f3 - 2 * f2 + f) * h, h01 = -2 * f3 + 3 * f2, h11 = (f3 - f2) * h;
+  return [0, 1, 2].map((i) => h00 * p0[i] + h10 * v0[i] + h01 * p1[i] + h11 * v1[i]);
+}
+
 const theta = (tMs, epochMs) => (MOON_RATE * (tMs - epochMs)) / 1000;
 const fixedToInertial = (v, tMs, epochMs) => rotZ(v, theta(tMs, epochMs));
 const inertialToFixedAt = (v, tMs, epochMs) => rotZ(v, -theta(tMs, epochMs));
@@ -2370,8 +2376,13 @@ function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeightKm = 0
     if (ts >= dSamples[dSamples.length - 1].tS) return dSamples[dSamples.length - 1];
     let lo = 0, hi = dSamples.length - 1;
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (dSamples[mid].tS <= ts) lo = mid; else hi = mid; }
-    const a = dSamples[lo], b = dSamples[hi], f = (ts - a.tS) / Math.max(1e-9, b.tS - a.tS);
-    return { ...a, r: lerp3(a.r, b.r, f), v: lerp3(a.v, b.v, f), massKg: a.massKg + (b.massKg - a.massKg) * f, altM: a.altM + (b.altM - a.altM) * f, thrustDir: a.thrustDir, phase: a.phase };
+    const a = dSamples[lo], b = dSamples[hi], h = Math.max(1e-9, b.tS - a.tS), f = (ts - a.tS) / h;
+    // cubic Hermite on position (the samples carry velocity), so the path and its velocity are continuous across
+    // the 1 s samples: a craft drawn from it, and a camera that follows it, move without kinks
+    const f2 = f * f, f3 = f2 * f;
+    const r = hermite3(a.r, a.v, b.r, b.v, h, f, f2, f3);
+    const td = a.thrustDir && b.thrustDir ? unit(lerp3(a.thrustDir, b.thrustDir, f)) : (a.thrustDir ?? b.thrustDir);
+    return { ...a, r, v: lerp3(a.v, b.v, f), massKg: a.massKg + (b.massKg - a.massKg) * f, altM: a.altM + (b.altM - a.altM) * f, throttle: a.throttle + (b.throttle - a.throttle) * f, thrustDir: td, phase: a.phase };
   };
   function landerMassAt(tMs) {
     if (tMs >= tPdi) return descentAt(tMs).massKg - (dSamples[0].massKg - massAtPdiPlan);
@@ -2519,7 +2530,7 @@ function enuAt(siteF, siteRadiusKm, pFixedKm) {
   return [dot(d, east) * 1000, dot(d, north) * 1000, dot(d, up) * 1000];
 }
 
-return { MISSION_DEFAULTS, PHASES, fixedToInertial, inertialToFixedAt, makeBodies, transferAt, planMission, enuAt };
+return { MISSION_DEFAULTS, PHASES, hermite3, fixedToInertial, inertialToFixedAt, makeBodies, transferAt, planMission, enuAt };
 })();
 __m['power.js'] = (() => {
 // Lander operations: +Z is engine thrust, fixed array normal is +X, and array tracking rotates about Z.
@@ -3411,23 +3422,35 @@ function createControls(camera, { target = [0, 0, 0], radius = 10, minRadius = 0
     st.user = true;
     apply();
   }
-  // smooth automatic framing: ease the target and radius toward the requested ones
-  function follow(target, radius, ease = 0.15) {
+  // Smooth automatic framing, independent of the frame rate: each call eases toward the request by
+  // 1 − exp(−dt / tau). While the framing mode (key) stays the same, the camera first moves with the requested
+  // target (the craft's motion since the last frame), so it tracks a moving craft with no lag and no jitter, and
+  // the easing only takes up changes of framing. A new key (or the first call) eases over from where it is.
+  let lastReq = null, lastKey;
+  const easeK = (dt, tau) => 1 - Math.exp(-Math.max(0, dt) / Math.max(1e-3, tau));
+  function follow(target, radius, { tau = 0.12, dt = 1 / 60, key = null } = {}) {
+    const carry = lastReq && key === lastKey ? target.clone().sub(lastReq) : null;
+    lastReq = target.clone(); lastKey = key;
     if (st.user) return;
-    st.target.lerp(target, ease);
-    st.radius += (radius - st.radius) * ease;
+    if (carry) st.target.add(carry);
+    const k = easeK(dt, tau);
+    st.target.lerp(target, k);
+    st.radius += (radius - st.radius) * k;
     apply();
   }
-  // as follow(), and also turn the view so the camera looks along viewDir (a THREE.Vector3 from target to camera)
-  function followView(target, radius, viewDir, ease = 0.08) {
-    if (st.user) return;
-    const d = viewDir.clone().normalize();
-    const th = Math.atan2(d.x, d.z), ph = Math.acos(Math.max(-1, Math.min(1, d.y)));
-    let dth = th - st.theta;
-    dth -= 2 * Math.PI * Math.round(dth / (2 * Math.PI));
-    st.theta += dth * ease;
-    st.phi += (ph - st.phi) * ease;
-    follow(target, radius, ease * 1.6);
+  // as follow(), and also turn the view so the camera looks along viewDir (a THREE.Vector3 from target to camera);
+  // tau is the time constant of the turn, the target and radius ease 1.6 × faster
+  function followView(target, radius, viewDir, { tau = 0.2, dt = 1 / 60, key = null } = {}) {
+    if (!st.user) {
+      const d = viewDir.clone().normalize();
+      const th = Math.atan2(d.x, d.z), ph = Math.acos(Math.max(-1, Math.min(1, d.y)));
+      let dth = th - st.theta;
+      dth -= 2 * Math.PI * Math.round(dth / (2 * Math.PI));
+      const k = easeK(dt, tau);
+      st.theta += dth * k;
+      st.phi += (ph - st.phi) * k;
+    }
+    follow(target, radius, { tau: tau / 1.6, dt, key });
   }
   function jump(target, radius) { st.target.copy(target); st.radius = radius; apply(); }
   apply();
@@ -3569,7 +3592,7 @@ function buildEarthScene(plan, labels) {
   const craftLbl = labels.add('Lander', 'craft', () => craft.position);
   labels.add('TLI', 'event', () => geo(t.tliMs));
 
-  function update(st) {
+  function update(st, { dt = 1 / 60 } = {}) {
     const m = moonAt(st.tMs) ?? moon.position;
     moon.position.copy(m);
     const p = st.pos && st.earth ? v3(sub(st.pos, st.earth), K) : craft.position;
@@ -3578,11 +3601,11 @@ function buildEarthScene(plan, labels) {
     craftLbl.el.textContent = st.tliStageAttached ? 'Lander + upper stage' : 'Lander';
     // automatic framing by phase: the parking orbit close in, the coast between the bodies, the approach on the Moon
     const dE = norm(sub(st.pos, st.earth)) * K;
-    let target, radius;
-    if (st.phase === 'leo' || st.phase === 'tli') { target = new T.Vector3(0, 0, 0); radius = 40; }
-    else if (dE < 60) { target = p.clone().multiplyScalar(0.5); radius = 60 + dE * 2.2; }
-    else { target = m.clone().multiplyScalar(0.5); radius = 820; }
-    controls.follow(target, radius);
+    let target, radius, key;
+    if (st.phase === 'leo' || st.phase === 'tli') { target = new T.Vector3(0, 0, 0); radius = 40; key = 'earth'; }
+    else if (dE < 60) { target = p.clone().multiplyScalar(0.5); radius = 60 + dE * 2.2; key = 'departure'; }
+    else { target = m.clone().multiplyScalar(0.5); radius = 820; key = 'cruise'; }
+    controls.follow(target, radius, { tau: 0.1, dt, key });
   }
   return { scene, camera, controls, update, name: 'earth' };
 }
@@ -3685,7 +3708,7 @@ function buildMoonScene(plan, labels) {
 
   const controls = createControls(camera, { radius: 7000, theta: 0.5, phi: 2.2, minRadius: 0.5 });
 
-  function update(st) {
+  function update(st, { dt = 1 / 60 } = {}) {
     moonGroup.rotation.y = (MOON_RATE * (st.tMs - plan.epochMs)) / 1000;
     sun.position.copy(v3(st.sunDir, 1e5));
     if (st.earth) earth.position.copy(v3(st.earth));
@@ -3697,22 +3720,22 @@ function buildMoonScene(plan, labels) {
     const r = norm(st.pos);
     const out = p.clone().normalize();
     if (st.phase === 'approach-moon' || st.phase === 'coast') {
-      controls.followView(new T.Vector3(0, 0, 0), Math.max(9000, r * 1.4), out.clone().add(new T.Vector3(0, -0.4, 0)));
+      controls.followView(new T.Vector3(0, 0, 0), Math.max(9000, r * 1.4), out.clone().add(new T.Vector3(0, -0.4, 0)), { tau: 0.2, dt, key: 'approach' });
     } else if (st.phase === 'braking' && activeBranch) {
       // side view across the descent plane, so a branch that climbs away (abort) separates from the nominal path
       const nrm = v3(plan.descentFrame.h2);
       if (nrm.dot(camera.position.clone().sub(p)) < 0) nrm.multiplyScalar(-1);
-      controls.followView(p, 900, nrm.multiplyScalar(0.9).add(out.clone().multiplyScalar(0.35)), 0.06);
+      controls.followView(p, 900, nrm.multiplyScalar(0.9).add(out.clone().multiplyScalar(0.35)), { tau: 0.27, dt, key: 'craft' });
     } else if (st.phase === 'braking') {
       const back = v3(unit(st.vel)).multiplyScalar(-1);
-      controls.followView(p, 420, out.clone().multiplyScalar(0.9).add(back.multiplyScalar(0.6)), 0.06);
+      controls.followView(p, 420, out.clone().multiplyScalar(0.9).add(back.multiplyScalar(0.6)), { tau: 0.27, dt, key: 'craft' });
     } else if (st.scene === 'surface') {
-      controls.followView(p, 60, out, 0.06);
+      controls.followView(p, 60, out, { tau: 0.27, dt, key: 'craft' });
     } else {
       // off the orbit plane (so the ring reads as an ellipse) and from the south, with the lander on the near side
       const nrm = v3(plan.llo.normal);
       if (nrm.dot(camera.position) < 0) nrm.multiplyScalar(-1);
-      controls.followView(new T.Vector3(0, 0, 0), 7600, out.clone().multiplyScalar(0.55).add(nrm.multiplyScalar(0.7)).add(new T.Vector3(0, -0.6, 0)), 0.04);
+      controls.followView(new T.Vector3(0, 0, 0), 7600, out.clone().multiplyScalar(0.55).add(nrm.multiplyScalar(0.7)).add(new T.Vector3(0, -0.6, 0)), { tau: 0.4, dt, key: 'orbit' });
     }
   }
   // contingency branches drawn as dashed alternatives (MCI km point lists)
@@ -3939,7 +3962,7 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
   }
 
   const controls = createControls(camera, { radius: 900, theta: 0.8, phi: 1.15, minRadius: 3, maxRadius: 3e5 });
-  const qTmp = new T.Quaternion(), yAxis = new T.Vector3(0, 1, 0);
+  const qTmp = new T.Quaternion(), yAxis = new T.Vector3(0, 1, 0), heading = new T.Vector3(0.6, 0, 0.8);
   const dirTo = (az, el, dist) => enu3([Math.sin(az * RAD) * Math.cos(el * RAD) * dist, Math.cos(az * RAD) * Math.cos(el * RAD) * dist, Math.sin(el * RAD) * dist]);
 
   function update(st, { dt = 0.016 } = {}) {
@@ -3970,9 +3993,9 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
         const d = toEnu(add(st.descent.r, scale(st.descent.thrustDir, 1000)));
         const dir = enu3([d[0] - e[0], d[1] - e[1], d[2] - e[2]]).normalize();
         qTmp.setFromUnitVectors(yAxis, dir);
-        lander.quaternion.slerp(qTmp, Math.min(1, dt * 2.5));
+        lander.quaternion.slerp(qTmp, 1 - Math.exp(-dt * 2.5));
       } else if (st.phase === 'landed') {
-        lander.quaternion.slerp(new T.Quaternion(), 0.2);
+        lander.quaternion.slerp(new T.Quaternion(), 1 - Math.exp(-dt * 12));
       }
       plume.visible = th > 0.01;
       plume.scale.set(1, 2 + th * 9, 1);
@@ -3980,13 +4003,15 @@ function buildSurfaceScene(plan, labels, { sky } = {}) {
       const alt = Math.max(0, e[2]);
       const v = st.descent.v;
       const vh = toEnu(add(st.descent.r, scale(v, 1)));
-      const back = enu3([e[0] - vh[0], e[1] - vh[1], 0]);
-      if (back.lengthSq() < 1e-6) back.set(0.6, 0, 0.8);
-      back.normalize();
+      // chase from behind the horizontal motion; in the vertical terminal descent the horizontal speed is
+      // millimetres per second and its direction is noise, so keep the last heading below 1 m/s
+      const hv = enu3([e[0] - vh[0], e[1] - vh[1], 0]);
+      if (hv.lengthSq() > 1) heading.copy(hv).normalize();
+      const back = heading.clone();
       const radius = Math.min(260, 22 + alt * 0.09);
-      controls.followView(lander.position.clone(), radius, back.multiplyScalar(0.85).add(new T.Vector3(0, 0.55, 0)), 0.05);
+      controls.followView(lander.position.clone(), radius, back.multiplyScalar(0.85).add(new T.Vector3(0, 0.55, 0)), { tau: 0.32, dt, key: 'craft' });
     } else {
-      controls.followView(new T.Vector3(0, 0, 0), 9000, new T.Vector3(0.5, 0.6, 0.6), 0.05);
+      controls.followView(new T.Vector3(0, 0, 0), 9000, new T.Vector3(0.5, 0.6, 0.6), { tau: 0.32, dt, key: 'site' });
     }
   }
   let branchLbl = null;

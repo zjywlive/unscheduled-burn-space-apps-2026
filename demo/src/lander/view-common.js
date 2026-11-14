@@ -76,23 +76,35 @@ export function createControls(camera, { target = [0, 0, 0], radius = 10, minRad
     st.user = true;
     apply();
   }
-  // smooth automatic framing: ease the target and radius toward the requested ones
-  function follow(target, radius, ease = 0.15) {
+  // Smooth automatic framing, independent of the frame rate: each call eases toward the request by
+  // 1 − exp(−dt / tau). While the framing mode (key) stays the same, the camera first moves with the requested
+  // target (the craft's motion since the last frame), so it tracks a moving craft with no lag and no jitter, and
+  // the easing only takes up changes of framing. A new key (or the first call) eases over from where it is.
+  let lastReq = null, lastKey;
+  const easeK = (dt, tau) => 1 - Math.exp(-Math.max(0, dt) / Math.max(1e-3, tau));
+  function follow(target, radius, { tau = 0.12, dt = 1 / 60, key = null } = {}) {
+    const carry = lastReq && key === lastKey ? target.clone().sub(lastReq) : null;
+    lastReq = target.clone(); lastKey = key;
     if (st.user) return;
-    st.target.lerp(target, ease);
-    st.radius += (radius - st.radius) * ease;
+    if (carry) st.target.add(carry);
+    const k = easeK(dt, tau);
+    st.target.lerp(target, k);
+    st.radius += (radius - st.radius) * k;
     apply();
   }
-  // as follow(), and also turn the view so the camera looks along viewDir (a THREE.Vector3 from target to camera)
-  function followView(target, radius, viewDir, ease = 0.08) {
-    if (st.user) return;
-    const d = viewDir.clone().normalize();
-    const th = Math.atan2(d.x, d.z), ph = Math.acos(Math.max(-1, Math.min(1, d.y)));
-    let dth = th - st.theta;
-    dth -= 2 * Math.PI * Math.round(dth / (2 * Math.PI));
-    st.theta += dth * ease;
-    st.phi += (ph - st.phi) * ease;
-    follow(target, radius, ease * 1.6);
+  // as follow(), and also turn the view so the camera looks along viewDir (a THREE.Vector3 from target to camera);
+  // tau is the time constant of the turn, the target and radius ease 1.6 × faster
+  function followView(target, radius, viewDir, { tau = 0.2, dt = 1 / 60, key = null } = {}) {
+    if (!st.user) {
+      const d = viewDir.clone().normalize();
+      const th = Math.atan2(d.x, d.z), ph = Math.acos(Math.max(-1, Math.min(1, d.y)));
+      let dth = th - st.theta;
+      dth -= 2 * Math.PI * Math.round(dth / (2 * Math.PI));
+      const k = easeK(dt, tau);
+      st.theta += dth * k;
+      st.phi += (ph - st.phi) * k;
+    }
+    follow(target, radius, { tau: tau / 1.6, dt, key });
   }
   function jump(target, radius) { st.target.copy(target); st.radius = radius; apply(); }
   apply();

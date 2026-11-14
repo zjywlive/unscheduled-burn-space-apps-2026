@@ -199,7 +199,7 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
   }
 
   const controls = createControls(camera, { radius: 900, theta: 0.8, phi: 1.15, minRadius: 3, maxRadius: 3e5 });
-  const qTmp = new T.Quaternion(), yAxis = new T.Vector3(0, 1, 0);
+  const qTmp = new T.Quaternion(), yAxis = new T.Vector3(0, 1, 0), heading = new T.Vector3(0.6, 0, 0.8);
   const dirTo = (az, el, dist) => enu3([Math.sin(az * RAD) * Math.cos(el * RAD) * dist, Math.cos(az * RAD) * Math.cos(el * RAD) * dist, Math.sin(el * RAD) * dist]);
 
   function update(st, { dt = 0.016 } = {}) {
@@ -230,9 +230,9 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
         const d = toEnu(add(st.descent.r, scale(st.descent.thrustDir, 1000)));
         const dir = enu3([d[0] - e[0], d[1] - e[1], d[2] - e[2]]).normalize();
         qTmp.setFromUnitVectors(yAxis, dir);
-        lander.quaternion.slerp(qTmp, Math.min(1, dt * 2.5));
+        lander.quaternion.slerp(qTmp, 1 - Math.exp(-dt * 2.5));
       } else if (st.phase === 'landed') {
-        lander.quaternion.slerp(new T.Quaternion(), 0.2);
+        lander.quaternion.slerp(new T.Quaternion(), 1 - Math.exp(-dt * 12));
       }
       plume.visible = th > 0.01;
       plume.scale.set(1, 2 + th * 9, 1);
@@ -240,13 +240,15 @@ export function buildSurfaceScene(plan, labels, { sky } = {}) {
       const alt = Math.max(0, e[2]);
       const v = st.descent.v;
       const vh = toEnu(add(st.descent.r, scale(v, 1)));
-      const back = enu3([e[0] - vh[0], e[1] - vh[1], 0]);
-      if (back.lengthSq() < 1e-6) back.set(0.6, 0, 0.8);
-      back.normalize();
+      // chase from behind the horizontal motion; in the vertical terminal descent the horizontal speed is
+      // millimetres per second and its direction is noise, so keep the last heading below 1 m/s
+      const hv = enu3([e[0] - vh[0], e[1] - vh[1], 0]);
+      if (hv.lengthSq() > 1) heading.copy(hv).normalize();
+      const back = heading.clone();
       const radius = Math.min(260, 22 + alt * 0.09);
-      controls.followView(lander.position.clone(), radius, back.multiplyScalar(0.85).add(new T.Vector3(0, 0.55, 0)), 0.05);
+      controls.followView(lander.position.clone(), radius, back.multiplyScalar(0.85).add(new T.Vector3(0, 0.55, 0)), { tau: 0.32, dt, key: 'craft' });
     } else {
-      controls.followView(new T.Vector3(0, 0, 0), 9000, new T.Vector3(0.5, 0.6, 0.6), 0.05);
+      controls.followView(new T.Vector3(0, 0, 0), 9000, new T.Vector3(0.5, 0.6, 0.6), { tau: 0.32, dt, key: 'site' });
     }
   }
   let branchLbl = null;

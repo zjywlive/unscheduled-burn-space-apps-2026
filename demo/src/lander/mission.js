@@ -53,6 +53,12 @@ export const PHASES = [
   { id: 'landed', name: 'Landed', scene: 'surface' },
 ];
 
+// cubic Hermite between (p0, v0) and (p1, v1) over h seconds, at fraction f (f2 = f², f3 = f³)
+export function hermite3(p0, v0, p1, v1, h, f, f2 = f * f, f3 = f2 * f) {
+  const h00 = 2 * f3 - 3 * f2 + 1, h10 = (f3 - 2 * f2 + f) * h, h01 = -2 * f3 + 3 * f2, h11 = (f3 - f2) * h;
+  return [0, 1, 2].map((i) => h00 * p0[i] + h10 * v0[i] + h01 * p1[i] + h11 * v1[i]);
+}
+
 const theta = (tMs, epochMs) => (MOON_RATE * (tMs - epochMs)) / 1000;
 export const fixedToInertial = (v, tMs, epochMs) => rotZ(v, theta(tMs, epochMs));
 export const inertialToFixedAt = (v, tMs, epochMs) => rotZ(v, -theta(tMs, epochMs));
@@ -287,8 +293,13 @@ export function planMission({ eph, site, landingMs, vehicle: vIn = {}, siteHeigh
     if (ts >= dSamples[dSamples.length - 1].tS) return dSamples[dSamples.length - 1];
     let lo = 0, hi = dSamples.length - 1;
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (dSamples[mid].tS <= ts) lo = mid; else hi = mid; }
-    const a = dSamples[lo], b = dSamples[hi], f = (ts - a.tS) / Math.max(1e-9, b.tS - a.tS);
-    return { ...a, r: lerp3(a.r, b.r, f), v: lerp3(a.v, b.v, f), massKg: a.massKg + (b.massKg - a.massKg) * f, altM: a.altM + (b.altM - a.altM) * f, thrustDir: a.thrustDir, phase: a.phase };
+    const a = dSamples[lo], b = dSamples[hi], h = Math.max(1e-9, b.tS - a.tS), f = (ts - a.tS) / h;
+    // cubic Hermite on position (the samples carry velocity), so the path and its velocity are continuous across
+    // the 1 s samples: a craft drawn from it, and a camera that follows it, move without kinks
+    const f2 = f * f, f3 = f2 * f;
+    const r = hermite3(a.r, a.v, b.r, b.v, h, f, f2, f3);
+    const td = a.thrustDir && b.thrustDir ? unit(lerp3(a.thrustDir, b.thrustDir, f)) : (a.thrustDir ?? b.thrustDir);
+    return { ...a, r, v: lerp3(a.v, b.v, f), massKg: a.massKg + (b.massKg - a.massKg) * f, altM: a.altM + (b.altM - a.altM) * f, throttle: a.throttle + (b.throttle - a.throttle) * f, thrustDir: td, phase: a.phase };
   };
   function landerMassAt(tMs) {
     if (tMs >= tPdi) return descentAt(tMs).massKg - (dSamples[0].massKg - massAtPdiPlan);
