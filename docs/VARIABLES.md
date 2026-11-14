@@ -85,8 +85,8 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 |---|---|---|---|---|---|
 | **Rover position (real time)** | lat/lon/alt | input (live feed or simulated track) | ⬜ | | time playback exists, but no rover position yet |
 | Position accuracy | m (3σ) | assumed | ⬜ | | [JPL-SS]: ≤10 m with a surface station and ≥3 orbiters |
-| **Comms-denied navigation (stars / Sun / Earth)** | — | derived from ephemeris + attitude | ⬜ | | If links drop, the rover estimates heading from Sun or star azimuth (we already have ephemeris) and position by dead reckoning |
-| Dead-reckoning drift | % of distance | assumed | ⬜ | | |
+| **Comms-denied navigation (stars / Sun / Earth)** | deg | derived: bearing to the haven, Sun and Earth azimuth relative to it, only when above the local skyline | ✅ | `contingency.js` `bearing`, `relAngle` | stars are not modelled (named as the fallback when neither body is up) |
+| Dead-reckoning drift | % of distance | assumed (2 %) | ✅ | `contingency.js` `HAVEN_DEFAULTS` | arrival uncertainty on the haven drive | |
 
 ## 6. Time and scenario
 
@@ -101,8 +101,8 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 
 | Variable | Unit | Source | Status | Code | Notes |
 |---|---|---|---|---|---|
-| **Backup plan for extreme events** | — | derived | ⬜ | | Triggers: comms loss, battery below margin, unexpected shadow, solar particle event. Action: nearest safe lit and Earth-visible point reachable within the remaining energy and the climb limit |
-| Safe-haven candidates | lat/lon | derived (lit + Earth-visible + gentle slope) | 🟡 | `score.js` | site scoring exists; "nearest safe haven from here" does not |
+| **Backup plan for extreme events** | — | derived | 🟡 | `contingency.js` `findHavens` | Covered: battery low or empty, unexpected shadow, comms loss (nearest haven and heading). Not modelled: solar particle events for the rover |
+| Safe-haven candidates | lat/lon | derived: Sun on arrival and for 24 h, Earth in view on arrival, ground ≤ 10°, reachable by drive within 10 km and the battery left | ✅ | `contingency.js`, `route-plan.js` `reachFrom` | every 2 km along the route and where the battery runs out |
 
 ## 8. Gravity
 

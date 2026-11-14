@@ -567,6 +567,55 @@ export function simplify(points, tolKm) {
   return points.filter((_, i) => keep[i]);
 }
 
+// ---------- phase 5: reachability from a point ----------
+// Fastest drive time (h) and the energy on that drive (Wh, when power is given: load + drive + climbing, as
+// route-energy.js) from `center` to every node within radiusKm, under the same directional limits as the
+// planner. power: { loadW, driveW, massKg, climbEff } or null. → { cor, hours, wh, start, xy(n), slope } | null
+export function reachFrom(dem, center, { mob, radiusKm = 10, power = null } = {}) {
+  const c = toPoint(center);
+  if (!c || !mob) return null;
+  const cor = buildCorridor(dem, c, c, radiusKm, null);
+  if (!cor) return null;
+  const { W, H, N, kpp, inv, slope, gxs, gys } = cor;
+  const lim = Math.max(mob.climbDeg, mob.descentDeg, mob.crossDeg);
+  const edgeOk = edgeTest(cor, mob);
+  const start = cor.nodeAt(c[0], c[1]);
+  const hours = new Float32Array(N).fill(Infinity), wh = new Float32Array(N).fill(Infinity), done = new Uint8Array(N);
+  const xy = (n) => { const u = n % W; return [cor.xOf(u), cor.yOf((n - u) / W)]; };
+  if (start < 0 || !(slope[start] <= lim)) return { cor, hours, wh, start: -1, xy, slope };
+  const r2 = (radiusKm / kpp) ** 2, u0 = start % W, v0 = (start - u0) / W;
+  const heap = createHeap();
+  hours[start] = 0; wh[start] = 0; heap.push(0, start);
+  while (heap.size) {
+    const n = heap.pop();
+    if (done[n]) continue;
+    done[n] = 1;
+    const u = n % W, v = (n - u) / W;
+    for (let k = 0; k < 16; k++) {
+      const uu = u + MOVES[k][0], vv = v + MOVES[k][1];
+      if (uu < 0 || vv < 0 || uu >= W || vv >= H) continue;
+      if ((uu - u0) ** 2 + (vv - v0) ** 2 > r2) continue;
+      const m = vv * W + uu;
+      if (done[m] || !(moveSlope(cor, u, v, k) <= lim) || !edgeOk(n, m)) continue;
+      let dx = MOVES[k][0], dy = -MOVES[k][1];
+      const L = Math.hypot(dx, dy); dx /= L; dy /= L;
+      const pitch = 0.5 * (gxs[n] * dx + gys[n] * dy + gxs[m] * dx + gys[m] * dy);
+      const km = L * kpp * 0.5 * (inv[n] + inv[m]);
+      const kmh = mob.speedKmh * speedFactor(pitch, mob), dt = km / kmh;
+      const t = hours[n] + dt;
+      if (t < hours[m]) {
+        hours[m] = t;
+        if (power) {
+          const climb = pitch > 0 ? (power.massKg * 1.62 * (kmh / 3.6) * Math.sin(Math.atan(pitch))) / power.climbEff : 0;
+          wh[m] = wh[n] + (power.loadW + power.driveW + climb) * dt;
+        }
+        heap.push(t, m);
+      }
+    }
+  }
+  return { cor, hours, wh, start, xy, slope };
+}
+
 // ---------- the planner ----------
 export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxSlopeDeg = DEFAULT_MAX_SLOPE, mobility = null } = {}, opts = {}) {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();

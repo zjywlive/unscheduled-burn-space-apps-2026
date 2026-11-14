@@ -1478,6 +1478,17 @@ button.relay-win:hover .relay-win-time { text-decoration: underline; text-underl
 .rp-station-mark path { fill: #3dd6c6; stroke: var(--ground); stroke-width: 1.5; }
 .rp-station-mark circle { fill: #fff; }
 
+/* ---------- phase 5: contingency ---------- */
+.rp-rover-sub { margin: 4px 0 6px; font-weight: 600; font-size: var(--fs-small); color: var(--text); }
+.rp-haven-link { fill: none; stroke: #7ee08a; stroke-width: 1.25; stroke-dasharray: 3 3; opacity: 0.85; }
+.rp-haven circle { fill: var(--ground); stroke: #7ee08a; stroke-width: 1.75; }
+.rp-haven text { fill: #7ee08a; font-size: 9px; font-weight: 700; }
+.rp-nohaven { fill: none; stroke: #ff5252; stroke-width: 1.75; }
+.rp-haven-here { fill: #7ee08a; stroke: var(--ground); stroke-width: 1; }
+/* four to a row: the unit is in the label, so the number gets the whole box */
+.rp-power .rp-rover-unit { display: none; }
+.rp-power .rp-rover-box { padding: 0 6px; }
+
 /* styles/phase4-shapeentry.css */
 /* Fix R9: the Coordinates form (ui/shapeentry.js). Same compact rows as the Route plan points: tag,
    latitude, longitude, row tools. No background of its own, so it sits on the glass panel. */
@@ -4213,6 +4224,55 @@ function simplify(points, tolKm) {
   return points.filter((_, i) => keep[i]);
 }
 
+// ---------- phase 5: reachability from a point ----------
+// Fastest drive time (h) and the energy on that drive (Wh, when power is given: load + drive + climbing, as
+// route-energy.js) from `center` to every node within radiusKm, under the same directional limits as the
+// planner. power: { loadW, driveW, massKg, climbEff } or null. → { cor, hours, wh, start, xy(n), slope } | null
+function reachFrom(dem, center, { mob, radiusKm = 10, power = null } = {}) {
+  const c = toPoint(center);
+  if (!c || !mob) return null;
+  const cor = buildCorridor(dem, c, c, radiusKm, null);
+  if (!cor) return null;
+  const { W, H, N, kpp, inv, slope, gxs, gys } = cor;
+  const lim = Math.max(mob.climbDeg, mob.descentDeg, mob.crossDeg);
+  const edgeOk = edgeTest(cor, mob);
+  const start = cor.nodeAt(c[0], c[1]);
+  const hours = new Float32Array(N).fill(Infinity), wh = new Float32Array(N).fill(Infinity), done = new Uint8Array(N);
+  const xy = (n) => { const u = n % W; return [cor.xOf(u), cor.yOf((n - u) / W)]; };
+  if (start < 0 || !(slope[start] <= lim)) return { cor, hours, wh, start: -1, xy, slope };
+  const r2 = (radiusKm / kpp) ** 2, u0 = start % W, v0 = (start - u0) / W;
+  const heap = createHeap();
+  hours[start] = 0; wh[start] = 0; heap.push(0, start);
+  while (heap.size) {
+    const n = heap.pop();
+    if (done[n]) continue;
+    done[n] = 1;
+    const u = n % W, v = (n - u) / W;
+    for (let k = 0; k < 16; k++) {
+      const uu = u + MOVES[k][0], vv = v + MOVES[k][1];
+      if (uu < 0 || vv < 0 || uu >= W || vv >= H) continue;
+      if ((uu - u0) ** 2 + (vv - v0) ** 2 > r2) continue;
+      const m = vv * W + uu;
+      if (done[m] || !(moveSlope(cor, u, v, k) <= lim) || !edgeOk(n, m)) continue;
+      let dx = MOVES[k][0], dy = -MOVES[k][1];
+      const L = Math.hypot(dx, dy); dx /= L; dy /= L;
+      const pitch = 0.5 * (gxs[n] * dx + gys[n] * dy + gxs[m] * dx + gys[m] * dy);
+      const km = L * kpp * 0.5 * (inv[n] + inv[m]);
+      const kmh = mob.speedKmh * speedFactor(pitch, mob), dt = km / kmh;
+      const t = hours[n] + dt;
+      if (t < hours[m]) {
+        hours[m] = t;
+        if (power) {
+          const climb = pitch > 0 ? (power.massKg * 1.62 * (kmh / 3.6) * Math.sin(Math.atan(pitch))) / power.climbEff : 0;
+          wh[m] = wh[n] + (power.loadW + power.driveW + climb) * dt;
+        }
+        heap.push(t, m);
+      }
+    }
+  }
+  return { cor, hours, wh, start, xy, slope };
+}
+
 // ---------- the planner ----------
 async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxSlopeDeg = DEFAULT_MAX_SLOPE, mobility = null } = {}, opts = {}) {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -4446,7 +4506,7 @@ function slopeAt(dem, xKm, yKm) {
   return Math.atan(Math.hypot((e - w) / span, (n - s) / span)) * DEG;
 }
 
-return { DEFAULT_MAX_SLOPE, MOBILITY_DEFAULTS, cleanMobility, speedFactor, MIN_POINTS, MAX_POINTS, MAX_LEG_KM, CANDIDATES, corridorPadKm, SUNNY_WEIGHTS, COSTS, sunnyTargetCost, toPoint, planSunLayers, sunFromJobs, edgeTest, TRAP_MIN_NODES, simplify, planRoutes, pickByMetric, slopeAt };
+return { DEFAULT_MAX_SLOPE, MOBILITY_DEFAULTS, cleanMobility, speedFactor, MIN_POINTS, MAX_POINTS, MAX_LEG_KM, CANDIDATES, corridorPadKm, SUNNY_WEIGHTS, COSTS, sunnyTargetCost, toPoint, planSunLayers, sunFromJobs, edgeTest, TRAP_MIN_NODES, simplify, reachFrom, planRoutes, pickByMetric, slopeAt };
 })();
 __m['state.js'] = (() => {
 // Screen state, URL hash parsing and writing, and the alternative scenario (spec §7.1).
@@ -7593,7 +7653,7 @@ function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
   const stops = [];
   const sKm = [], sSoc = [], sLit = [], sT = [];
   // phase 4: every sample's Earth visibility and time (0 / NaN where the drive did not get to)
-  const per = { earth: new Uint8Array(n), lit: new Uint8Array(n), tMs: new Float64Array(n).fill(NaN) };
+  const per = { earth: new Uint8Array(n), lit: new Uint8Array(n), tMs: new Float64Array(n).fill(NaN), socWh: new Float32Array(n).fill(NaN) };
   const record = (lit) => { sKm.push(km); sSoc.push(soc / cap); sLit.push(lit ? 1 : 0); sT.push(t); };
   const out = (ok, reason, extra = {}) => {
     const keep = Math.max(1, Math.ceil(sKm.length / 240));
@@ -7619,7 +7679,7 @@ function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
     t += dtH * 3600e3; km += dk; driveH += dtH;
     if (!lit) darkKm += dk;
     if (s.earthDeg > 0) earthKm += dk;
-    per.earth[i] = s.earthDeg > 0 ? 1 : 0; per.lit[i] = lit ? 1 : 0; per.tMs[i] = t - (dtH * 3600e3) / 2;
+    per.earth[i] = s.earthDeg > 0 ? 1 : 0; per.lit[i] = lit ? 1 : 0; per.tMs[i] = t - (dtH * 3600e3) / 2; per.socWh[i] = Math.max(0, soc);
     if (soc <= 0) { soc = 0; record(lit); return out(false, 'empty', { emptyAt: { x, y, km, tMs: t } }); }
     if (soc < socMin) { socMin = soc; socMinKm = km; }
     record(lit);
@@ -7673,9 +7733,10 @@ function skyFromGrid(grid, eph, bodyAzEl, fromXY) {
     const k = grid.cellAt(x, y);
     const { latDeg, lonDeg } = fromXY(x, y);
     const r = bodyAzEl(eph, { latDeg, lonDeg }, tMs);
-    if (k === null || k === undefined || !r) return { sunDeg: NaN, earthDeg: NaN, azDeg: r?.sun.azDeg ?? null, elDeg: r?.sun.elDeg ?? NaN };
+    const earthAz = r?.earth.azDeg ?? null, earthEl = r?.earth.elDeg ?? NaN;
+    if (k === null || k === undefined || !r) return { sunDeg: NaN, earthDeg: NaN, azDeg: r?.sun.azDeg ?? null, elDeg: r?.sun.elDeg ?? NaN, earthAzDeg: earthAz, earthElDeg: earthEl };
     grid.clearances(k, d, c);
-    return { sunDeg: c[0], earthDeg: c[1], azDeg: r.sun.azDeg, elDeg: r.sun.elDeg };
+    return { sunDeg: c[0], earthDeg: c[1], azDeg: r.sun.azDeg, elDeg: r.sun.elDeg, earthAzDeg: earthAz, earthElDeg: earthEl };
   };
 }
 
@@ -7839,6 +7900,7 @@ __m['ui/routeplan.js'] = (() => {
 //   energy: { drive, departMs, routeId } | null   phase 3: route-energy.js simulateDrive of the selected route
 //   departures: { routeId, scan } | null           phase 3: route-energy.js scanDepartures of the selected route
 //   comms: { routeId, summary, links, earth, coverage } | null   phase 4: comms.js figures of the selected route
+//   havens: { routeId, result } | null           phase 5: contingency.js findHavens of the selected route
 const { h, s, clear } = __m['ui/dom.js'];
 const { fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
 const { parseLatLon, formatLat, formatLon } = __m['coords.js'];
@@ -7914,7 +7976,7 @@ function roverLines(plan, r) {
 // Phase 3: the energy figures of a simulated drive as display lines.
 const when = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
 const dur = (h) => (h >= 48 ? `${(h / 24).toFixed(1)} days` : `${h.toFixed(h < 10 ? 1 : 0)} h`);
-function energyLines(drive, power = POWER_DEFAULTS) {
+function energyLines(drive, power = POWER_DEFAULTS, skyKm = null) {
   if (!drive) return [];
   if (drive.reason === 'ephemeris') return [{ key: 'energy', warn: true, text: 'Energy not simulated: the departure is outside the ephemeris (1 Nov 2026 to 1 Jan 2029).' }];
   const pct = (v) => `${Math.round(v * 100)}%`;
@@ -7923,7 +7985,7 @@ function energyLines(drive, power = POWER_DEFAULTS) {
   else if (drive.reason === 'empty') lines.push({ key: 'arrive', warn: true, text: `Leaving ${when(drive.departMs)}, the battery runs out at km ${kmFmt.format(drive.emptyAt.km)} (${when(drive.emptyAt.tMs)}), ${drive.stops.length ? 'parked in the dark' : 'in the dark'}. Leave at another time, carry more battery or take a sunnier route.` });
   else if (drive.reason === 'stuck') lines.push({ key: 'arrive', warn: true, text: `Leaving ${when(drive.departMs)}, it is parked for over 30 days waiting for sunlight at km ${kmFmt.format(drive.km)}: this departure does not work.` });
   lines.push({ key: 'battery', warn: drive.socMin < power.reserve + 1e-9, text: `Battery: starts ${pct(drive.socStart)}, lowest ${pct(drive.socMin)} at km ${kmFmt.format(drive.socMinKm)}${drive.ok ? `, ends ${pct(drive.socEnd)}` : ''} (${intFmt.format(power.batteryWh)} Wh, ${pct(power.reserve)} reserve).` });
-  if (drive.km > 0) lines.push({ key: 'light', text: `In shadow for ${kmFmt.format(drive.darkKm)} km of ${kmFmt.format(drive.km)}; Earth in view for ${Math.round((drive.earthKm / drive.km) * 100)}% of it.` });
+  if (drive.km > 0) lines.push({ key: 'light', text: `In shadow for ${kmFmt.format(drive.darkKm)} km of ${kmFmt.format(drive.km)}; Earth in view for ${Math.round((drive.earthKm / drive.km) * 100)}% of it${skyKm ? ` (shadows from the ${skyKm} km skyline grid${skyKm > 1 ? '; the 1 km grid is still loading and can change this' : ''})` : ''}.` });
   return lines;
 }
 
@@ -7943,6 +8005,37 @@ function commsLines(comms) {
     ? { key: 'gap', warn: true, text: `No link at all for ${kmFmt.format(m.totalKm - m.anyKm)} km; the longest gap is ${kmFmt.format(m.gapKm)} km${m.gapH !== null && m.gapH > 0 ? ` (${m.gapH.toFixed(1)} h)` : ''}.` }
     : { key: 'gap', text: 'Always in touch: the station or Earth covers every part of the route.' });
   if (c) lines.push({ key: 'coverage', text: `The station has line of sight to ${Math.round(c.losShare * 100)}% of its ${c.settings.radiusKm} km circle and a usable link to ${Math.round(c.linkShare * 100)}% (coloured on the map).` });
+  return lines;
+}
+
+// Phase 5: safe havens and comms-denied navigation as display lines.
+const deg0 = (v) => `${Math.round(v)}°`;
+const side = (rel) => (Math.abs(rel) < 3 ? 'straight ahead' : rel > 0 ? `${deg0(rel)} to your right` : `${deg0(-rel)} to your left`);
+function havenLines(result, drive = null) {
+  if (!result?.checkpoints?.length) return [];
+  const cps = result.checkpoints, lines = [];
+  const crit = `Sun on arrival and for the next ${result.lookaheadH} h, Earth in view, gentle ground`;
+  lines.push({ key: 'havens', text: `Safe havens (${crit}) within ${result.radiusKm} km by drive: found from ${result.found} of ${cps.length} checkpoints along the route.` });
+  if (result.worst) {
+    const w = result.worst, h = w.haven;
+    lines.push({ key: 'worst', text: `Farthest one: from km ${kmFmt.format(w.km)}, ${kmFmt.format(h.distKm)} km away (${h.hours.toFixed(1)} h, ${(h.wh / 1000).toFixed(1)} kWh of the ${(w.socWh / 1000).toFixed(1)} kWh left).` });
+  }
+  if (result.missing.length) {
+    const kms = result.missing.map((c) => kmFmt.format(c.km));
+    const why = result.missing[0].why;
+    lines.push({ key: 'missing', warn: true, text: `No haven from km ${kms.length > 4 ? `${kms.slice(0, 3).join(', ')} … ${kms.at(-1)}` : kms.join(', ')} (${why}). Keep the battery high there, or add a waypoint by a lit ridge.` });
+  }
+  // navigation cue: where the battery runs out, else the farthest haven
+  const cue = (drive?.emptyAt ? cps.at(-1) : null)?.haven ? cps.at(-1) : result.worst;
+  if (cue?.haven?.nav) {
+    const nv = cue.haven.nav, refs = [];
+    // steer only by what is above the local skyline at the checkpoint
+    if (nv.sunVisible && nv.sunRelDeg !== null) refs.push(`the Sun (azimuth ${deg0(nv.sunAzDeg)}, ${Math.max(0, nv.sunElDeg).toFixed(1)}° up) ${side(nv.sunRelDeg)}`);
+    if (nv.earthVisible && nv.earthRelDeg !== null) refs.push(`Earth (azimuth ${deg0(nv.earthAzDeg)}, ${nv.earthElDeg.toFixed(1)}° up) ${side(nv.earthRelDeg)}`);
+    const keep = refs.length ? `keeping ${refs.join(' and ')}` : 'with neither the Sun nor Earth above the skyline here, so by star tracker or wheel odometry alone';
+    const hidden = refs.length === 1 ? (nv.sunVisible ? ' (Earth is behind the terrain here)' : ' (the Sun is behind the terrain here)') : '';
+    lines.push({ key: 'nav', text: `Without comms, from km ${kmFmt.format(cue.km)}: head ${deg0(cue.haven.bearingDeg)} to the haven, ${keep}${hidden}. With 2 % dead-reckoning drift it arrives within about ${intFmt.format(Math.max(10, Math.round(nv.drift95M / 10) * 10))} m.` });
+  }
   return lines;
 }
 
@@ -8027,7 +8120,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   let limit = DEFAULT_MAX_SLOPE;
   let mobility = { ...MOBILITY_DEFAULTS };   // phase 2: the rest of the rover limits
   let power = { ...POWER_DEFAULTS };         // phase 3: panel, battery, load, mass
-  let energy = null, departures = null, comms = null;
+  let energy = null, departures = null, comms = null, havens = null;
   let station = { ...STATION_DEFAULTS }, stationOn = true;
   let lastPoints = null, emitted = null;
   let running = false, progress = 0, plan = null, selected = null, hovered = null;
@@ -8068,7 +8161,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     return h('label', { class: 'rp-rover-field', for: `${id}-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, h('span', { class: 'rp-rover-unit' }, unit)));
   };
   const powerRow = h('div', { class: 'rp-rover rp-power' },
-    powerInput('panelW', 'Panel', 'W', 0, 20000, 10), powerInput('batteryWh', 'Battery', 'Wh', 100, 100000, 100), powerInput('loadW', 'Load', 'W', 0, 5000, 5), powerInput('massKg', 'Mass', 'kg', 10, 20000, 10));
+    powerInput('panelW', 'Panel W', 'W', 0, 20000, 10), powerInput('batteryWh', 'Battery Wh', 'Wh', 100, 100000, 100), powerInput('loadW', 'Load W', 'W', 0, 5000, 5), powerInput('massKg', 'Mass kg', 'kg', 10, 20000, 10));
   // phase 4: the surface station
   const stationField = (key, label, unit, min, max, step) => {
     const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-st-${key}`, min, max, step, value: station[key], inputmode: 'decimal' });
@@ -8087,7 +8180,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   const stationRow = h('div', { class: 'rp-station' },
     h('label', { class: 'rp-station-head', for: `${id}-st-on` }, stationToggle, h('span', null, 'Surface station '), h('span', { class: 'rp-assumed' }, 'JPL site')),
     h('div', { class: 'rp-rover rp-power' },
-      stationField('latDeg', 'Lat', '°', -90, -80, 0.01), stationField('lonDeg', 'Lon (E)', '°', 0, 360, 0.1), stationField('mastM', 'Mast', 'm', 0, 200, 1),
+      stationField('latDeg', 'Lat °', '°', -90, -80, 0.01), stationField('lonDeg', 'Lon °E', '°', 0, 360, 0.1), stationField('mastM', 'Mast m', 'm', 0, 200, 1),
       h('label', { class: 'rp-rover-field', for: `${id}-st-band` }, h('span', { class: 'rp-rover-name' }, 'Band'), h('span', { class: 'rp-rover-box' }, bandSel))));
   const roverRow = h('div', { class: 'rp-rover' },
     roverInput('descentDeg', 'Descent', '°', 1, 45, 1), roverInput('crossDeg', 'Across', '°', 1, 45, 1), roverInput('speedKmh', 'Speed', 'km/h', 0.05, 20, 0.05));
@@ -8336,14 +8429,14 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   const roverBox = h('div', { class: 'rp-rover-result', 'aria-live': 'polite' });
   function renderRover() {
     const r = plan?.ok && !running ? plan.routes.find((x) => x.id === selected) : null;
-    const key = r ? `${plan.ms}:${plan.nodes}:${selected}:${energy?.departMs ?? ''}:${energy?.routeId ?? ''}:${departures?.scan?.tried ?? ''}:${departures?.routeId ?? ''}:${comms?.stamp ?? ''}` : null;
+    const key = r ? `${plan.ms}:${plan.nodes}:${selected}:${energy?.departMs ?? ''}:${energy?.routeId ?? ''}:${departures?.scan?.tried ?? ''}:${departures?.routeId ?? ''}:${comms?.stamp ?? ''}:${havens?.stamp ?? ''}` : null;
     if (key === roverKey) return;
     roverKey = key;
     clear(roverBox);
     const lines = roverLines(plan, r);
     if (!lines.length) { roverBox.remove(); return; }
     const drive = energy && energy.routeId === r.id ? energy.drive : null;
-    const eLines = energyLines(drive, power);
+    const eLines = energyLines(drive, power, energy?.skyKm ?? null);
     const chart = drive ? batteryChart(drive, power.reserve, r.lengthKm) : null;
     roverBox.append(h('p', { class: 'rp-rover-title' }, `Rover on the ${names[r.id] ?? r.label} route`),
       eLines.length ? h('ul', { class: 'rp-energy' }, ...eLines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))) : null,
@@ -8356,6 +8449,11 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
         if (!cl.length) return [];
         return [h('ul', { class: 'rp-energy rp-comms' }, ...cl.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))),
           c.coverage ? h('div', { class: 'rp-cov-key', 'aria-label': 'Station coverage colours, received power' }, ...COVERAGE_BINS.map((b) => h('span', null, h('i', { style: `background:${b.color}` }), b.label))) : null];
+      })(),
+      ...(() => {
+        const hv = havens && havens.routeId === r.id ? havens.result : null;
+        const hl = havenLines(hv, drive);
+        return hl.length ? [h('p', { class: 'rp-rover-sub' }, 'If something goes wrong'), h('ul', { class: 'rp-energy rp-havens' }, ...hl.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text)))] : [];
       })(),
       drive ? h('div', { class: 'rp-depart-row' },
         h('button', { type: 'button', class: 'btn rp-depart', onclick: () => callbacks.onDepartNow?.() }, 'Leave at the timeline time'),
@@ -8447,6 +8545,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     if ('energy' in p) { energy = p.energy ?? null; roverKey = null; }
     if ('departures' in p) { departures = p.departures ?? null; roverKey = null; }
     if ('comms' in p) { comms = p.comms ?? null; roverKey = null; }
+    if ('havens' in p) { havens = p.havens ?? null; roverKey = null; }
     const baseBefore = notes.dataset.base;
     renderResults();
     if (baseText() !== baseBefore) { notes.dataset.base = baseText(); renderNotes(); }
@@ -8461,7 +8560,7 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   return { el, update };
 }
 
-return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, COVERAGE_BINS, commsLines, linkStrip, departuresLine, batteryChart, routeSentence, planMatches, createRoutePlanCard };
+return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, COVERAGE_BINS, commsLines, havenLines, linkStrip, departuresLine, batteryChart, routeSentence, planMatches, createRoutePlanCard };
 })();
 __m['map/routes-layer.js'] = (() => {
 // Planned route candidates on the map (phase 4 §6 R): the three candidates of route-plan.js and their
@@ -8482,6 +8581,7 @@ __m['map/routes-layer.js'] = (() => {
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
 //   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
+//   havens: contingency.js findHavens() | null  phase 5: checkpoint → haven links, havens (H), checkpoints without one
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
 //                                        default) reads the site names, dots and feature names on the page
@@ -8574,7 +8674,7 @@ function placeLabel(points, toPx, name, frac, taken, width = Infinity, height = 
   return null;
 }
 
-function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null } = {}) {
+function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
@@ -8640,6 +8740,25 @@ function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx,
       taken.push(at.box);
       gEl.append(s('text', { class: `rp-label${r.id === selected ? ' is-selected' : ''}`, x: f1(at.x), y: f1(at.y + 4), 'text-anchor': at.anchor }, name));
     }
+  }
+  if (havens?.checkpoints?.length) {
+    const g = s('g', { class: 'rp-havens-layer' });
+    let d = '';
+    const seen = new Map();
+    for (const c of havens.checkpoints) {
+      const [ax, ay] = toPx(c.x, c.y);
+      if (!Number.isFinite(ax) || !Number.isFinite(ay)) continue;
+      if (!c.haven) { g.append(s('circle', { class: 'rp-nohaven', cx: f1(ax), cy: f1(ay), r: 4 })); continue; }
+      // the checkpoint is itself a haven (or nearly): a dot on the route, no detour to draw
+      if (c.haven.distKm < 0.3) { g.append(s('circle', { class: 'rp-haven-here', cx: f1(ax), cy: f1(ay), r: 2.6 })); continue; }
+      const [hx, hy] = toPx(c.haven.x, c.haven.y);
+      if (!Number.isFinite(hx) || !Number.isFinite(hy)) continue;
+      d += `M${f1(ax)} ${f1(ay)}L${f1(hx)} ${f1(hy)}`;
+      seen.set(`${Math.round(hx)},${Math.round(hy)}`, [hx, hy]);
+    }
+    if (d) g.append(s('path', { class: 'rp-haven-link', d }));
+    for (const [hx, hy] of seen.values()) g.append(s('g', { class: 'rp-haven', transform: `translate(${f1(hx)} ${f1(hy)})` }, s('circle', { r: 6.5 }), s('text', { y: 3.5, 'text-anchor': 'middle' }, 'H')));
+    gEl.append(g);
   }
   if (drive) {
     const g = s('g', { class: 'rp-drive' });
@@ -9294,6 +9413,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
       waypoints: rp?.plan?.waypoints ?? rp?.points ?? null,
       traps: rp?.plan?.traps ?? null,
       drive: rp?.energy?.drive ?? null,
+      havens: rp?.havens?.result ?? null,
       coverage: rp?.stationOff ? null : rp?.coverage ?? null,
       toPx: (x, y) => toPxView(sqView(view), S, x, y),
       width: S, height: S,
@@ -11913,6 +12033,113 @@ function createShapeEntry(cb = {}) {
 }
 
 return { ENTRY_TOOLS, MAX_RADIUS_KM, MIN_POLYGON, blankFields, shapeFromFields, fieldsFromShape, createShapeEntry };
+})();
+__m['contingency.js'] = (() => {
+// Phase 5 (docs/PHASES.md): what the rover does when something goes wrong on a planned route.
+//
+// Safe havens: from checkpoints along the route (every everyKm, and where the battery would run out), the
+// closest place by drive time that is lit on arrival and for the next lookaheadH hours, has Earth in view on
+// arrival, is gentle enough to park on, and can be reached with the battery left at the checkpoint. Drive
+// times and energy come from route-plan.js reachFrom (the same directional limits as the planner).
+//
+// Comms-denied navigation: the bearing to the haven and where the Sun and Earth sit relative to it, so the
+// rover (or an operator reading a camera image) can hold the heading without a link; dead-reckoning error
+// grows with the distance driven.
+//
+// findHavens({ dem, mob, power, profile, drive, sky, opts }) → { checkpoints: [Checkpoint], radiusKm, … }
+//   Checkpoint = { km, x, y, tMs, socWh, haven: Haven | null, why (when no haven) }
+//   Haven = { x, y, hours, wh, distKm, bearingDeg, nav: { sunAzDeg, sunElDeg, sunRelDeg, earthAzDeg,
+//             earthElDeg, earthRelDeg, drift95M, sunVisible, earthVisible } }
+const { reachFrom } = __m['route-plan.js'];
+const { cleanPower } = __m['route-energy.js'];
+const { fromXY } = __m['terrain.js'];
+
+const RAD = Math.PI / 180, DEG = 180 / Math.PI;
+const HAVEN_DEFAULTS = Object.freeze({ everyKm: 2, radiusKm: 10, lookaheadH: 24, stepH: 6, parkSlopeDeg: 10, driftShare: 0.02 });
+
+// Initial great-circle bearing (deg from north, east-positive) from one map point to another.
+function bearing(ax, ay, bx, by) {
+  const a = fromXY(ax, ay), b = fromXY(bx, by);
+  const p1 = a.latDeg * RAD, p2 = b.latDeg * RAD, dl = (b.lonDeg - a.lonDeg) * RAD;
+  const y = Math.sin(dl) * Math.cos(p2), x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return ((Math.atan2(y, x) * DEG) + 360) % 360;
+}
+
+// Signed angle from the heading to a body's azimuth: + to the right, − to the left (deg, −180…180).
+const relAngle = (azDeg, headingDeg) => ((azDeg - headingDeg + 540) % 360) - 180;
+
+// Is a place a haven if the rover gets there at tMs? (sky as route-energy.js skyFromGrid; cache optional)
+function isHaven(sky, x, y, tMs, { lookaheadH, stepH }, cache = null) {
+  const at = (t) => {
+    if (!cache) return sky(x, y, t);
+    const key = `${Math.round(x * 2)},${Math.round(y * 2)},${Math.round(t / 3600e3)}`;
+    if (!cache.has(key)) cache.set(key, sky(x, y, t));
+    return cache.get(key);
+  };
+  const now = at(tMs);
+  if (!now || !(now.sunDeg > 0) || !(now.earthDeg > 0)) return false;
+  for (let h = stepH; h <= lookaheadH; h += stepH) { const q = at(tMs + h * 3600e3); if (!q || !(q.sunDeg > 0)) return false; }
+  return true;
+}
+
+// Checkpoints along a profile: every everyKm from the start, plus the end and, if the battery runs out, the
+// last sample before it. Uses the drive's per-sample times and battery.
+function checkpoints(profile, drive, everyKm) {
+  const per = drive?.perSample, n = profile.km.length, out = [];
+  let km = 0, next = 0;
+  for (let i = 0; i < n; i++) {
+    const reached = per && Number.isFinite(per.tMs[i]);
+    const last = i === n - 1 || (per && !Number.isFinite(per.tMs[i + 1]));
+    if (reached && (km >= next || last)) {
+      out.push({ i, km, x: profile.x[i], y: profile.y[i], tMs: per.tMs[i], socWh: per.socWh[i] });
+      next = km + everyKm;
+    }
+    km += profile.km[i];
+    if (per && !reached) break;
+  }
+  return out;
+}
+
+function findHavens({ dem, mob, power: p0 = {}, profile, drive, sky, opts = {} }) {
+  const o = { ...HAVEN_DEFAULTS, ...opts }, power = cleanPower(p0);
+  const cache = new Map();
+  const cps = checkpoints(profile, drive, o.everyKm);
+  for (const cp of cps) {
+    const R = reachFrom(dem, [cp.x, cp.y], { mob, radiusKm: o.radiusKm, power });
+    if (!R || R.start < 0) { cp.haven = null; cp.why = 'off the terrain grid'; continue; }
+    // candidates by drive time, nearest first
+    const order = [];
+    for (let n = 0; n < R.hours.length; n++) if (Number.isFinite(R.hours[n]) && R.slope[n] <= o.parkSlopeDeg) order.push(n);
+    order.sort((a, b) => R.hours[a] - R.hours[b]);
+    let best = null, tooFar = false;
+    for (const n of order) {
+      if (R.wh[n] > cp.socWh) { tooFar = true; continue; }   // not enough battery to get there
+      const [x, y] = R.xy(n), arrive = cp.tMs + R.hours[n] * 3600e3;
+      if (!isHaven(sky, x, y, arrive, o, cache)) continue;
+      best = { n, x, y, hours: R.hours[n], wh: R.wh[n], arrive };
+      break;
+    }
+    if (!best) { cp.haven = null; cp.why = tooFar ? `none within reach of the ${Math.round(cp.socWh)} Wh left` : `none within ${o.radiusKm} km`; continue; }
+    const brg = bearing(cp.x, cp.y, best.x, best.y);
+    const s = sky(cp.x, cp.y, cp.tMs) ?? {};
+    const distKm = Math.hypot(best.x - cp.x, best.y - cp.y);
+    const driveKm = best.hours * mob.speedKmh;   // an upper bound on the km driven (slopes only slow it)
+    cp.haven = {
+      x: best.x, y: best.y, hours: best.hours, wh: best.wh, distKm, bearingDeg: brg, arriveMs: best.arrive,
+      nav: {
+        sunAzDeg: s.azDeg ?? null, sunElDeg: s.elDeg ?? null, sunRelDeg: Number.isFinite(s.azDeg) ? relAngle(s.azDeg, brg) : null,
+        earthAzDeg: s.earthAzDeg ?? null, earthElDeg: s.earthElDeg ?? null, earthRelDeg: Number.isFinite(s.earthAzDeg) ? relAngle(s.earthAzDeg, brg) : null,
+        drift95M: o.driftShare * driveKm * 1000,
+        sunVisible: s.sunDeg > 0, earthVisible: s.earthDeg > 0,   // above the local skyline at the checkpoint
+      },
+    };
+  }
+  const found = cps.filter((c) => c.haven);
+  const worst = found.length ? found.reduce((a, b) => (b.haven.hours > a.haven.hours ? b : a)) : null;
+  return { checkpoints: cps, radiusKm: o.radiusKm, lookaheadH: o.lookaheadH, found: found.length, worst, missing: cps.filter((c) => !c.haven) };
+}
+
+return { HAVEN_DEFAULTS, bearing, relAngle, isHaven, checkpoints, findHavens };
 })();
 __m['charts/scale.js'] = (() => {
 // Linear scales, round ticks and path splitting for the two charts.
@@ -18696,6 +18923,7 @@ const { createShapeEntry } = __m['ui/shapeentry.js'];
 const { planRoutes, sunFromJobs, simplify } = __m['route-plan.js'];
 const { simulateDrive, skyFromGrid, scanDepartures } = __m['route-energy.js'];
 const { coverage: stationCoverage, routeLinks, linkSummary, STATION_DEFAULTS } = __m['comms.js'];
+const { findHavens } = __m['contingency.js'];
 const { renderPanorama, updatePanoramaCursor } = __m['charts/panorama.js'];
 const { renderElevation, updateElevationCursor } = __m['charts/elevation.js'];
 const { renderCompare } = __m['ui/compare.js'];
@@ -18823,6 +19051,8 @@ function start() {
         // so a filter never runs on a missing array
         const g = createHeatGrid({ horizon: fineBytes.horizon_1km, ...meta.horizons[1] });
         plan.setFine({ grid: g, inside: insideMask(g), label: '1 km', slope: staticGrid(fineBytes.slope_1km, 0.25), shadow: staticGrid(fineBytes.shadow_1km, 1) });
+        // phase 3: shadows on a planned route are sharper on the 1 km skyline grid, so its drive is run again
+        if (rp?.plan?.ok && rp.energy) setTimeout(() => updateEnergy(), 0);
       }
     }
   }
@@ -19105,10 +19335,21 @@ function start() {
     if (!r?.profile || !rp.plan.mobility || !g) { rp = { ...rp, energy: null }; routePlanCard?.update({ energy: null }); return; }
     const departMs = rp.departMs ?? timelineNow();
     const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
-    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id } };
+    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id, skyKm: g.cellKm } };
     routePlanCard?.update({ energy: rp.energy });
+    updateHavens();
     updateComms();
     redrawRoutes();
+  }
+  // phase 5: safe havens from checkpoints along the drive, on the planner's 240 m grid
+  function updateHavens() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+    const dem240 = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
+    const g = plan?.fine?.grid ?? coarse?.grid;
+    if (!r?.profile || !rp.energy || !dem240 || !g) { rp = { ...rp, havens: null }; routePlanCard?.update({ havens: null }); return; }
+    const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
+    rp = { ...rp, havens: { routeId: r.id, result, stamp: Date.now() } };
+    routePlanCard?.update({ havens: rp.havens });
   }
   // phase 4: the surface station's coverage and the links along the selected route, on the finest terrain loaded
   function terrainHeight(x, y) {

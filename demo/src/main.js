@@ -29,6 +29,7 @@ import { createShapeEntry } from './ui/shapeentry.js';
 import { planRoutes, sunFromJobs, simplify } from './route-plan.js';
 import { simulateDrive, skyFromGrid, scanDepartures } from './route-energy.js';
 import { coverage as stationCoverage, routeLinks, linkSummary, STATION_DEFAULTS } from './comms.js';
+import { findHavens } from './contingency.js';
 import { renderPanorama, updatePanoramaCursor } from './charts/panorama.js';
 import { renderElevation, updateElevationCursor } from './charts/elevation.js';
 import { renderCompare } from './ui/compare.js';
@@ -156,6 +157,8 @@ function start() {
         // so a filter never runs on a missing array
         const g = createHeatGrid({ horizon: fineBytes.horizon_1km, ...meta.horizons[1] });
         plan.setFine({ grid: g, inside: insideMask(g), label: '1 km', slope: staticGrid(fineBytes.slope_1km, 0.25), shadow: staticGrid(fineBytes.shadow_1km, 1) });
+        // phase 3: shadows on a planned route are sharper on the 1 km skyline grid, so its drive is run again
+        if (rp?.plan?.ok && rp.energy) setTimeout(() => updateEnergy(), 0);
       }
     }
   }
@@ -438,10 +441,21 @@ function start() {
     if (!r?.profile || !rp.plan.mobility || !g) { rp = { ...rp, energy: null }; routePlanCard?.update({ energy: null }); return; }
     const departMs = rp.departMs ?? timelineNow();
     const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
-    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id } };
+    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id, skyKm: g.cellKm } };
     routePlanCard?.update({ energy: rp.energy });
+    updateHavens();
     updateComms();
     redrawRoutes();
+  }
+  // phase 5: safe havens from checkpoints along the drive, on the planner's 240 m grid
+  function updateHavens() {
+    const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
+    const dem240 = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
+    const g = plan?.fine?.grid ?? coarse?.grid;
+    if (!r?.profile || !rp.energy || !dem240 || !g) { rp = { ...rp, havens: null }; routePlanCard?.update({ havens: null }); return; }
+    const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
+    rp = { ...rp, havens: { routeId: r.id, result, stamp: Date.now() } };
+    routePlanCard?.update({ havens: rp.havens });
   }
   // phase 4: the surface station's coverage and the links along the selected route, on the finest terrain loaded
   function terrainHeight(x, y) {

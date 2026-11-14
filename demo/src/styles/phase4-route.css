@@ -169,3 +169,14 @@
 .rp-cov { opacity: 0.42; }
 .rp-station-mark path { fill: #3dd6c6; stroke: var(--ground); stroke-width: 1.5; }
 .rp-station-mark circle { fill: #fff; }
+
+/* ---------- phase 5: contingency ---------- */
+.rp-rover-sub { margin: 4px 0 6px; font-weight: 600; font-size: var(--fs-small); color: var(--text); }
+.rp-haven-link { fill: none; stroke: #7ee08a; stroke-width: 1.25; stroke-dasharray: 3 3; opacity: 0.85; }
+.rp-haven circle { fill: var(--ground); stroke: #7ee08a; stroke-width: 1.75; }
+.rp-haven text { fill: #7ee08a; font-size: 9px; font-weight: 700; }
+.rp-nohaven { fill: none; stroke: #ff5252; stroke-width: 1.75; }
+.rp-haven-here { fill: #7ee08a; stroke: var(--ground); stroke-width: 1; }
+/* four to a row: the unit is in the label, so the number gets the whole box */
+.rp-power .rp-rover-unit { display: none; }
+.rp-power .rp-rover-box { padding: 0 6px; }

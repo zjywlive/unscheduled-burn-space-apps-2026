@@ -130,10 +130,27 @@ loss plus knife-edge diffraction along the terrain).
   and the two-ray model the paper used in line of sight; the coverage is computed once per station on the
   levels loaded at that moment.
 
-## Phase 5: contingency and navigation
+## Phase 5: contingency and navigation (done 14 Nov, 19:45 GMT)
 
 Nearest safe haven from any point on the route (lit, Earth-visible, reachable within the energy and
 slope limits). Comms-denied heading from the Sun and Earth position.
+
+**Status (14 Nov).** `demo/src/contingency.js` and `reachFrom` in `route-plan.js`:
+- From checkpoints every 2 km along the simulated drive (and where the battery runs out): the nearest place by
+  drive time, under the same directional limits, that has the Sun on arrival and for the next 24 h (checked
+  every 6 h), Earth in view on arrival and ground under 10°, and that the battery left at the checkpoint can
+  reach. Card: "If something goes wrong" with the coverage, the farthest haven and the checkpoints without one;
+  map: green dots where the checkpoint is itself a haven, H and a dashed link where it needs a detour, red rings
+  where there is none.
+- Comms-denied cue: the bearing to the haven and where the Sun and Earth sit relative to it, using only bodies
+  above the local skyline at that point; dead-reckoning drift of 2 % gives the arrival uncertainty.
+- Tests (`tests/contingency.test.mjs`): flat-ground drive times and energy, the nearest lit patch, radius and
+  battery limits, the 24 h rule, bearings, checkpoints, and the real route.
+- Found while testing: at the south pole's low Sun, the 2 km and 1 km skyline grids can disagree (this drive runs
+  out at km 7.8 on the 2 km grid and succeeds on the 1 km grid). The card now says which grid it used, and the
+  drive is run again when the 1 km grid finishes loading.
+- Checked in headless Chrome on the Flattest route leaving 18 Jan 18:00 UTC: havens from 27 of 27 checkpoints,
+  the farthest 1.6 km away (2.5 h, 0.8 kWh).
 
 ## Phase 6: 3D route and live position
 

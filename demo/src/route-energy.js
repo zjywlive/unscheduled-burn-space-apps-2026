@@ -64,7 +64,7 @@ export function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
   const stops = [];
   const sKm = [], sSoc = [], sLit = [], sT = [];
   // phase 4: every sample's Earth visibility and time (0 / NaN where the drive did not get to)
-  const per = { earth: new Uint8Array(n), lit: new Uint8Array(n), tMs: new Float64Array(n).fill(NaN) };
+  const per = { earth: new Uint8Array(n), lit: new Uint8Array(n), tMs: new Float64Array(n).fill(NaN), socWh: new Float32Array(n).fill(NaN) };
   const record = (lit) => { sKm.push(km); sSoc.push(soc / cap); sLit.push(lit ? 1 : 0); sT.push(t); };
   const out = (ok, reason, extra = {}) => {
     const keep = Math.max(1, Math.ceil(sKm.length / 240));
@@ -90,7 +90,7 @@ export function simulateDrive(profile, { mob, power: p0, departMs, sky }) {
     t += dtH * 3600e3; km += dk; driveH += dtH;
     if (!lit) darkKm += dk;
     if (s.earthDeg > 0) earthKm += dk;
-    per.earth[i] = s.earthDeg > 0 ? 1 : 0; per.lit[i] = lit ? 1 : 0; per.tMs[i] = t - (dtH * 3600e3) / 2;
+    per.earth[i] = s.earthDeg > 0 ? 1 : 0; per.lit[i] = lit ? 1 : 0; per.tMs[i] = t - (dtH * 3600e3) / 2; per.socWh[i] = Math.max(0, soc);
     if (soc <= 0) { soc = 0; record(lit); return out(false, 'empty', { emptyAt: { x, y, km, tMs: t } }); }
     if (soc < socMin) { socMin = soc; socMinKm = km; }
     record(lit);
@@ -144,8 +144,9 @@ export function skyFromGrid(grid, eph, bodyAzEl, fromXY) {
     const k = grid.cellAt(x, y);
     const { latDeg, lonDeg } = fromXY(x, y);
     const r = bodyAzEl(eph, { latDeg, lonDeg }, tMs);
-    if (k === null || k === undefined || !r) return { sunDeg: NaN, earthDeg: NaN, azDeg: r?.sun.azDeg ?? null, elDeg: r?.sun.elDeg ?? NaN };
+    const earthAz = r?.earth.azDeg ?? null, earthEl = r?.earth.elDeg ?? NaN;
+    if (k === null || k === undefined || !r) return { sunDeg: NaN, earthDeg: NaN, azDeg: r?.sun.azDeg ?? null, elDeg: r?.sun.elDeg ?? NaN, earthAzDeg: earthAz, earthElDeg: earthEl };
     grid.clearances(k, d, c);
-    return { sunDeg: c[0], earthDeg: c[1], azDeg: r.sun.azDeg, elDeg: r.sun.elDeg };
+    return { sunDeg: c[0], earthDeg: c[1], azDeg: r.sun.azDeg, elDeg: r.sun.elDeg, earthAzDeg: earthAz, earthElDeg: earthEl };
   };
 }

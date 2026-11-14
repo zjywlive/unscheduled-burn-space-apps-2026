@@ -16,6 +16,7 @@
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
 //   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
+//   havens: contingency.js findHavens() | null  phase 5: checkpoint → haven links, havens (H), checkpoints without one
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
 //                                        default) reads the site names, dots and feature names on the page
@@ -108,7 +109,7 @@ export function placeLabel(points, toPx, name, frac, taken, width = Infinity, he
   return null;
 }
 
-export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null } = {}) {
+export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
@@ -174,6 +175,25 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
       taken.push(at.box);
       gEl.append(s('text', { class: `rp-label${r.id === selected ? ' is-selected' : ''}`, x: f1(at.x), y: f1(at.y + 4), 'text-anchor': at.anchor }, name));
     }
+  }
+  if (havens?.checkpoints?.length) {
+    const g = s('g', { class: 'rp-havens-layer' });
+    let d = '';
+    const seen = new Map();
+    for (const c of havens.checkpoints) {
+      const [ax, ay] = toPx(c.x, c.y);
+      if (!Number.isFinite(ax) || !Number.isFinite(ay)) continue;
+      if (!c.haven) { g.append(s('circle', { class: 'rp-nohaven', cx: f1(ax), cy: f1(ay), r: 4 })); continue; }
+      // the checkpoint is itself a haven (or nearly): a dot on the route, no detour to draw
+      if (c.haven.distKm < 0.3) { g.append(s('circle', { class: 'rp-haven-here', cx: f1(ax), cy: f1(ay), r: 2.6 })); continue; }
+      const [hx, hy] = toPx(c.haven.x, c.haven.y);
+      if (!Number.isFinite(hx) || !Number.isFinite(hy)) continue;
+      d += `M${f1(ax)} ${f1(ay)}L${f1(hx)} ${f1(hy)}`;
+      seen.set(`${Math.round(hx)},${Math.round(hy)}`, [hx, hy]);
+    }
+    if (d) g.append(s('path', { class: 'rp-haven-link', d }));
+    for (const [hx, hy] of seen.values()) g.append(s('g', { class: 'rp-haven', transform: `translate(${f1(hx)} ${f1(hy)})` }, s('circle', { r: 6.5 }), s('text', { y: 3.5, 'text-anchor': 'middle' }, 'H')));
+    gEl.append(g);
   }
   if (drive) {
     const g = s('g', { class: 'rp-drive' });
