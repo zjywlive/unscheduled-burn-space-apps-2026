@@ -5,6 +5,8 @@ Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 - **Challenge:** [Lunar Landing Site Navigator](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/)
 - **Demo:** _TBD_
 - **Project page:** _TBD_
+- **User guide:** [docs/GUIDE.md](docs/GUIDE.md), with screenshots and worked use cases for every page; how NASA
+  plans a lunar landing, mapped to the tool: [docs/NASA-MISSION-PLANNING.md](docs/NASA-MISSION-PLANNING.md)
 
 ## Project history
 
@@ -87,7 +89,9 @@ attitude, landing checks against the terrain, and contingency branches (abort to
 See `docs/LANDER.md`.
 
 All vehicle, rover and radio figures are assumptions the user can change; the cards label them so. The decision
-variables and their sources are listed in `docs/VARIABLES.md`, the build in `docs/PHASES.md`.
+variables and their sources are listed in `docs/VARIABLES.md`, the build in `docs/PHASES.md`. How to use every page
+is in the [user guide](docs/GUIDE.md) ([glossary](docs/guide/glossary.md), [FAQ](docs/guide/faq.md)), and how NASA
+plans a landing in [docs/NASA-MISSION-PLANNING.md](docs/NASA-MISSION-PLANNING.md).
 
 ## NASA data and other resources
 
@@ -111,6 +115,7 @@ as the submission rules require.
 | SLDEM2015 (LOLA merged with SELENE/Kaguya Terrain Camera; Barker et al. 2016, *Icarus* 273), 512 px/deg tiles, byte ranges only; LOLA polar `LDEM_{875,85,80,75,60}N_*` and `LDEM_75S_30M`, `LDEM_60S_60M` for `--at` | NASA PDS Geosciences Node, https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/sldem2015/tiles/float_img/ and …/lola_gdr/polar/img/ | `tools/fetch-hires.mjs --at lat,lon`: a fine patch anywhere (59 m between 60°S and 60°N); the 4 × 4 km patch at Apollo 11 is the lander's finest terrain there |
 | IAU/USGS Gazetteer of Planetary Nomenclature (Moon; LOLA 2011 control-network centres and diameters) | https://planetarynames.wr.usgs.gov (accessed 2026-11-14; one feature page per entry in `demo/src/lander/gazetteer.js`) | Names and positions of 32 major maria, craters and basins on the lander planner's whole-Moon map |
 | Further lander references | `docs/LANDER.md` §11 | Constants, guidance and comparisons, each marked where unverified |
+| NASA programme documents (Systems Engineering Handbook, Artemis landing-region releases, NTRS papers, Lunar Surface Data Book, CLPS and LRO pages) | Listed with links in `docs/NASA-MISSION-PLANNING.md` §9 | Background for the user guide's mission-planning chapter; summarised, not used as data |
 
 ## Use of AI tools
 
