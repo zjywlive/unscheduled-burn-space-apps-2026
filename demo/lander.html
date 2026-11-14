@@ -6,6 +6,25 @@
 <meta name="color-scheme" content="dark">
 <title>Lander Path: Earth to the South Pole</title>
 <!-- Built page: edit the markup and CSS here; the marked blocks are written by `node tools/build-lander.mjs`. -->
+<!--LANDER:BOOTCSS-->
+<style>
+#lsn-boot { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, #15171b 0%, #050506 70%); color: #e8eaed; font: 13px/1.4 Inter, system-ui, sans-serif; transition: opacity .45s ease; }
+#lsn-boot.is-done { opacity: 0; pointer-events: none; }
+#lsn-boot .boot-card { display: grid; justify-items: center; gap: 14px; padding: 24px; text-align: center; }
+#lsn-boot .boot-moon { width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #d9d9d6 0%, #9a9a96 45%, #3a3a38 80%); box-shadow: 0 0 40px rgba(232,234,237,.12); animation: lsn-boot-spin 6s linear infinite; }
+#lsn-boot h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+#lsn-boot .boot-sub { margin: -8px 0 0; color: #9aa0a6; font-size: 12px; }
+#lsn-boot .boot-bar { position: relative; width: min(280px, 70vw); height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
+#lsn-boot .boot-bar i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(.04); background: #e8eaed; border-radius: 2px; transition: transform .3s ease; }
+#lsn-boot .boot-bar.is-wait i { width: 30%; transform: none; animation: lsn-boot-slide 1.4s ease-in-out infinite; }
+#lsn-boot .boot-text { color: #9aa0a6; font-size: 12px; min-height: 17px; font-variant-numeric: tabular-nums; }
+#lsn-boot button { font: inherit; font-size: 12px; color: #e8eaed; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 5px 14px; cursor: pointer; }
+#lsn-boot button:hover { background: rgba(255,255,255,.14); }
+@keyframes lsn-boot-spin { from { background-position: 0 0; } to { background-position: 64px 0; } }
+@keyframes lsn-boot-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { #lsn-boot, #lsn-boot .boot-bar i { transition: none; animation: none; } }
+</style>
+<!--/LANDER:BOOTCSS-->
 <!--LANDER:STUB-->
 <script>window.__lsnStore = {}; window.__lsnData = (n, b) => { __lsnStore[n] = b; (window.__lsnWaiters?.[n] ?? []).forEach((f) => f()); };</script>
 <!--/LANDER:STUB-->
@@ -192,6 +211,12 @@
 </style>
 </head>
 <body>
+<!--LANDER:BOOT-->
+<div id="lsn-boot" role="status" aria-live="polite" aria-label="Loading">
+<div class="boot-card"><div class="boot-moon" aria-hidden="true"></div><h1>Lunar Lander</h1><p class="boot-sub">Earth orbit to a south-pole touchdown</p>
+<div class="boot-bar is-wait"><i></i></div><div class="boot-text">Loading the trajectory and terrain…</div>
+<button type="button" onclick="this.closest('#lsn-boot').classList.add('is-done')">Show the map now</button></div></div>
+<!--/LANDER:BOOT-->
 <canvas id="view" aria-label="3D view of the lander's path"></canvas>
 <div id="labels-earth" class="labels"></div>
 <div id="labels-moon" class="labels" hidden></div>
@@ -4119,7 +4144,7 @@ function renderLanding(el, checks, plan, terrainNote, roverUrl = null) {
     <table class="tbl"><tbody>${rows}</tbody></table>
     ${s ? `<p class="note">At touchdown the Sun is at azimuth ${n0(s.sun.azDeg)}°, elevation ${n1(s.sun.elDeg, 2)}°; the Earth at ${n0(s.earth.azDeg)}°, ${n1(s.earth.elDeg, 2)}°. Clearance is measured above the LOLA skyline. Limits are assumptions for this vehicle (Apollo LM design: about 3 m/s vertical, 1.2 m/s horizontal, 12°).</p>` : ''}
     <p class="note">${esc(terrainNote)}</p>
-    ${roverUrl ? `<p class="next-step"><a class="btn primary" href="${esc(roverUrl)}">Plan the rover route →</a><small>Step 3: the navigator's route card opens at this site and touchdown time.</small></p>` : ''}`;
+    ${roverUrl ? `<p class="next-step"><a class="btn primary" href="${esc(roverUrl)}">Plan the rover route →</a><small>Step 2: the navigator's route card opens at this site and touchdown time.</small></p>` : ''}`;
 }
 
 const FIELDS = [
@@ -4523,10 +4548,71 @@ function createHiresSet(manifest, load, { onLoad = () => {} } = {}) {
 
 return { createPatch, createHiresSet };
 })();
+__m['../boot.js'] = (() => {
+// Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
+// page itself, so it shows while the page and its data load, before any script runs; the page's script then
+// moves the bar with bootScreen().set() and lifts the screen with done(). "Show the map now" lifts it at once.
+const BOOT_ID = 'lsn-boot';
+
+const BOOT_CSS = `
+#lsn-boot { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, #15171b 0%, #050506 70%); color: #e8eaed; font: 13px/1.4 Inter, system-ui, sans-serif; transition: opacity .45s ease; }
+#lsn-boot.is-done { opacity: 0; pointer-events: none; }
+#lsn-boot .boot-card { display: grid; justify-items: center; gap: 14px; padding: 24px; text-align: center; }
+#lsn-boot .boot-moon { width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #d9d9d6 0%, #9a9a96 45%, #3a3a38 80%); box-shadow: 0 0 40px rgba(232,234,237,.12); animation: lsn-boot-spin 6s linear infinite; }
+#lsn-boot h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+#lsn-boot .boot-sub { margin: -8px 0 0; color: #9aa0a6; font-size: 12px; }
+#lsn-boot .boot-bar { position: relative; width: min(280px, 70vw); height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
+#lsn-boot .boot-bar i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(.04); background: #e8eaed; border-radius: 2px; transition: transform .3s ease; }
+#lsn-boot .boot-bar.is-wait i { width: 30%; transform: none; animation: lsn-boot-slide 1.4s ease-in-out infinite; }
+#lsn-boot .boot-text { color: #9aa0a6; font-size: 12px; min-height: 17px; font-variant-numeric: tabular-nums; }
+#lsn-boot button { font: inherit; font-size: 12px; color: #e8eaed; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 5px 14px; cursor: pointer; }
+#lsn-boot button:hover { background: rgba(255,255,255,.14); }
+@keyframes lsn-boot-spin { from { background-position: 0 0; } to { background-position: 64px 0; } }
+@keyframes lsn-boot-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { #lsn-boot, #lsn-boot .boot-bar i { transition: none; animation: none; } }
+`;
+
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// The screen's HTML, for a build script to put right after <body>. The bar waits (a sliding stripe) until the
+// script reports progress.
+function bootMarkup(title, sub, text = 'Loading the terrain…') {
+  return `<div id="${BOOT_ID}" role="status" aria-live="polite" aria-label="Loading">
+<div class="boot-card"><div class="boot-moon" aria-hidden="true"></div><h1>${esc(title)}</h1><p class="boot-sub">${esc(sub)}</p>
+<div class="boot-bar is-wait"><i></i></div><div class="boot-text">${esc(text)}</div>
+<button type="button" onclick="this.closest('#${BOOT_ID}').classList.add('is-done')">Show the map now</button></div></div>`;
+}
+
+// Control of the screen in the page. All calls are safe when the screen is not there.
+function bootScreen(doc = typeof document !== 'undefined' ? document : null) {
+  const el = doc?.getElementById(BOOT_ID) ?? null;
+  const barBox = el?.querySelector('.boot-bar'), bar = el?.querySelector('.boot-bar i'), text = el?.querySelector('.boot-text');
+  let finished = !el || el.classList.contains('is-done');
+  const api = {
+    set(frac, msg) {
+      if (finished || !el) return;
+      if (Number.isFinite(frac) && bar) { barBox.classList.remove('is-wait'); bar.style.transform = `scaleX(${Math.max(0.04, Math.min(1, frac)).toFixed(3)})`; }
+      if (msg && text) text.textContent = msg;
+    },
+    done() {
+      if (finished || !el) return;
+      finished = true;
+      if (bar) { barBox.classList.remove('is-wait'); bar.style.transform = 'scaleX(1)'; }
+      el.classList.add('is-done');
+      setTimeout(() => el.remove(), 500);
+    },
+    // false once lifted, by the page or by "Show the map now"
+    get active() { return !finished && !!el && !el.classList.contains('is-done'); },
+  };
+  return api;
+}
+
+return { BOOT_ID, BOOT_CSS, bootMarkup, bootScreen };
+})();
 __m['main.js'] = (() => {
 // Entry of demo/lander.html (bundled by tools/build-lander.mjs). Reads the inlined JSON data, plans the mission,
 // builds the three linked scenes and runs the timeline. Deep link: lander.html?site=<id | lat,lon>&t=<ISO time>.
-// Step 2 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
+// Step 1 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
 // stores the site and landing time it plans, and after touchdown it links on to the rover route (step 2).
 const { createEphemeris } = __m['../ephemeris.js'];
 const { createDem, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
@@ -4544,6 +4630,7 @@ const { buildSurfaceScene } = __m['view-surface.js'];
 const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle } = __m['ui.js'];
 const { readMission, writeMission, stageUrl, stageBar } = __m['../mission-flow.js'];
 const { createHiresSet } = __m['../hires.js'];
+const { bootScreen } = __m['../boot.js'];
 
 const $ = (s) => document.querySelector(s);
 const json = (id) => JSON.parse(document.getElementById(id)?.textContent ?? 'null');
@@ -4575,7 +4662,13 @@ function startingPoint(q, mission, sites, eph) {
 function boot() {
   const T = three();
   const status = (msg) => { const el = $('#status'); el.textContent = msg || ''; el.hidden = !msg; };
-  if (!T) { status('three.js did not load (vendor/three.classic.js).'); return; }
+  // loading screen (boot.js, written into the page by the build): lifted after the first frame with the descent
+  // terrain in, on an error, by "Show the map now", or after 15 s at the latest
+  const loading = bootScreen(document);
+  const lift = () => loading.done();
+  setTimeout(lift, 15000);
+  if (!T) { lift(); status('three.js did not load (vendor/three.classic.js).'); return; }
+  loading.set(0.08, 'Reading the ephemeris and the landing sites…');
   const eph = createEphemeris(json('data-ephemeris'));
   const sites = json('data-sites').filter((s) => s.latDeg <= TERRAIN_MAX_LAT);
   const meta = json('data-terrain');
@@ -4650,7 +4743,7 @@ function boot() {
     }
     const h = S.dem.heightAt(site.latDeg, site.lonDeg);
     const plan = planMission({ eph, site, landingMs: S.landingMs, vehicle: S.vehicle, siteHeightKm: (h ?? 0) / 1000, mask });
-    if (!plan.ok) { status(plan.error); return; }
+    if (!plan.ok) { lift(); status(plan.error); return; }
     status('');
     const tKeep = keepTime && S.plan ? S.timeline.fToT(S.f) : null;
     S.plan = plan;
@@ -4681,20 +4774,25 @@ function boot() {
     renderPanels();
     setBranches();
     resize();
+    loading.set(0.5, `Loading the terrain around ${site.name}…`);
     loadTerrain(plan, ++S.token);
   }
 
   async function loadTerrain(plan, token) {
     S.terrainNote = 'Loading terrain…';
     try {
-      const terr = await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => status(m) });
+      let k = 0;
+      const terr = await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => { status(m); loading.set(0.55 + 0.1 * k++, m); } });
       if (token !== S.token) return;
       status('Building the descent terrain…');
+      loading.set(0.88, 'Building the descent terrain mesh…');
       await new Promise((r) => setTimeout(r, 30));   // let the status paint before the mesh build
       if (token !== S.token) return;
       S.terrain = terr;
       S.scenes.surface.setTerrain(terr.sample, { overlay: $('#slope').checked, fine: terr.fine, resAt: terr.resAt });
       S.terrainSample = terr.sample;
+      S.liftAfterFrame = true;
+      setTimeout(lift, 400);   // a background tab draws no frames; do not leave the screen up until the cap
       const m = (k) => `${Math.round(k * 1000)} m`;
       const shift = S.scenes.surface.terrainInfo()?.offsetM ?? 0;
       S.terrainNote = `Descent terrain: LOLA DEM at ${terr.levelsKm.map(m).join(' / ')} around the site (finest first), with lunar curvature.`
@@ -4708,6 +4806,7 @@ function boot() {
     } catch (e) {
       S.terrainNote = `Terrain could not be loaded (${e.message}); the descent scene shows a flat disc.`;
       status(S.terrainNote);
+      lift();
     }
   }
 
@@ -4790,9 +4889,14 @@ function boot() {
   });
 
   // start: the 480 m DEM is a startup pack; wait for it if the script tag has not run yet
-  const start = () => { S.dem = readDem(); replan(); setScene('earth', false); requestAnimationFrame(frame); };
+  const start = () => {
+    S.dem = readDem();
+    loading.set(0.3, 'Planning the trajectory from Earth orbit to the site…');
+    // a moment for the loading text to paint before the (synchronous) planning and scene build
+    setTimeout(() => { replan(); setScene('earth', false); requestAnimationFrame(frame); }, loading.active ? 30 : 0);
+  };
   if (hasData('dem_480m')) start();
-  else { status('Loading terrain…'); loadData('dem_480m').then(start, (e) => status(`dem_480m failed to load: ${e.message}`)); }
+  else { status('Loading terrain…'); loading.set(0.15, 'Loading the 480 m terrain map…'); loadData('dem_480m').then(start, (e) => { lift(); status(`dem_480m failed to load: ${e.message}`); }); }
 
   let last = performance.now(), hudAt = 0, lastPhase = null;
   function frame(now) {
@@ -4811,6 +4915,7 @@ function boot() {
     const sc = S.scenes[S.scene];
     sc.update(st, { dt });
     renderer.render(sc.scene, sc.camera);
+    if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);
     S.timeline.setT(t);
     if (now - hudAt > 90) {

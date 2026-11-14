@@ -1,6 +1,6 @@
 // Entry of demo/lander.html (bundled by tools/build-lander.mjs). Reads the inlined JSON data, plans the mission,
 // builds the three linked scenes and runs the timeline. Deep link: lander.html?site=<id | lat,lon>&t=<ISO time>.
-// Step 2 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
+// Step 1 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
 // stores the site and landing time it plans, and after touchdown it links on to the rover route (step 2).
 import { createEphemeris } from '../ephemeris.js';
 import { createDem, skylineFor, TERRAIN_MAX_LAT } from '../terrain.js';
@@ -18,6 +18,7 @@ import { buildSurfaceScene } from './view-surface.js';
 import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle } from './ui.js';
 import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.js';
 import { createHiresSet } from '../hires.js';
+import { bootScreen } from '../boot.js';
 
 const $ = (s) => document.querySelector(s);
 const json = (id) => JSON.parse(document.getElementById(id)?.textContent ?? 'null');
@@ -49,7 +50,13 @@ export function startingPoint(q, mission, sites, eph) {
 export function boot() {
   const T = three();
   const status = (msg) => { const el = $('#status'); el.textContent = msg || ''; el.hidden = !msg; };
-  if (!T) { status('three.js did not load (vendor/three.classic.js).'); return; }
+  // loading screen (boot.js, written into the page by the build): lifted after the first frame with the descent
+  // terrain in, on an error, by "Show the map now", or after 15 s at the latest
+  const loading = bootScreen(document);
+  const lift = () => loading.done();
+  setTimeout(lift, 15000);
+  if (!T) { lift(); status('three.js did not load (vendor/three.classic.js).'); return; }
+  loading.set(0.08, 'Reading the ephemeris and the landing sites…');
   const eph = createEphemeris(json('data-ephemeris'));
   const sites = json('data-sites').filter((s) => s.latDeg <= TERRAIN_MAX_LAT);
   const meta = json('data-terrain');
@@ -124,7 +131,7 @@ export function boot() {
     }
     const h = S.dem.heightAt(site.latDeg, site.lonDeg);
     const plan = planMission({ eph, site, landingMs: S.landingMs, vehicle: S.vehicle, siteHeightKm: (h ?? 0) / 1000, mask });
-    if (!plan.ok) { status(plan.error); return; }
+    if (!plan.ok) { lift(); status(plan.error); return; }
     status('');
     const tKeep = keepTime && S.plan ? S.timeline.fToT(S.f) : null;
     S.plan = plan;
@@ -155,20 +162,25 @@ export function boot() {
     renderPanels();
     setBranches();
     resize();
+    loading.set(0.5, `Loading the terrain around ${site.name}…`);
     loadTerrain(plan, ++S.token);
   }
 
   async function loadTerrain(plan, token) {
     S.terrainNote = 'Loading terrain…';
     try {
-      const terr = await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => status(m) });
+      let k = 0;
+      const terr = await loadSiteTerrain(meta, plan.site, { hires, onProgress: (m) => { status(m); loading.set(0.55 + 0.1 * k++, m); } });
       if (token !== S.token) return;
       status('Building the descent terrain…');
+      loading.set(0.88, 'Building the descent terrain mesh…');
       await new Promise((r) => setTimeout(r, 30));   // let the status paint before the mesh build
       if (token !== S.token) return;
       S.terrain = terr;
       S.scenes.surface.setTerrain(terr.sample, { overlay: $('#slope').checked, fine: terr.fine, resAt: terr.resAt });
       S.terrainSample = terr.sample;
+      S.liftAfterFrame = true;
+      setTimeout(lift, 400);   // a background tab draws no frames; do not leave the screen up until the cap
       const m = (k) => `${Math.round(k * 1000)} m`;
       const shift = S.scenes.surface.terrainInfo()?.offsetM ?? 0;
       S.terrainNote = `Descent terrain: LOLA DEM at ${terr.levelsKm.map(m).join(' / ')} around the site (finest first), with lunar curvature.`
@@ -182,6 +194,7 @@ export function boot() {
     } catch (e) {
       S.terrainNote = `Terrain could not be loaded (${e.message}); the descent scene shows a flat disc.`;
       status(S.terrainNote);
+      lift();
     }
   }
 
@@ -264,9 +277,14 @@ export function boot() {
   });
 
   // start: the 480 m DEM is a startup pack; wait for it if the script tag has not run yet
-  const start = () => { S.dem = readDem(); replan(); setScene('earth', false); requestAnimationFrame(frame); };
+  const start = () => {
+    S.dem = readDem();
+    loading.set(0.3, 'Planning the trajectory from Earth orbit to the site…');
+    // a moment for the loading text to paint before the (synchronous) planning and scene build
+    setTimeout(() => { replan(); setScene('earth', false); requestAnimationFrame(frame); }, loading.active ? 30 : 0);
+  };
   if (hasData('dem_480m')) start();
-  else { status('Loading terrain…'); loadData('dem_480m').then(start, (e) => status(`dem_480m failed to load: ${e.message}`)); }
+  else { status('Loading terrain…'); loading.set(0.15, 'Loading the 480 m terrain map…'); loadData('dem_480m').then(start, (e) => { lift(); status(`dem_480m failed to load: ${e.message}`); }); }
 
   let last = performance.now(), hudAt = 0, lastPhase = null;
   function frame(now) {
@@ -285,6 +303,7 @@ export function boot() {
     const sc = S.scenes[S.scene];
     sc.update(st, { dt });
     renderer.render(sc.scene, sc.camera);
+    if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);
     S.timeline.setT(t);
     if (now - hudAt > 90) {

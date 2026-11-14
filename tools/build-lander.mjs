@@ -8,8 +8,11 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { bundle, LOADER_STUB } from './build.mjs';
+import { bootMarkup, BOOT_CSS } from '../demo/src/boot.js';
 
-export const LANDER_MARKS = ['STUB', 'DATA', 'JS'];
+// BOOTCSS (in <head>) and BOOT (right after <body>): the shared loading screen (demo/src/boot.js), in the page
+// itself so it shows before any script runs
+export const LANDER_MARKS = ['BOOTCSS', 'STUB', 'BOOT', 'DATA', 'JS'];
 
 export function fillMark(html, name, content) {
   const re = new RegExp(`(<!--LANDER:${name}-->)[\\s\\S]*?(<!--/LANDER:${name}-->)`);
@@ -24,6 +27,8 @@ export function buildLander(demo = join(dirname(fileURLToPath(import.meta.url)),
   let html = readFileSync(file, 'utf8');
   const data = (p) => JSON.parse(readFileSync(join(demo, p), 'utf8'));
   const js = bundle(join(demo, 'src', 'lander', 'main.js')).replace(/<\/script/gi, '<\\/script');
+  html = fillMark(html, 'BOOTCSS', `<style>${BOOT_CSS}</style>`);
+  html = fillMark(html, 'BOOT', bootMarkup('Lunar Lander', 'Earth orbit to a south-pole touchdown', 'Loading the trajectory and terrain…'));
   html = fillMark(html, 'STUB', LOADER_STUB);
   html = fillMark(html, 'DATA', [
     jsonScript('data-ephemeris', data('data/ephemeris.json')),

@@ -147,3 +147,14 @@ test('page: the built lander carries the patch manifest, the stage bar slot and 
   const js = page.split('<!--LANDER:JS-->')[1];
   assert.ok(js.includes("__m['../mission-flow.js']") && js.includes("__m['../hires.js']"));
 });
+
+test('page: the shared loading screen is in the built page before any script, and the bundle drives it', () => {
+  const page = readFileSync(join(demo, 'lander.html'), 'utf8');
+  const head = page.split('</head>')[0], body = page.split('<body>')[1];
+  assert.ok(head.includes('#lsn-boot {'), 'BOOT_CSS in <head>');
+  assert.ok(/^\s*<!--LANDER:BOOT-->\s*<div id="lsn-boot"/.test(body), 'boot markup right after <body>');
+  assert.ok(body.indexOf('id="lsn-boot"') < body.indexOf('<script'), 'before the first script');
+  assert.ok(body.includes('Lunar Lander') && body.includes('Show the map now'));
+  assert.equal(page.split('id="lsn-boot"').length, 2, 'exactly one loading screen (the build is idempotent)');
+  assert.ok(page.split('<!--LANDER:JS-->')[1].includes("__m['../boot.js']"));
+});
