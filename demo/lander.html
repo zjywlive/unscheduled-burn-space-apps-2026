@@ -181,6 +181,58 @@
   .cam:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   .cam.follow.on { background: #fff; color: #000; border-color: #fff; }
   .cam.zoom { margin-left: 6px; }
+  /* icon + label buttons in the top bar (icon only on narrow screens) */
+  .btn .ic { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; margin-right: 6px; }
+  #plan-site { background: rgba(242, 179, 61, 0.16); border-color: rgba(242, 179, 61, 0.55); color: #ffe2a8; }
+  #plan-site:hover { background: rgba(242, 179, 61, 0.26); }
+
+  /* landing-site planner: the map as the hero, the scores in a column */
+  .planner { position: fixed; inset: 0; z-index: 20; background: #050506; display: grid; grid-template-columns: 1fr 420px; }
+  .planner[hidden] { display: none; }
+  .pl-map { position: relative; min-width: 0; min-height: 0; }
+  .pl-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+  .pl-top { top: 16px; left: 16px; right: 16px; position: absolute; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; }
+  .pl-go { display: flex; gap: 6px; }
+  .pl-go input { height: 32px; width: 230px; border-radius: var(--radius-control); border: 1px solid var(--line); background: var(--raised); color: #fff; padding: 0 10px; }
+  .pl-hint { color: var(--muted); font-size: 12px; }
+  .pl-zoom { position: absolute; right: 16px; top: 84px; display: grid; gap: 4px; }
+  .pl-key { position: absolute; left: 16px; bottom: 16px; max-width: 420px; padding: 8px 10px; font-size: 11px; color: var(--muted); }
+  .pl-k-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; flex-wrap: wrap; }
+  .pl-k-bar { width: 64px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #e5484d, #e5b34d 50%, #7fd18b); flex: none; }
+  .pl-k-sw { width: 14px; height: 10px; border-radius: 2px; flex: none; }
+  .pl-k-sw.fail { background: rgba(229, 72, 77, 0.45); }
+  .pl-k-sw.psr { background: rgba(120, 160, 255, 0.45); border: 1px solid rgba(120, 160, 255, 0.9); }
+  .pl-k-sw.ell { border: 1.5px solid #fff; border-radius: 50%; background: none; margin-left: 8px; }
+  .pl-k-src { color: var(--faint); margin-top: 3px; }
+  .pl-k-short { display: none; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .pl-k-short .pl-k-bar { width: 36px; }
+  .pl-toast { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); padding: 7px 14px; border-radius: 999px; background: rgba(20, 22, 26, 0.92); border: 1px solid var(--line); color: #fff; font-size: 12px; max-width: 90%; }
+  .pl-side { position: relative; inset: auto; border-radius: 0; border-width: 0 0 0 1px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .pl-side header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; }
+  .pl-side h2 { font-size: 16px; margin: 0; }
+  .pl-assume { margin: 0 16px 8px; color: var(--faint); font-size: 11px; }
+  .pl-body { overflow-y: auto; padding: 0 16px 16px; }
+  .pl-point { font-size: 13px; margin: 6px 0; }
+  .pl-verdict { font-weight: 600; padding: 8px 10px; border-radius: 8px; margin: 8px 0; }
+  .pl-verdict.g-pass { background: rgba(127, 209, 139, 0.12); color: var(--ok); }
+  .pl-verdict.g-near { background: rgba(229, 179, 77, 0.12); color: #e5b34d; }
+  .pl-verdict.g-fail { background: rgba(229, 72, 77, 0.12); color: #ff7b7f; }
+  .pl-g { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: 0.02em; }
+  .g-pass { color: var(--ok); } .g-near { color: #e5b34d; } .g-fail { color: #ff7b7f; }
+  .pl-figs { list-style: none; margin: 0; padding: 0; }
+  .pl-figs li { padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); color: var(--text); }
+  .pl-f-h { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .pl-f-h .pl-g { flex: none; }
+  .pl-figs li.g-pass .pl-g { color: var(--ok); } .pl-figs li.g-near .pl-g { color: #e5b34d; } .pl-figs li.g-fail .pl-g { color: #ff7b7f; }
+  .pl-f-v { display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .pl-figs li.g-pass .pl-f-v b { color: var(--ok); } .pl-figs li.g-near .pl-f-v b { color: #e5b34d; } .pl-figs li.g-fail .pl-f-v b { color: #ff7b7f; }
+  .pl-figs small { display: block; color: var(--faint); font-size: 11px; margin-top: 2px; }
+  .pl-cmp tr[data-n] { cursor: pointer; }
+  .pl-cmp tr.on td { background: rgba(255, 255, 255, 0.07); }
+  .pl-land { width: 100%; justify-content: center; height: 38px; margin: 10px 0 4px; }
+  .pl-prog { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+  .pl-prog i { display: block; height: 100%; background: #fff; transition: width 120ms; }
+
   /* terrain key (descent view): colour mode, contours, legend, interval, scale bar */
   .terrkey { right: 16px; bottom: 104px; width: 300px; padding: 10px 12px; z-index: 2; font-size: 12px; transition: right 220ms cubic-bezier(0.22, 1, 0.36, 1), bottom 220ms cubic-bezier(0.22, 1, 0.36, 1); }
   .terrkey[hidden] { display: none; }
@@ -212,21 +264,34 @@
 
   @media (max-width: 1360px) {
     .field > span { display: none; }
-  }
-  @media (max-width: 1180px) {
     /* steps as numbers only (each keeps its name as tooltip and accessible label) */
     .stages .lsn-stages a { font-size: 0; gap: 0; padding: 5px; }
     .stages .lsn-stages a .n { font-size: 10px; }
+  }
+  @media (max-width: 1180px) {
     .wide { display: none; }
     .narrow { display: inline; }
   }
   @media (max-width: 1100px) {
+    .btn .btn-l { display: none; }
+    .btn .ic { margin-right: 0; }
+    .planner { grid-template-columns: 1fr 360px; }
+    .pl-hint { display: none; }
     .side { width: 340px; }
     #side-toggle { right: 364px; }
     .side:not(.closed) ~ .next { left: calc((100% - 356px) / 2); }
     .side:not(.closed) ~ .terrkey { right: 372px; }
   }
   @media (max-width: 760px) {
+    /* planner on a phone: the map on top, the scores below */
+    .planner { grid-template-columns: 1fr; grid-template-rows: 52vh minmax(0, 1fr); }
+    .pl-side { border-width: 1px 0 0; }
+    .pl-top { top: 8px; left: 8px; right: 8px; padding: 6px; gap: 6px; }
+    .pl-go input { width: 148px; }
+    .pl-zoom { top: 104px; right: 8px; }
+    .pl-key { left: 8px; right: 8px; bottom: 34px; max-width: none; font-size: 10px; padding: 6px 8px; }
+    .pl-k-src, .pl-k-row { display: none; }
+    .pl-k-short { display: flex; }
     /* three rows: steps + next lit window / site + time / views */
     .top { padding: 8px; gap: 6px; }
     .grp { display: contents; }
@@ -279,7 +344,8 @@
   <div class="grp">
     <label class="field"><span>Site</span><select id="site" aria-label="Landing site"></select></label>
     <label class="field"><span>Landing (UTC)</span><input id="when" type="datetime-local" step="60" aria-label="Requested landing time, UTC"></label>
-    <button id="find" class="btn" title="Next time with the Sun and the Earth above the skyline">Next lit window</button>
+    <button id="find" class="btn" title="Next time with the Sun and the Earth above the skyline" aria-label="Next lit window"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 4.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7zM8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M13 3l-1.1 1.1M4.1 11.9L3 13"/></svg><span class="btn-l">Next lit window</span></button>
+    <button id="plan-site" class="btn" title="Choose where to land: map, scores and better spots nearby" aria-label="Choose where to land"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5s-4.5-4.4-4.5-8a4.5 4.5 0 0 1 9 0c0 3.6-4.5 8-4.5 8zM8 4.6a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 1 0 0-3.8z"/></svg><span class="btn-l">Where to land</span></button>
   </div>
   <div class="grp view">
     <div class="seg" id="scenes" role="group" aria-label="View">
@@ -303,6 +369,7 @@
   <div class="track"><div class="segs"></div><div class="ticks"></div><div class="cursor"></div></div>
 </footer>
 <div id="status" class="status" hidden></div>
+<section id="planner" class="planner" hidden aria-label="Choose where to land"></section>
 <a id="next" class="glass next" href="index.html" hidden><span class="next-t">Touchdown<small id="next-where"></small></span><span class="btn primary">Plan the rover route →</span></a>
 <div id="terrkey" class="glass terrkey" hidden>
   <div class="tk-row"><div class="seg tk-modes" role="group" aria-label="Terrain colour"><button data-tmode="plain" class="on">Plain</button><button data-tmode="height">Height</button><button data-tmode="slope">Slope</button></div><label class="tk-check"><input type="checkbox" id="tk-contours" checked> Contours</label></div>
@@ -4992,6 +5059,145 @@ function createCloseup(doc = document) {
 
 return { createCloseup };
 })();
+__m['../psr.js'] = (() => {
+// Permanently shadowed regions (task book phase 4 §3 T.5, contract §4.2): the official PSR bitmap
+// (Mazarico et al. 2011, 2016 update; 120 m) as a lookup and as a restrained map layer.
+// The pack psr_120m is size × size bits, row by row, high bit first; row 0 at the top (+y), as the DEMs;
+// pixel (row, col) covers x ∈ [−halfKm + col·k, −halfKm + (col+1)·k), y ∈ (halfKm − (row+1)·k, halfKm − row·k].
+// A set bit is permanent shadow.
+
+const PSR_PACK = 'psr_120m';
+const PSR_DEFAULTS = Object.freeze({ size: 5400, kmPerPixel: 0.12, halfKm: 324 });
+
+// bytes: the pack (Uint8Array); meta: terrain.json `psr` (size, kmPerPixel, halfKm), defaults per §4.2.
+function createPsr(bytes, meta = {}) {
+  const size = meta.size ?? PSR_DEFAULTS.size, k = meta.kmPerPixel ?? PSR_DEFAULTS.kmPerPixel, halfKm = meta.halfKm ?? PSR_DEFAULTS.halfKm;
+  const need = Math.ceil((size * size) / 8);
+  if (!bytes || bytes.length < need) throw new Error(`psr: ${bytes?.length ?? 0} bytes, expected ${need}`);
+  const bitAt = (row, col) => {
+    const idx = row * size + col;
+    return (bytes[idx >> 3] >> (7 - (idx & 7))) & 1;
+  };
+  // true inside a PSR pixel; false elsewhere, including off the bitmap
+  function isPsr(xKm, yKm) {
+    const col = Math.floor((xKm + halfKm) / k), row = Math.floor((halfKm - yKm) / k);
+    if (!(col >= 0 && row >= 0 && col < size && row < size)) return false;
+    return bitAt(row, col) === 1;
+  }
+  return { size, kmPerPixel: k, halfKm, bytes, isPsr, bitAt };
+}
+
+// The PSR mask under a canvas: Uint8Array(width × height), 0 = none, 1 = inside, 2 = outline.
+// geom: { width, height, kmPerPx, cx, cy } (the hillshade rectangle form, canvas px).
+// - Each pixel takes the strict majority of up to 4 × 4 samples spread over its footprint (one sample when a
+//   pixel is smaller than a PSR pixel), so zooming out does not alias.
+// - Restraint: a patch (8-connected) narrower than minPx in either direction, or smaller than minPx²
+//   pixels, is left out, so the zoomed-out map shows no speckle.
+// - Outline: kept pixels with a 4-neighbour outside the kept set (the canvas edge does not count).
+function psrMask(psr, { width, height, kmPerPx, cx = 0, cy = 0 }, { minPx = 2 } = {}) {
+  const raw = new Uint8Array(width * height);
+  const { size, kmPerPixel: k, halfKm, bitAt } = psr;
+  const foot = kmPerPx / k;                                  // PSR pixels per canvas pixel
+  const n = foot <= 1 ? 1 : Math.min(4, Math.ceil(foot));    // samples per axis
+  const x0 = cx - (width * kmPerPx) / 2, y0 = cy + (height * kmPerPx) / 2;
+  // sample columns once per canvas column (and rows once per row): PSR pixel indices, −1 off the bitmap
+  const colIdx = new Int32Array(width * n), rowIdx = new Int32Array(height * n);
+  for (let c = 0; c < width; c++) for (let s = 0; s < n; s++) {
+    const v = Math.floor((x0 + (c + (s + 0.5) / n) * kmPerPx + halfKm) / k);
+    colIdx[c * n + s] = v >= 0 && v < size ? v : -1;
+  }
+  for (let r = 0; r < height; r++) for (let s = 0; s < n; s++) {
+    const v = Math.floor((halfKm - (y0 - (r + (s + 0.5) / n) * kmPerPx)) / k);
+    rowIdx[r * n + s] = v >= 0 && v < size ? v : -1;
+  }
+  const half = (n * n) / 2;
+  let any = false;
+  for (let r = 0; r < height; r++) {
+    for (let c = 0; c < width; c++) {
+      let hits = 0;
+      for (let sr = 0; sr < n; sr++) {
+        const pr = rowIdx[r * n + sr];
+        if (pr < 0) continue;
+        for (let sc = 0; sc < n; sc++) { const pc = colIdx[c * n + sc]; if (pc >= 0) hits += bitAt(pr, pc); }
+      }
+      if (hits > half) { raw[r * width + c] = 1; any = true; }
+    }
+  }
+  if (!any) return raw;
+  // patches: breadth-first fill (the queue doubles as the member list), drop the small ones
+  const keep = new Uint8Array(width * height);
+  const queue = new Int32Array(width * height);
+  for (let start = 0; start < raw.length; start++) {
+    if (raw[start] !== 1) continue;
+    let head = 0, tail = 0;
+    let minX = width, maxX = -1, minY = height, maxY = -1;
+    queue[tail++] = start; raw[start] = 3;               // 3: visited
+    while (head < tail) {
+      const p = queue[head++];
+      const x = p % width, y = (p - x) / width;
+      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= width) continue;
+          const q = yy * width + xx;
+          if (raw[q] === 1) { raw[q] = 3; queue[tail++] = q; }
+        }
+      }
+    }
+    if (maxX - minX + 1 < minPx || maxY - minY + 1 < minPx || tail < minPx * minPx) continue;
+    for (let m = 0; m < tail; m++) keep[queue[m]] = 1;
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      if (!keep[p]) continue;
+      const out = (x > 0 && !keep[p - 1]) || (x < width - 1 && !keep[p + 1]) || (y > 0 && !keep[p - width]) || (y < height - 1 && !keep[p + width]);
+      keep[p] = out ? 2 : 1;
+    }
+  }
+  return keep;
+}
+
+// RGBA (Uint8ClampedArray, width × height × 4) for the layer: a fine outline and a faint diagonal hatch
+// in one neutral colour (default: the Both ink of readColours, the existing neutral; no new hue). The
+// hatch is fixed to the ground, so it moves with the map instead of shimmering over it.
+function psrRaster(psr, geom, { colour = [230, 230, 230], minPx = 2, hatchPx = 6, outlineAlpha = 0.6, hatchAlpha = 0.22 } = {}) {
+  const { width, height, kmPerPx, cx = 0, cy = 0 } = geom;
+  const mask = psrMask(psr, geom, { minPx });
+  const out = new Uint8ClampedArray(width * height * 4);
+  const phase = Math.round((cx - cy) / kmPerPx - (width + height) / 2);
+  const step = Math.max(2, Math.round(hatchPx));
+  const aOut = Math.round(outlineAlpha * 255), aHatch = Math.round(hatchAlpha * 255);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const m = mask[y * width + x];
+      if (!m) continue;
+      let a = 0;
+      if (m === 2) a = aOut;
+      else if ((((x + y + phase) % step) + step) % step === 0) a = aHatch;
+      if (!a) continue;
+      const o = 4 * (y * width + x);
+      out[o] = colour[0]; out[o + 1] = colour[1]; out[o + 2] = colour[2]; out[o + 3] = a;
+    }
+  }
+  return out;
+}
+
+// Draws the layer over what is on ctx (composited, not replaced). geom as psrMask.
+function paintPsr(ctx, psr, geom, opts) {
+  const { width, height } = geom;
+  const img = new ImageData(width, height);
+  img.data.set(psrRaster(psr, geom, opts));
+  const tmp = new OffscreenCanvas(width, height);
+  tmp.getContext('2d').putImageData(img, 0, 0);
+  ctx.drawImage(tmp, 0, 0);
+}
+
+return { PSR_PACK, PSR_DEFAULTS, createPsr, psrMask, psrRaster, paintPsr };
+})();
 __m['../globe-terrain.js'] = (() => {
 // Global lunar terrain model (phase 1, docs/PHASES.md): one height for any latitude and longitude on the
 // Moon, from the finest level that is loaded at that point.
@@ -5176,6 +5382,650 @@ const southFrom = (pyramid) => () => pyramid.levels;
 
 return { MOON_R_KM, DN_TO_M, G0, G1, G2, TILED, NORTH, SOUTH_MAX_LAT, normLon, toXYNorth, deltaDecode, gunzip, decodePack, tileName, tileOf, tilesInBox, sampleG0, sampleTile, createGlobeTerrain, southFrom };
 })();
+__m['../score.js'] = (() => {
+// Per-cell filters and the suitability score (task book phase 3 §4.3, §4.4, §5.4).
+// All arrays are one value per heat-grid cell, indexed j × size + i like heat.js.
+
+const DEFAULT_WEIGHTS = { sun: 40, earth: 30, slope: 20, shadow: 10 };
+const SLOPE_SCALE_DEG = 20;
+const SHADOW_SCALE_KM = 50;
+
+// Decodes a static per-cell byte grid: slope bytes × 0.25 = degrees, shadow bytes × 1 = km.
+function staticGrid(bytes, scale) {
+  const out = new Float32Array(bytes.length);
+  for (let k = 0; k < bytes.length; k++) out[k] = bytes[k] * scale;
+  return out;
+}
+
+// null (or undefined) limit means Any. Limits are inclusive. A value that is not a finite number
+// cannot be shown to pass, so it fails any active limit.
+function passes(slopeDeg, darkH, { maxSlope = null, maxDark = null } = {}) {
+  if (maxSlope != null && !(typeof slopeDeg === 'number' && slopeDeg <= maxSlope)) return false;
+  if (maxDark != null && !(typeof darkH === 'number' && darkH <= maxDark)) return false;
+  return true;
+}
+
+// 1 = filtered out, 0 = passes. An active limit whose array is missing filters every cell out.
+function filterMask({ slope = null, dark = null, maxSlope = null, maxDark = null, count }) {
+  const n = count ?? slope?.length ?? dark?.length ?? 0;
+  const out = new Uint8Array(n);
+  if (maxSlope == null && maxDark == null) return out;
+  const limits = { maxSlope, maxDark };
+  for (let k = 0; k < n; k++) out[k] = passes(slope ? slope[k] : NaN, dark ? dark[k] : NaN, limits) ? 0 : 1;
+  return out;
+}
+
+// Accepts { sun, earth, slope, shadow } or [sun, earth, slope, shadow] (the hash order).
+// Negative or non-numeric weights count as 0.
+function weightsOf(w) {
+  const v = Array.isArray(w) ? { sun: w[0], earth: w[1], slope: w[2], shadow: w[3] } : (w ?? DEFAULT_WEIGHTS);
+  const f = (x) => Math.max(0, +x || 0);
+  return { sun: f(v.sun), earth: f(v.earth), slope: f(v.slope), shadow: f(v.shadow) };
+}
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+// Weighted mean of four 0–1 terms: sun fraction, Earth fraction, clamp(1 − slope/20°),
+// clamp(1 − shadowKm/50 km), except that a cell inside persistent shadow (shadowKm 0) scores 0 on the
+// shadow term: the term rewards sunlit ground within reach of shadow, not the shadow itself (task book
+// revision, wave 2). Terms with weight 0 are ignored (their arrays may be null).
+// All NaN when the weights sum to 0; NaN in a cell where a weighted input is missing or not finite.
+function scoreCells({ sun = null, earth = null, slope = null, shadowKm = null, weights = DEFAULT_WEIGHTS, count }) {
+  const w = weightsOf(weights);
+  const n = count ?? sun?.length ?? earth?.length ?? slope?.length ?? shadowKm?.length ?? 0;
+  const out = new Float32Array(n);
+  const total = w.sun + w.earth + w.slope + w.shadow;
+  if (!(total > 0)) return out.fill(NaN);
+  for (let k = 0; k < n; k++) {
+    let acc = 0;
+    if (w.sun) acc += w.sun * clamp01(sun ? sun[k] : NaN);
+    if (w.earth) acc += w.earth * clamp01(earth ? earth[k] : NaN);
+    if (w.slope) acc += w.slope * clamp01(1 - (slope ? slope[k] : NaN) / SLOPE_SCALE_DEG);
+    if (w.shadow) {
+      const d = shadowKm ? shadowKm[k] : NaN;
+      acc += w.shadow * (d === 0 ? 0 : clamp01(1 - d / SHADOW_SCALE_KM));
+    }
+    out[k] = acc / total;
+  }
+  return out;
+}
+
+return { DEFAULT_WEIGHTS, SLOPE_SCALE_DEG, SHADOW_SCALE_KM, staticGrid, passes, filterMask, scoreCells };
+})();
+__m['siteplan.js'] = (() => {
+// Choosing where to land (pure computation, no DOM): the landing ellipse around a point, the terrain inside it,
+// Sun and Earth above the real skyline over the stay, the longest dark spell against the battery, permanent
+// shadow, and a grid search around a pick ranked with the navigator's suitability score (score.js).
+// Map coordinates are the polar-stereographic km of terrain.js; heights in metres.
+const { azEl } = __m['../geometry.js'];
+const { toXY, fromXY } = __m['../terrain.js'];
+const { scoreCells, passes, DEFAULT_WEIGHTS } = __m['../score.js'];
+const { slopeDeg } = __m['landing.js'];
+
+// Assumed 3σ landing dispersion with terrain-relative navigation: 150 m down-range × 100 m cross-range.
+// A polar orbit passes over the pole, so near it the descent runs along the meridian: down-range is radial on
+// the polar map.
+const ELLIPSE = Object.freeze({ downrangeM: 150, crossrangeM: 100 });
+
+// Map points (km) inside the ellipse centred on (x, y), on a grid of stepM.
+function ellipsePoints(xKm, yKm, { downrangeM = ELLIPSE.downrangeM, crossrangeM = ELLIPSE.crossrangeM, stepM = 20 } = {}) {
+  const r = Math.hypot(xKm, yKm);
+  const u = r > 1e-9 ? [xKm / r, yKm / r] : [0, 1];   // down-range (radial)
+  const v = [-u[1], u[0]];                              // cross-range
+  const a = downrangeM / 1000, b = crossrangeM / 1000, s = stepM / 1000;
+  const out = [];
+  for (let i = -Math.floor(a / s); i <= Math.floor(a / s); i++) {
+    for (let j = -Math.floor(b / s); j <= Math.floor(b / s); j++) {
+      const p = i * s, q = j * s;
+      if ((p * p) / (a * a) + (q * q) / (b * b) > 1) continue;
+      out.push([xKm + p * u[0] + q * v[0], yKm + p * u[1] + q * v[1]]);
+    }
+  }
+  return out;
+}
+
+// Terrain inside the ellipse: slopes over baselineKm (share over the lander's limit, mean, 95th percentile) and
+// roughness (RMS of heights about the best-fit plane, m) at the DEM's scale. Rocks are below every DEM here.
+function terrainStats(sample, pts, { baselineKm = 0.04, limitDeg = 10 } = {}) {
+  const sl = [], hs = [];
+  for (const [x, y] of pts) {
+    const s = slopeDeg(sample, x, y, baselineKm);
+    if (Number.isFinite(s)) sl.push(s);
+    const h = sample(x, y);
+    if (Number.isFinite(h)) hs.push([x * 1000, y * 1000, h]);
+  }
+  if (!sl.length) return { n: 0, overLimit: NaN, meanDeg: NaN, p95Deg: NaN, roughM: NaN };
+  sl.sort((p, q) => p - q);
+  const over = sl.filter((s) => s > limitDeg).length / sl.length;
+  return { n: sl.length, overLimit: over, meanDeg: sl.reduce((p, q) => p + q, 0) / sl.length, p95Deg: sl[Math.min(sl.length - 1, Math.floor(0.95 * sl.length))], roughM: planeRms(hs) };
+}
+
+// RMS distance of points (x, y, h) from their least-squares plane h = a + b x + c y.
+function planeRms(pts) {
+  const n = pts.length;
+  if (n < 4) return NaN;
+  let mx = 0, my = 0, mh = 0;
+  for (const [x, y, h] of pts) { mx += x; my += y; mh += h; }
+  mx /= n; my /= n; mh /= n;
+  let sxx = 0, syy = 0, sxy = 0, sxh = 0, syh = 0;
+  for (const [x0, y0, h0] of pts) {
+    const x = x0 - mx, y = y0 - my, h = h0 - mh;
+    sxx += x * x; syy += y * y; sxy += x * y; sxh += x * h; syh += y * h;
+  }
+  const det = sxx * syy - sxy * sxy;
+  const b = det ? (sxh * syy - syh * sxy) / det : 0, c = det ? (syh * sxx - sxh * sxy) / det : 0;
+  let ss = 0;
+  for (const [x0, y0, h0] of pts) { const r = h0 - mh - b * (x0 - mx) - c * (y0 - my); ss += r * r; }
+  return Math.sqrt(ss / n);
+}
+
+// Sun and Earth directions over the stay, once for all points: [{ tMs, sun, earth, earthRangeKm }].
+function skyDirections(eph, startMs, days, stepH = 1) {
+  const out = [];
+  const n = Math.max(1, Math.round((days * 24) / stepH));
+  for (let i = 0; i < n; i++) {
+    const t = startMs + (i + 0.5) * stepH * 3600e3;
+    const d = eph.at(t);
+    if (d) out.push({ tMs: t, ...d });
+  }
+  return out;
+}
+
+// Over those directions at one place with its skyline mask (az → deg): shares of time with the Sun / the Earth
+// above the skyline, and the longest spells without each (hours).
+function skyStats(dirs, site, mask, stepH = 1) {
+  const m = typeof mask === 'function' ? mask : () => mask ?? 0;
+  let s = 0, e = 0, b = 0, run = 0, longest = 0, runE = 0, longestE = 0;
+  for (const d of dirs) {
+    const su = azEl(d.sun, Infinity, site.lonDeg, site.latDeg), ea = azEl(d.earth, d.earthRangeKm, site.lonDeg, site.latDeg);
+    const sun = su.elDeg > m(su.azDeg), earth = ea.elDeg > m(ea.azDeg);
+    if (sun) { s++; run = 0; } else if (++run > longest) longest = run;
+    if (earth) { e++; runE = 0; } else if (++runE > longestE) longestE = runE;
+    if (sun && earth) b++;
+  }
+  const n = dirs.length || 1;
+  return { sun: s / n, earth: e / n, both: b / n, longestDarkH: longest * stepH, longestNoEarthH: longestE * stepH, hours: dirs.length * stepH };
+}
+
+// Hours the battery carries the surface load through darkness (usable share above the minimum state of charge).
+const batteryHours = (vehicle) => (vehicle.batteryWh * (1 - vehicle.batteryMinSoc)) / Math.max(1, vehicle.loadsW.surface);
+
+// One figure graded against its limits: 'pass' | 'near' | 'fail'. higher: true when more is better.
+function grade(value, { pass, near, higher = false }) {
+  if (!Number.isFinite(value)) return 'fail';
+  if (higher) return value >= pass ? 'pass' : value >= near ? 'near' : 'fail';
+  return value <= pass ? 'pass' : value <= near ? 'near' : 'fail';
+}
+
+// The figures for one place, each { id, label, value, text, limit, grade, note }.
+// t: terrainStats; sky: skyStats; psrShare: share of the ellipse in permanent shadow; budget: plan budget or null;
+// earthAtLanding: boolean; battH: batteryHours; res: DEM km per pixel used for the slopes.
+function figures({ t, sky, psrShare, budget = null, earthAtLanding = null, battH, limitDeg, resKm, stayDays }) {
+  const pct = (x) => `${Math.round(x * 100)} %`;
+  const out = [];
+  const add = (id, label, value, text, limit, g, note) => out.push({ id, label, value, text, limit, grade: g, note });
+  add('slope', 'Ellipse steeper than the lander limit', t.overLimit, Number.isFinite(t.overLimit) ? pct(t.overLimit) : 'no data', `≤ 5 % (limit ${limitDeg}°)`, grade(t.overLimit, { pass: 0.05, near: 0.15 }),
+    `slope over ${Math.round(resKm * 2000)} m on the ${Math.round(resKm * 1000)} m DEM; mean ${Number.isFinite(t.meanDeg) ? t.meanDeg.toFixed(1) : '—'}°, 95 % below ${Number.isFinite(t.p95Deg) ? t.p95Deg.toFixed(1) : '—'}°`);
+  // roughness needs several DEM pixels across the ellipse: at 120 m and coarser it is not resolved (graded near)
+  const roughOk = resKm <= 0.04 && Number.isFinite(t.roughM);
+  add('rough', 'Roughness in the ellipse', roughOk ? t.roughM : NaN, roughOk ? `${t.roughM.toFixed(1)} m RMS` : `not resolved at ${Math.round(resKm * 1000)} m`, '≤ 1 m RMS (assumed)', roughOk ? grade(t.roughM, { pass: 1, near: 2.5 }) : 'near',
+    roughOk ? `height scatter about the best-fit plane on the ${Math.round(resKm * 1000)} m DEM; rocks are smaller than the DEM and not modelled` : 'needs 40 m or finer elevation data across the ellipse; rocks are not modelled either way');
+  add('psr', 'Ellipse in permanent shadow', psrShare, pct(psrShare), '0 %', grade(psrShare, { pass: 0, near: 0.05 }), 'LOLA PSR map, 120 m (Mazarico et al. 2011)');
+  add('sun', `Sun above the skyline over ${stayDays} days`, sky.sun, `${pct(sky.sun)} (${Math.round(sky.sun * sky.hours)} h)`, '≥ 70 %', grade(sky.sun, { pass: 0.7, near: 0.4, higher: true }), 'ephemeris + LOLA skyline, hourly');
+  add('dark', 'Longest dark spell vs battery', sky.longestDarkH, `${Math.round(sky.longestDarkH)} h of ${battH.toFixed(1)} h`, `≤ ${battH.toFixed(1)} h on battery`, grade(sky.longestDarkH / Math.max(0.1, battH), { pass: 1, near: 1.5 }),
+    'battery and surface load assumed (Vehicle tab)');
+  add('earth', `Earth above the skyline over ${stayDays} days`, sky.earth, `${pct(sky.earth)} (${Math.round(sky.earth * sky.hours)} h)`, '≥ 50 %', grade(sky.earth, { pass: 0.5, near: 0.25, higher: true }), 'direct-to-Earth line of sight; no relay modelled here');
+  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', 'needed for a live landing link');
+  if (budget) add('dv', 'Lander Δv margin after the reserve', budget.marginMs, `${Math.round(budget.marginMs)} m/s · ${Math.round(budget.propellantLeftKg)} kg left`, '≥ 50 m/s', grade(budget.marginMs, { pass: 50, near: 0, higher: true }), 'from the planned orbit, rocket equation; vehicle assumed');
+  return out;
+}
+
+// One sentence for the figures.
+function verdict(figs) {
+  const fails = figs.filter((f) => f.grade === 'fail'), nears = figs.filter((f) => f.grade === 'near');
+  const names = (l) => l.map((f) => f.label.toLowerCase()).join(', ');
+  if (fails.length) return { grade: 'fail', text: `Not recommended: ${names(fails)}${nears.length ? `; also close on ${names(nears)}` : ''}.` };
+  if (nears.length) return { grade: 'near', text: `Possible with care: ${names(nears)} near the limit; everything else passes.` };
+  return { grade: 'pass', text: 'Good landing site: every figure passes its limit.' };
+}
+
+// Search grid around a map point: centres every stepKm within radiusKm (a square), with lat/lon.
+function searchGrid(xKm, yKm, { radiusKm = 15, stepKm = 1 } = {}) {
+  const out = [];
+  const n = Math.round(radiusKm / stepKm);
+  for (let j = -n; j <= n; j++) for (let i = -n; i <= n; i++) {
+    const x = xKm + i * stepKm, y = yKm + j * stepKm;
+    const { latDeg, lonDeg } = fromXY(x, y);
+    out.push({ i, j, xKm: x, yKm: y, latDeg, lonDeg });
+  }
+  return out;
+}
+
+// Suitability of grid points (navigator score: Sun 40, Earth 30, slope 20, nearness to shadow 10) and whether
+// each passes the hard limits (slope ≤ limit, longest dark ≤ battery, not in permanent shadow).
+// pts: [{ sun, earth, slopeDeg, shadowKm, darkH }] → [{ score (0–1), ok }]
+function suitability(pts, { limitDeg, battH, weights = DEFAULT_WEIGHTS }) {
+  const arr = (k) => Float32Array.from(pts, (p) => p[k]);
+  const s = scoreCells({ sun: arr('sun'), earth: arr('earth'), slope: arr('slopeDeg'), shadowKm: arr('shadowKm'), weights, count: pts.length });
+  return pts.map((p, k) => ({ score: s[k], ok: passes(p.slopeDeg, p.darkH, { maxSlope: limitDeg, maxDark: battH }) && p.shadowKm !== 0 }));
+}
+
+// The best `count` points that pass, highest score first, each at least minKm from those taken (and from `avoid`).
+function bestPoints(pts, { count = 5, minKm = 2, avoid = [] } = {}) {
+  const order = pts.filter((p) => p.ok && Number.isFinite(p.score)).sort((a, b) => b.score - a.score);
+  const taken = [];
+  for (const p of order) {
+    if ([...avoid, ...taken].every((q) => Math.hypot(q.xKm - p.xKm, q.yKm - p.yKm) >= minKm)) taken.push(p);
+    if (taken.length === count) break;
+  }
+  return taken;
+}
+
+const mapXY = (latDeg, lonDeg) => toXY(latDeg, lonDeg);
+
+return { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, searchGrid, suitability, bestPoints, mapXY };
+})();
+__m['planner.js'] = (() => {
+// "Choose where to land" (step 1 of the mission): a full-screen map of the south polar region (relief from the
+// finest LOLA level in view, permanent shadow, the listed sites, the 80°S edge of the data) and a whole-Moon view;
+// a click or a typed latitude/longitude proposes a landing point. The point and its landing ellipse are scored
+// (siteplan.js), a grid around it is searched for better spots (navigator suitability, score.js), the top five
+// are ranked on the map and in a table, and "Land here" hands the chosen point to the page (onLand).
+const { loadData } = __m['../data-loader.js'];
+const { createDem, toXY, fromXY, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
+const { createPsr, paintPsr, PSR_PACK } = __m['../psr.js'];
+const { decodePack, G0, sampleG0 } = __m['../globe-terrain.js'];
+const { loadSiteTerrain } = __m['terrain-local.js'];
+const { pickLandingTime, skyAt } = __m['landing.js'];
+const { planMission } = __m['mission.js'];
+const { ELLIPSE, ellipsePoints, terrainStats, skyDirections, skyStats, batteryHours, figures, verdict, searchGrid, suitability, bestPoints } = __m['siteplan.js'];
+
+const RAD = Math.PI / 180;
+const EDGE_KM = Math.hypot(...toXY(TERRAIN_MAX_LAT, 0));   // 80°S on the polar map
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
+const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+// "−85.4, 35.3", "85.4S 35.3E", "85.4 S, 324.7 E" → { latDeg, lonDeg } | null
+function parseLatLon(text) {
+  const m = String(text).trim().match(/^(-?\d+(?:\.\d+)?)\s*°?\s*([NS])?[\s,;]+(-?\d+(?:\.\d+)?)\s*°?\s*([EW])?$/i);
+  if (!m) return null;
+  let lat = Number(m[1]), lon = Number(m[3]);
+  if (m[2] && m[2].toUpperCase() === 'S') lat = -Math.abs(lat);
+  if (m[4] && m[4].toUpperCase() === 'W') lon = -Math.abs(lon);
+  if (!(lat >= -90 && lat <= 90)) return null;
+  let L = lon % 360;
+  if (L < 0) L += 360;   // (no + 360 on positive longitudes: keeps 35.3 exactly 35.3)
+  return { latDeg: lat, lonDeg: L };
+}
+
+function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, getVehicle, getFromMs, getStayDays, getCurrent, onLand }) {
+  root.innerHTML = `
+    <div class="pl-map">
+      <canvas aria-label="Map of the lunar south pole: click to propose a landing point"></canvas>
+      <div class="pl-top glass">
+        <div class="seg" role="group" aria-label="Map"><button data-view="polar" class="on">South pole</button><button data-view="moon">Whole Moon</button></div>
+        <form class="pl-go"><input type="text" placeholder="lat, lon  e.g. 85.4S 35.3E" aria-label="Latitude and longitude"><button class="btn" type="submit">Go</button></form>
+        <span class="pl-hint">Click the map to propose a landing point · drag to pan · wheel or pinch to zoom</span>
+      </div>
+      <div class="pl-zoom"><button class="cam" data-z="1.6" aria-label="Zoom in" title="Zoom in">+</button><button class="cam" data-z="0.625" aria-label="Zoom out" title="Zoom out">−</button></div>
+      <div class="pl-key glass"></div>
+      <div class="pl-toast" hidden></div>
+    </div>
+    <aside class="pl-side glass">
+      <header><h2>Choose where to land</h2><button class="btn ghost pl-close" aria-label="Close the planner">Close</button></header>
+      <p class="pl-assume"></p>
+      <div class="pl-body"><p class="note">Click anywhere on the south polar map (80°S to the pole, where this page has terrain, skyline and descent data), or type a latitude and longitude.</p></div>
+    </aside>`;
+  const canvas = root.querySelector('canvas'), ctx = canvas.getContext('2d');
+  const body = root.querySelector('.pl-body'), keyBox = root.querySelector('.pl-key'), toast = root.querySelector('.pl-toast');
+  const S = { view: 'polar', cx: 0, cy: 0, kmPerPx: 0.8, w: 0, h: 0, pick: null, sel: 0, grid: null, results: null, token: 0, base: null, baseKey: '', g0: null, moonImg: null };
+  const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null };
+  let opened = false;
+
+  // ---------- data ----------
+  async function loadLayers() {
+    const get = (n) => loadData(n, { timeoutMs: 90000 }).catch(() => null);
+    const [sl, sh, psr] = await Promise.all([get('slope_1km'), get('shadow_1km'), get(PSR_PACK)]);
+    if (sl) L.slope = { bytes: sl, ...meta.slope?.find((x) => x.name === 'slope_1km') };
+    if (sh) L.shadow = { bytes: sh, ...meta.shadow?.find((x) => x.name === 'shadow_1km') };
+    try { if (psr) L.psr = createPsr(psr, meta.psr); } catch { L.psr = null; }
+    const lv = meta.levels?.find((l) => l.name === 'dem_120m');
+    if (lv) {
+      const b = await get('dem_120m');
+      if (b) L.dem120 = createDem({ data: new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1), size: lv.size, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, halfKm: lv.halfKm });
+    }
+    S.baseKey = ''; draw();
+  }
+  // navigator 1 km grids (±320 km): slope bytes × 0.25 = deg (240 m baseline), shadow bytes = km to the nearest PSR (0 inside)
+  const cellOf = (g, x, y) => {
+    const size = g.size ?? 640, ck = g.cellKm ?? 1, half = (size * ck) / 2;
+    const i = Math.floor((x + half) / ck), j = Math.floor((half - y) / ck);
+    return i >= 0 && j >= 0 && i < size && j < size ? j * size + i : -1;
+  };
+  const slopeAt = (x, y) => { if (!L.slope) return NaN; const k = cellOf(L.slope, x, y); return k < 0 ? NaN : L.slope.bytes[k] * (L.slope.scale ?? 0.25); };
+  const shadowAt = (x, y) => { if (!L.shadow) return NaN; const k = cellOf(L.shadow, x, y); return k < 0 ? NaN : L.shadow.bytes[k]; };
+
+  // ---------- map ----------
+  const toScreen = (x, y) => [S.w / 2 + (x - S.cx) / S.kmPerPx, S.h / 2 - (y - S.cy) / S.kmPerPx];
+  const toMap = (px, py) => [S.cx + (px - S.w / 2) * S.kmPerPx, S.cy - (py - S.h / 2) * S.kmPerPx];
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    S.w = Math.max(1, Math.round(r.width)); S.h = Math.max(1, Math.round(r.height));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(S.w * dpr); canvas.height = Math.round(S.h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    S.baseKey = ''; draw();
+  }
+  // relief shading of the visible window from the finest level loaded at this scale (light from the upper left)
+  function sampler() {
+    const dem = getDem();
+    const chain = [];
+    if (S.kmPerPx < 0.06 && L.fine) chain.push(L.fine);
+    if (S.kmPerPx < 0.4 && L.dem120) chain.push(L.dem120.sample);
+    if (dem) chain.push(dem.sample);
+    return (x, y) => { for (const f of chain) { const v = f(x, y); if (v === v) return v; } return NaN; };
+  }
+  function renderBase() {
+    const key = `${S.view}|${S.cx.toFixed(3)}|${S.cy.toFixed(3)}|${S.kmPerPx.toFixed(5)}|${S.w}x${S.h}|${!!L.dem120}|${!!L.fine}`;
+    if (key === S.baseKey && S.base) return S.base;
+    const w = S.w, h = S.h, img = new ImageData(w, h);
+    if (S.view === 'polar') {
+      const f = sampler(), k = S.kmPerPx;
+      const H = new Float32Array((w + 1) * (h + 1));
+      for (let j = 0; j <= h; j++) for (let i = 0; i <= w; i++) { const [x, y] = toMap(i, j); H[j * (w + 1) + i] = f(x, y); }
+      const lx = -0.6, ly = 0.6, lz = 0.53, ex = Math.max(1, 6 * Math.sqrt(k));   // exaggerate gentle relief at small scales
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const a = H[j * (w + 1) + i], b = H[j * (w + 1) + i + 1], c = H[(j + 1) * (w + 1) + i];
+        const o = (j * w + i) * 4;
+        if (!(a === a && b === b && c === c)) { img.data[o] = 12; img.data[o + 1] = 13; img.data[o + 2] = 15; img.data[o + 3] = 255; continue; }
+        const gx = ((b - a) / (k * 1000)) * ex, gy = ((a - c) / (k * 1000)) * ex;   // +x right, +y up
+        const nz = 1 / Math.sqrt(gx * gx + gy * gy + 1);
+        const sh = Math.max(0, (-gx * lx - gy * ly + lz) * nz);
+        const v = 28 + sh * 190;
+        img.data[o] = v; img.data[o + 1] = v * 0.99; img.data[o + 2] = v * 0.96; img.data[o + 3] = 255;
+      }
+    } else if (S.g0) {
+      // whole Moon, equirectangular, 7.6 km LOLA (globe_g0): fit the width
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const { lat, lon } = moonLL(i, j);
+        const o = (j * w + i) * 4;
+        if (lat === null) { img.data[o + 3] = 255; continue; }
+        const a = sampleG0(S.g0, lat, lon), b = sampleG0(S.g0, lat, lon + 0.5), c = sampleG0(S.g0, lat - 0.5, lon);
+        // heights in DN (0.5 m); 0.5° is about 15 km at the equator: a gentle slope shade
+        const sh = Math.max(0, Math.min(1, 0.55 + ((a - b) + (a - c)) * 0.00025));
+        const v = 30 + sh * 180;
+        img.data[o] = v; img.data[o + 1] = v * 0.99; img.data[o + 2] = v * 0.96; img.data[o + 3] = 255;
+      }
+    }
+    const c = new OffscreenCanvas(w, h);
+    c.getContext('2d').putImageData(img, 0, 0);
+    S.base = c; S.baseKey = key;
+    return c;
+  }
+  const moonLL = (i, j) => {
+    const sc = S.w / 360, top = (S.h - 180 * sc) / 2;
+    const lat = 90 - (j - top) / sc, lon = i / sc;
+    return lat < -90 || lat > 90 ? { lat: null, lon: null } : { lat, lon };
+  };
+  let drawQueued = false;
+  function draw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(() => { drawQueued = false; paint(); }); setTimeout(() => { if (drawQueued) { drawQueued = false; paint(); } }, 60); } }
+  function paint() {
+    if (!opened || !S.w) return;
+    ctx.clearRect(0, 0, S.w, S.h);
+    ctx.drawImage(renderBase(), 0, 0, S.w, S.h);
+    if (S.view === 'moon') return paintMoon();
+    // permanent shadow (LOLA PSR) over the relief
+    if (L.psr && S.kmPerPx < 1.2) { try { paintPsr(ctx, L.psr, { width: S.w, height: S.h, kmPerPx: S.kmPerPx, cx: S.cx, cy: S.cy }, { colour: [120, 160, 255], hatchAlpha: 0.18, outlineAlpha: 0.55 }); } catch { /* no OffscreenCanvas */ } }
+    // suitability around the pick (1 km cells)
+    if (S.grid) {
+      const half = 0.5 / S.kmPerPx;
+      for (const p of S.grid) {
+        if (!p.done) continue;
+        const [sx, sy] = toScreen(p.xKm, p.yKm);
+        if (sx < -half || sy < -half || sx > S.w + half || sy > S.h + half) continue;
+        ctx.fillStyle = p.ok ? rampCss(p.score, 0.42) : 'rgba(229,72,77,0.28)';
+        ctx.fillRect(sx - half, sy - half, half * 2 + 0.5, half * 2 + 0.5);
+        if (!p.ok && half > 3) { ctx.strokeStyle = 'rgba(229,72,77,0.55)'; ctx.beginPath(); ctx.moveTo(sx - half, sy + half); ctx.lineTo(sx + half, sy - half); ctx.stroke(); }
+      }
+    }
+    // 80°S: the edge of the page's terrain, skyline and descent data
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 1;
+    const [ox, oy] = toScreen(0, 0);
+    ctx.beginPath(); ctx.arc(ox, oy, EDGE_KM / S.kmPerPx, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    if (EDGE_KM / S.kmPerPx < Math.max(S.w, S.h) * 1.5) label(ox, oy - EDGE_KM / S.kmPerPx - 6, '80°S · edge of the terrain data', 'rgba(255,255,255,0.6)', 'center');
+    // listed sites
+    for (const s of sites) { const [sx, sy] = toScreen(...toXY(s.latDeg, s.lonDeg)); dot(sx, sy, 3, '#f2b33d'); if (S.kmPerPx < 1.2) label(sx + 6, sy + 4, s.name, 'rgba(242,179,61,0.9)'); }
+    // the current mission's site
+    const cur = getCurrent?.();
+    if (cur) { const [sx, sy] = toScreen(...toXY(cur.latDeg, cur.lonDeg)); ring(sx, sy, 7, '#fff'); label(sx + 9, sy - 8, 'current plan', 'rgba(255,255,255,0.8)'); }
+    // candidates and the pick with their ellipses
+    const cand = S.results?.list ?? [];
+    cand.forEach((c, n) => { if (n === 0) return; const [sx, sy] = toScreen(c.xKm, c.yKm); ellipse(c, n === S.sel ? '#7fd18b' : 'rgba(127,209,139,0.8)'); badge(sx, sy, String(n), n === S.sel); });
+    if (S.pick) { const [sx, sy] = toScreen(S.pick.xKm, S.pick.yKm); ellipse(S.pick, S.sel === 0 ? '#fff' : 'rgba(255,255,255,0.75)'); cross(sx, sy); }
+    scaleBar();
+    renderKey();
+  }
+  const rampCss = (t, a) => { const v = Math.max(0, Math.min(1, t)); const r = v < 0.5 ? 229 : Math.round(229 - (v - 0.5) * 2 * 102), g = v < 0.5 ? Math.round(72 + v * 2 * 107) : Math.round(179 + (v - 0.5) * 2 * 30); return `rgba(${r},${g},${v < 0.5 ? 77 : 107},${a})`; };
+  function dot(x, y, r, c) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+  function ring(x, y, r, c) { ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); }
+  function label(x, y, t, c, align = 'left') { ctx.font = '12px Inter, system-ui, sans-serif'; ctx.textAlign = align; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(t, x, y); ctx.fillStyle = c; ctx.fillText(t, x, y); ctx.textAlign = 'left'; }
+  function cross(x, y) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 9, y); ctx.lineTo(x - 3, y); ctx.moveTo(x + 3, y); ctx.lineTo(x + 9, y); ctx.moveTo(x, y - 9); ctx.lineTo(x, y - 3); ctx.moveTo(x, y + 3); ctx.lineTo(x, y + 9); ctx.stroke(); }
+  function badge(x, y, t, on) { dot(x, y, 9, on ? '#7fd18b' : 'rgba(20,22,26,0.85)'); ring(x, y, 9, '#7fd18b'); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = on ? '#000' : '#7fd18b'; ctx.textAlign = 'center'; ctx.fillText(t, x, y + 4); ctx.textAlign = 'left'; }
+  // the 3σ ellipse at true scale (down-range radial), with at least a few pixels so it is seen when zoomed out
+  function ellipse(p, colour) {
+    const [sx, sy] = toScreen(p.xKm, p.yKm);
+    const a = Math.max(4, ELLIPSE.downrangeM / 1000 / S.kmPerPx), b = Math.max(3, ELLIPSE.crossrangeM / 1000 / S.kmPerPx);
+    const ang = Math.atan2(-p.yKm, p.xKm);   // radial direction on screen (y down)
+    ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy, a, b, ang, 0, Math.PI * 2); ctx.stroke();
+  }
+  function scaleBar() {
+    const want = S.kmPerPx * 120, p = Math.pow(10, Math.floor(Math.log10(want)));
+    const km = [5, 2, 1].map((m) => m * p).find((v) => v <= want) ?? p;
+    const px = km / S.kmPerPx, x = S.w - px - 64, y = S.h - 18;   // bottom right, clear of the key
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
+    label(x + px + 6, y + 1, km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`, '#fff');
+  }
+  function paintMoon() {
+    const sc = S.w / 360, top = (S.h - 180 * sc) / 2, y80 = top + (90 + 80) * sc;
+    ctx.fillStyle = 'rgba(242,179,61,0.18)'; ctx.fillRect(0, y80, S.w, top + 180 * sc - y80);
+    ctx.strokeStyle = 'rgba(242,179,61,0.8)'; ctx.beginPath(); ctx.moveTo(0, y80); ctx.lineTo(S.w, y80); ctx.stroke();
+    label(10, top + 180 * sc + 18, '↑ 80°S to the pole (shaded band): the lander plans landings there; click it to open the polar map', 'rgba(242,179,61,0.95)');
+    for (const s of sites) { const x = (((s.lonDeg % 360) + 360) % 360) * sc, y = top + (90 - s.latDeg) * sc; dot(x, y, 2.5, '#f2b33d'); }
+    keyBox.innerHTML = '<b>Whole Moon</b> · LOLA 7.6 km (LDEM_4), equirectangular. The planner works south of 80°S, where the page has the polar terrain, skyline and descent data.';
+  }
+  function renderKey() {
+    const res = S.kmPerPx < 0.06 && L.fine ? 'fine DEM near the pick' : S.kmPerPx < 0.4 && L.dem120 ? 'LOLA 120 m' : 'LOLA 480 m';
+    keyBox.innerHTML = `<div class="pl-k-row"><span class="pl-k-bar"></span><span>Landing suitability around the pick (navigator score: Sun 40 · Earth 30 · slope 20 · near shadow 10), 1 km cells</span></div>
+      <div class="pl-k-row"><span class="pl-k-sw fail"></span><span>fails a limit: slope over the lander limit, dark spell longer than the battery, or permanent shadow</span></div>
+      <div class="pl-k-row"><span class="pl-k-sw psr"></span><span>permanent shadow (LOLA PSR, 120 m)</span><span class="pl-k-sw ell"></span><span>3σ landing ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m (assumed)</span></div>
+      <div class="pl-k-src">Relief: ${res}, light from the upper left.</div>
+      <div class="pl-k-short"><span class="pl-k-bar"></span> suitability · <span class="pl-k-sw fail"></span> fails a limit · <span class="pl-k-sw psr"></span> permanent shadow · ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m (assumed)</div>`;
+  }
+
+  // ---------- interaction ----------
+  let drag = null; const pts = new Map(); let pinch = null;
+  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); drag = { x: e.clientX, y: e.clientY, cx: S.cx, cy: S.cy, moved: false }; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) zoomBy(d / pinch); pinch = d; drag.moved = true; return; }
+    if (!drag || S.view !== 'polar') return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.hypot(dx, dy) > 4) drag.moved = true;
+    if (drag.moved) { S.cx = drag.cx - dx * S.kmPerPx; S.cy = drag.cy + dy * S.kmPerPx; draw(); }
+  });
+  const end = (e) => {
+    const wasDrag = drag?.moved;
+    pts.delete(e.pointerId); if (pts.size < 2) pinch = null;
+    if (e.type === 'pointerup' && !wasDrag && pts.size === 0) {
+      const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      if (S.view === 'moon') {
+        const { lat, lon } = moonLL(px, py);
+        if (lat === null) return;
+        if (lat > TERRAIN_MAX_LAT) return say('North of 80°S: the lander has no polar terrain, skyline or descent data there. Pick in the shaded band.');
+        setView('polar');
+        setPick(lat, lon, { center: true });
+      } else {
+        // a numbered spot selects it; anywhere else proposes a new point
+        const hit = S.results ? S.results.list.findIndex((c, n) => n > 0 && Math.hypot(...toScreen(c.xKm, c.yKm).map((v, i) => v - [px, py][i])) < 11) : -1;
+        if (hit > 0) return select(hit);
+        const [x, y] = toMap(px, py);
+        const { latDeg, lonDeg } = fromXY(x, y);
+        if (latDeg > TERRAIN_MAX_LAT) return say('Outside 80°S: no terrain, skyline or descent data there.');
+        setPick(latDeg, lonDeg);
+      }
+    }
+    if (pts.size === 0) drag = null;
+  };
+  canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); const r = canvas.getBoundingClientRect(); zoomBy(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+  function zoomBy(f, px = S.w / 2, py = S.h / 2) {
+    if (S.view !== 'polar') return;
+    const [x, y] = toMap(px, py);
+    S.kmPerPx = Math.min(1.6, Math.max(0.004, S.kmPerPx / f));
+    S.cx = x - (px - S.w / 2) * S.kmPerPx; S.cy = y + (py - S.h / 2) * S.kmPerPx;
+    draw();
+  }
+  root.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => zoomBy(Number(b.dataset.z))));
+  root.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+  root.querySelector('.pl-go').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const ll = parseLatLon(root.querySelector('.pl-go input').value);
+    if (!ll) return say('Type a latitude and longitude, e.g. 85.4S 35.3E or −85.4, 35.3');
+    if (ll.latDeg > TERRAIN_MAX_LAT) return say('North of 80°S: outside the lander\'s polar terrain data.');
+    setView('polar'); setPick(ll.latDeg, ll.lonDeg, { center: true });
+  });
+  root.querySelector('.pl-close').addEventListener('click', () => close());
+  function say(t) { toast.textContent = t; toast.hidden = false; clearTimeout(say.t); say.t = setTimeout(() => { toast.hidden = true; }, 4200); }
+  async function setView(v) {
+    S.view = v;
+    root.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+    if (v === 'moon' && !S.g0) { try { S.g0 = await decodePack(await loadData(G0.name, { timeoutMs: 60000 }), G0.width); } catch { say('The whole-Moon terrain (globe_g0) did not load.'); } }
+    S.baseKey = ''; draw();
+  }
+
+  // ---------- evaluation ----------
+  async function setPick(latDeg, lonDeg, { center = false } = {}) {
+    const [x, y] = toXY(latDeg, lonDeg);
+    S.pick = { latDeg, lonDeg, xKm: x, yKm: y };
+    S.sel = 0; S.results = null; S.grid = null;
+    if (center) { S.cx = x; S.cy = y; S.kmPerPx = Math.min(S.kmPerPx, 0.08); }
+    root.querySelector('.pl-go input').value = `${fmtLat(latDeg)} ${fmtLon(lonDeg)}`;
+    draw();
+    const token = ++S.token;
+    const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
+    const fromMs = getFromMs();
+    const dem = getDem();
+    setBody(`<p class="note">Searching ${15} km around the point for the best landing spots…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
+    // stage 1: suitability on a 1 km grid around the pick (skyline from the 480 m DEM, Sun/Earth every 4 h over the stay)
+    const mask0 = skylineFor(dem, S.pick);
+    const land0 = pickLandingTime(eph, S.pick, mask0, fromMs) ?? fromMs;
+    const dirs4 = skyDirections(eph, land0, stayDays, 4);
+    const grid = searchGrid(x, y, { radiusKm: 15, stepKm: 1 }).filter((p) => p.latDeg <= TERRAIN_MAX_LAT);
+    S.grid = grid;
+    for (let k = 0; k < grid.length; k++) {
+      const p = grid[k];
+      const sky = skyStats(dirs4, p, skylineFor(dem, p), 4);
+      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slopeAt(p.xKm, p.yKm), shadowKm: shadowAt(p.xKm, p.yKm) });
+      if (k % 24 === 23 || k === grid.length - 1) {
+        const done = grid.slice(0, k + 1), s = suitability(done, { limitDeg: limit, battH });
+        done.forEach((q, n) => { q.score = s[n].score; q.ok = s[n].ok; q.done = true; });
+        const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((k + 1) / grid.length) * 100)}%`;
+        draw();
+        await tick();
+        if (token !== S.token) return;
+      }
+    }
+    // stage 2: the pick and the eight best points that pass, in detail; the 1 km screen uses a 240 m slope, so the
+    // fine ellipse figures re-rank them (fewest fails, then fewest near limits, then suitability) and five are kept
+    const best = bestPoints(grid, { count: 8, minKm: 2, avoid: [{ xKm: x, yKm: y }] });
+    setBody(`<p class="note">Scoring the point and the ${best.length} best spots in detail (terrain in the ellipse, sky over the stay, Δv)…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
+    const pick = { ...S.pick, name: 'Your point' };
+    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score }));
+    const all = [pick, ...cands];
+    for (let n = 0; n < all.length; n++) {
+      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs }));
+      if (token !== S.token) return;
+      const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((n + 1) / all.length) * 100)}%`;
+      await tick();
+    }
+    const count = (c, g) => c.figs.filter((f) => f.grade === g).length;
+    cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
+    const list = [pick, ...cands.slice(0, 5)];
+    list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
+    S.results = { list, limit, battH, stayDays };
+    renderResults();
+    draw();
+  }
+
+  async function detail(c, { vehicle, limit, battH, stayDays, fromMs }) {
+    const dem = getDem();
+    const listed = sites.find((s) => Math.hypot(...[0, 1].map((i) => toXY(s.latDeg, s.lonDeg)[i] - [c.xKm, c.yKm][i])) < 0.2);
+    const site = { id: listed?.id ?? 'custom', name: listed?.name ?? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}`, latDeg: c.latDeg, lonDeg: c.lonDeg };
+    let terr = null;
+    try { terr = await loadSiteTerrain(meta, site, { halfKm: 0.6, hires }); } catch { terr = null; }
+    const resKm = terr?.finestKm ?? 0.12;
+    if (c === S.results?.list?.[0] || c.name === 'Your point') L.fine = terr?.sample ?? null;
+    const sample = terr?.sample ?? ((x, y) => (L.dem120 ?? dem).sample(x, y));
+    // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM)
+    const pts = ellipsePoints(c.xKm, c.yKm, { stepM: Math.min(30, Math.max(5, resKm * 1000)) });
+    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit });
+    const psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(c.xKm, c.yKm) === 0 ? 1 : 0);
+    const mask = skylineFor(dem, site);
+    const landingMs = pickLandingTime(eph, site, mask, fromMs) ?? fromMs;
+    const sky = skyStats(skyDirections(eph, landingMs, stayDays, 1), site, mask, 1);
+    const at = skyAt(eph, site, landingMs, mask);
+    let budget = null;
+    try {
+      const h = dem.heightAt(site.latDeg, site.lonDeg);
+      const plan = planMission({ eph, site, landingMs, vehicle, siteHeightKm: (h ?? 0) / 1000, mask });
+      if (plan.ok) budget = plan.budget;
+    } catch { budget = null; }
+    const figs = figures({ t, sky, psrShare, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, battH, limitDeg: limit, resKm, stayDays });
+    return { site, landingMs, figs, verdict: verdict(figs), resKm, distKm: S.pick ? Math.hypot(c.xKm - S.pick.xKm, c.yKm - S.pick.yKm) : 0 };
+  }
+
+  function setBody(html) { body.innerHTML = html; }
+  const G = { pass: 'pass', near: 'near', fail: 'fail' };
+  function renderResults() {
+    const R = S.results, c = R.list[S.sel];
+    const fig = (id, x) => x.figs.find((f) => f.id === id);
+    const cell = (f) => (f ? `<td class="r g-${G[f.grade]}">${esc(f.text.split(' (')[0].split(' · ')[0])}</td>` : '<td class="r">—</td>');
+    body.innerHTML = `
+      <div class="pl-point"><b>${esc(c.name)}</b> · ${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}${c.distKm ? ` · ${c.distKm.toFixed(1)} km from your point` : ''}<br><span class="muted">landing ${new Date(c.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC (first lit window) · slopes on the ${Math.round(c.resKm * 1000)} m DEM</span></div>
+      <p class="pl-verdict g-${c.verdict.grade}">${esc(c.verdict.text)}</p>
+      <ul class="pl-figs">${c.figs.map((f) => `<li class="g-${G[f.grade]}"><div class="pl-f-h"><span>${esc(f.label)}</span><span class="pl-g">${f.grade}</span></div><div class="pl-f-v"><b>${esc(f.text)}</b><span class="muted">limit ${esc(f.limit)}</span></div><small>${esc(f.note)}</small></li>`).join('')}</ul>
+      <button class="btn primary pl-land">Land here: plan the mission to ${esc(c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name)}</button>
+      <h3>Better spots nearby <small>the 5 best that pass the hard limits in a 30 × 30 km square around your point, at least 2 km apart, by suitability; same stay and method</small></h3>
+      <table class="tbl pl-cmp"><thead><tr><th>#</th><th class="r">km</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Earth</th><th class="r">Dark</th><th class="r">Δv</th></tr></thead><tbody>
+      ${R.list.map((x, n) => `<tr data-n="${n}" class="${n === S.sel ? 'on' : ''}"><td>${n === 0 ? 'You' : n}</td><td class="r">${x.distKm.toFixed(1)}</td>${cell(fig('slope', x))}${cell(fig('sun', x))}${cell(fig('earth', x))}${cell(fig('dark', x))}${cell(fig('dv', x))}</tr>`).join('')}
+      </tbody></table>
+      <p class="note">Click a row or a numbered spot on the map to see its figures. Rocks smaller than the DEM are not modelled; Sun and Earth use the 480 m skyline; the Δv is from the planned polar orbit with this vehicle (assumed).</p>`;
+    body.querySelectorAll('.pl-cmp tr[data-n]').forEach((tr) => tr.addEventListener('click', () => select(Number(tr.dataset.n))));
+    body.querySelector('.pl-land').addEventListener('click', () => { onLand({ site: c.site, landingMs: c.landingMs }); close(); });
+  }
+  function select(n) { S.sel = n; renderResults(); const c = S.results.list[n]; S.cx = c.xKm; S.cy = c.yKm; draw(); }
+
+  // ---------- open / close ----------
+  function open() {
+    root.hidden = false; opened = true;
+    const v = getVehicle();
+    root.querySelector('.pl-assume').textContent = `Assumed: 3σ landing ellipse ${ELLIPSE.downrangeM} m down-range × ${ELLIPSE.crossrangeM} m cross-range (terrain-relative navigation); slope limit ${v.touchdown.maxSlopeDeg}°; stay ${getStayDays()} days from the first lit window; battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on a ${v.loadsW.surface} W surface load = ${batteryHours(v).toFixed(1)} h of darkness.`;
+    const cur = getCurrent?.();
+    if (cur && !S.pick) { const [x, y] = toXY(cur.latDeg, cur.lonDeg); S.cx = x; S.cy = y; S.kmPerPx = 0.25; }
+    requestAnimationFrame(resize);
+    setTimeout(resize, 50);
+    if (!L.slope) loadLayers();
+  }
+  function close() { root.hidden = true; opened = false; S.token++; }
+  window.addEventListener('resize', () => { if (opened) resize(); });
+  return { open, close, get isOpen() { return opened; }, setPick, state: S };
+}
+
+return { parseLatLon, createPlanner };
+})();
 __m['../hires.js'] = (() => {
 // High-resolution terrain patches around the landing sites (tools/fetch-hires.mjs, demo/data/hires.json):
 // 5 m, 10 m or 20 m LOLA, 10 × 10 km per site, polar stereographic map km like terrain.js. A patch has the
@@ -5321,6 +6171,7 @@ const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, re
 const { readMission, writeMission, stageUrl, stageBar } = __m['../mission-flow.js'];
 const { attitudeState } = __m['model.js'];
 const { createCloseup } = __m['closeup.js'];
+const { createPlanner } = __m['planner.js'];
 const { createHiresSet } = __m['../hires.js'];
 const { bootScreen } = __m['../boot.js'];
 
@@ -5368,7 +6219,7 @@ function boot() {
   const hires = createHiresSet(json('data-hires'), (name) => loadData(name, { timeoutMs: 60000 }));
   const q = new URLSearchParams(location.search);
   const start0 = startingPoint(q, readMission(), sites, eph);
-  const choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
+  let choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
 
   const S = {
     site: start0.site,
@@ -5399,7 +6250,8 @@ function boot() {
   // narrow screens start with the details panel closed so the 3D view is visible (the handle reopens it)
   if (window.innerWidth < 760) { $('#side').classList.add('closed'); $('#side-toggle').textContent = 'Details ‹'; }
   // site picker
-  $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
+  const fillSites = () => { $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join(''); };
+  fillSites();
   $('#site').value = S.site.id;
   // the mission's steps across the pages; this page is step 1
   const stages = stageBar(document, 'landing');
@@ -5604,6 +6456,24 @@ function boot() {
   $('#play').addEventListener('click', () => togglePlay());
   // playback: 0.5–4× of the compressed timeline, or real time (one simulated second per second)
   $('#speed').addEventListener('change', (e) => { S.speed = e.target.value === 'real' ? 'real' : Number(e.target.value); });
+  // "Where to land": the landing-site planner (map, scores, better spots); "Land here" replans the mission there
+  const planner = createPlanner({
+    root: $('#planner'), eph, sites, meta, hires,
+    getDem: () => S.dem, getVehicle: () => S.plan?.vehicle ?? S.vehicle,
+    getFromMs: () => (Number.isFinite(S.landingMs) ? S.landingMs - 2 * 86400e3 : DEFAULT_FROM),
+    getStayDays: () => readMission()?.stayDays ?? 7,
+    getCurrent: () => S.site,
+    onLand: ({ site, landingMs }) => {
+      const listed = sites.find((s) => s.id === site.id);
+      const s = listed ?? { id: 'custom', name: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg };
+      if (!listed) { choices = [s, ...sites]; fillSites(); }
+      S.site = s; S.landingMs = landingMs;
+      $('#site').value = s.id;
+      replan();
+    },
+  });
+  S.planner = planner;   // inspection from the console, as S itself
+  $('#plan-site').addEventListener('click', () => planner.open());
   $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replan(); });
   $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replan(); } });
   $('#find').addEventListener('click', () => { S.landingMs = pickLandingTime(eph, S.site, skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3); replan(); });
@@ -5648,6 +6518,7 @@ function boot() {
     $('#play').textContent = S.playing ? 'Pause' : 'Play';
   }
   window.addEventListener('keydown', (e) => {
+    if (planner.isOpen) { if (e.key === 'Escape') planner.close(); return; }
     if (e.target.closest('input, select, textarea')) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if (e.code === 'ArrowRight') S.f = Math.min(1, S.f + 0.005);
@@ -5674,7 +6545,7 @@ function boot() {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!S.plan) return;
+    if (!S.plan || planner.isOpen) return;   // the planner covers the view: no 3D frames meanwhile
     if (S.playing) {
       S.f = playbackStep(S.f, dt, S.speed, S.timeline, PLAYBACK_S);
       if (S.f >= 1) togglePlay();

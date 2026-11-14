@@ -19,6 +19,7 @@ import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, r
 import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.js';
 import { attitudeState } from './model.js';
 import { createCloseup } from './closeup.js';
+import { createPlanner } from './planner.js';
 import { createHiresSet } from '../hires.js';
 import { bootScreen } from '../boot.js';
 
@@ -66,7 +67,7 @@ export function boot() {
   const hires = createHiresSet(json('data-hires'), (name) => loadData(name, { timeoutMs: 60000 }));
   const q = new URLSearchParams(location.search);
   const start0 = startingPoint(q, readMission(), sites, eph);
-  const choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
+  let choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
 
   const S = {
     site: start0.site,
@@ -97,7 +98,8 @@ export function boot() {
   // narrow screens start with the details panel closed so the 3D view is visible (the handle reopens it)
   if (window.innerWidth < 760) { $('#side').classList.add('closed'); $('#side-toggle').textContent = 'Details ‹'; }
   // site picker
-  $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
+  const fillSites = () => { $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join(''); };
+  fillSites();
   $('#site').value = S.site.id;
   // the mission's steps across the pages; this page is step 1
   const stages = stageBar(document, 'landing');
@@ -302,6 +304,24 @@ export function boot() {
   $('#play').addEventListener('click', () => togglePlay());
   // playback: 0.5–4× of the compressed timeline, or real time (one simulated second per second)
   $('#speed').addEventListener('change', (e) => { S.speed = e.target.value === 'real' ? 'real' : Number(e.target.value); });
+  // "Where to land": the landing-site planner (map, scores, better spots); "Land here" replans the mission there
+  const planner = createPlanner({
+    root: $('#planner'), eph, sites, meta, hires,
+    getDem: () => S.dem, getVehicle: () => S.plan?.vehicle ?? S.vehicle,
+    getFromMs: () => (Number.isFinite(S.landingMs) ? S.landingMs - 2 * 86400e3 : DEFAULT_FROM),
+    getStayDays: () => readMission()?.stayDays ?? 7,
+    getCurrent: () => S.site,
+    onLand: ({ site, landingMs }) => {
+      const listed = sites.find((s) => s.id === site.id);
+      const s = listed ?? { id: 'custom', name: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg };
+      if (!listed) { choices = [s, ...sites]; fillSites(); }
+      S.site = s; S.landingMs = landingMs;
+      $('#site').value = s.id;
+      replan();
+    },
+  });
+  S.planner = planner;   // inspection from the console, as S itself
+  $('#plan-site').addEventListener('click', () => planner.open());
   $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replan(); });
   $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replan(); } });
   $('#find').addEventListener('click', () => { S.landingMs = pickLandingTime(eph, S.site, skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3); replan(); });
@@ -346,6 +366,7 @@ export function boot() {
     $('#play').textContent = S.playing ? 'Pause' : 'Play';
   }
   window.addEventListener('keydown', (e) => {
+    if (planner.isOpen) { if (e.key === 'Escape') planner.close(); return; }
     if (e.target.closest('input, select, textarea')) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if (e.code === 'ArrowRight') S.f = Math.min(1, S.f + 0.005);
@@ -372,7 +393,7 @@ export function boot() {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!S.plan) return;
+    if (!S.plan || planner.isOpen) return;   // the planner covers the view: no 3D frames meanwhile
     if (S.playing) {
       S.f = playbackStep(S.f, dt, S.speed, S.timeline, PLAYBACK_S);
       if (S.f >= 1) togglePlay();
