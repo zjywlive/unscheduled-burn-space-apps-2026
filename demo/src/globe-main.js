@@ -6,7 +6,7 @@ import { createGlobeView, cameraFromHash, cameraToHash } from './globe-view.js';
 import { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } from './route3d.js';
 import { createRouteLayer } from './globe-route.js';
 import { createHiresSet } from './hires.js';
-import { stageBar, readMission } from './mission-flow.js';
+import { stageBar, readMission, landedFor } from './mission-flow.js';
 import { bootScreen } from './boot.js';
 
 function readJson(id) {
@@ -151,10 +151,38 @@ export function startGlobe() {
       const fromHash = cameraFromHash(location.hash);
       // opened from the stage bar without a camera: start over the mission's site
       const mission = readMission();
-      const startAt = fromHash.lat === undefined && mission && !/(^|[#&])route=1/.test(location.hash) ? { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 } : fromHash;
+      const touch = landedFor(mission);   // where the lander came down, if it has
+      const startAt = fromHash.lat === undefined && mission && !/(^|[#&])route=1/.test(location.hash) ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
       view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
       view.onFrame(frame);
       window.__globe = { view, terrain, pyramid, hires };   // for debugging from the console
+      // where the lander touched down (written by the lander page): a lander on its legs, sized to the zoom
+      const landed = landedFor(readMission());
+      if (landed) {
+        const T = view.THREE, lander = new T.Group(), gold = new T.MeshBasicMaterial({ color: 0xffd23d });
+        const body = new T.Mesh(new T.CylinderGeometry(0.7, 0.9, 0.9, 8), gold); body.position.y = 1.35; lander.add(body);
+        for (let k = 0; k < 4; k++) {
+          const a = (k / 4) * Math.PI * 2 + Math.PI / 4, leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 1.5, 6), gold);
+          leg.position.set(Math.cos(a) * 0.95, 0.6, Math.sin(a) * 0.95); leg.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); lander.add(leg);
+        }
+        view.addObject(lander);
+        view.onFrame(() => {
+          const [x, y, z] = view.surface(landed.latDeg, landed.lonDeg, 0);
+          lander.position.set(x, y, z);
+          lander.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), lander.position.clone().normalize());
+          lander.scale.setScalar(view.kmPerPx() * 6);
+        });
+        const el = document.createElement('button');
+        el.type = 'button'; el.className = 'site site-lander'; el.textContent = landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander';
+        el.title = `Touchdown ${landed.latDeg.toFixed(4)}°, ${landed.lonDeg.toFixed(4)}°E`;
+        el.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
+        labels.appendChild(el);
+        labelEls.push({ s: { latDeg: landed.latDeg, lonDeg: landed.lonDeg }, el });
+        PRESETS.push({ id: 'lander', label: 'Lander', lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 });
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = 'Lander';
+        b.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
+        chips.appendChild(b);
+      }
       window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
       if (routeMode) startRoute(view, cameraFromHash(location.hash));
       document.body.classList.add('ready');

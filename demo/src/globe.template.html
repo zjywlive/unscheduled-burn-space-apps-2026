@@ -46,6 +46,8 @@
   .site { position: absolute; left: 0; top: 0; pointer-events: auto; font: 500 11px Inter, system-ui, sans-serif; color: #fff; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px; padding: 2px 8px 2px 16px; cursor: pointer; white-space: nowrap; margin: -10px 0 0 -6px; }
   .site::before { content: ""; position: absolute; left: 5px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #ffb74d; }
   .site[hidden] { display: none; }
+  .site-lander { color: #ffd23d; border-color: rgba(255, 210, 61, 0.6); }
+  .site-lander::before { background: #ffd23d; border-radius: 2px; }
   body:not(.ready) .panel, body:not(.ready) .readout { opacity: 0.5; }
   /* phase 6: route playback */
   .route-hud { left: 50%; transform: translateX(-50%); bottom: 16px; width: min(640px, calc(100vw - 600px)); min-width: 420px; padding: 10px 14px; display: none; gap: 8px; }

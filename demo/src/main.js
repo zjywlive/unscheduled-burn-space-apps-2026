@@ -1,6 +1,6 @@
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
-import { writeMission } from './mission-flow.js';
+import { writeMission, readMission, landedFor, landFromHash, moonKm } from './mission-flow.js';
 import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
 import { summarize, summarizePair, sampleSeries } from './windows.js';
@@ -129,6 +129,7 @@ function start() {
 
   // mission-flow.js: a link from the lander's "Plan the rover route" carries plan=1 (open the route card at the site)
   const planOnLoad = /(^|[#&])plan=1(&|$)/.test(location.hash);
+  let landHash = landFromHash(location.hash);   // where the lander touched down, from the lander's link
   let state = parseHash(location.hash, sites, eph);
   state.viewport = clampView(state.viewport);
   if (!state.windowOn) state.mapMode = 'now';   // no mission window: the Live view
@@ -1138,8 +1139,24 @@ function start() {
     missionKey = key;
     writeMission({ siteId: s.id ?? null, siteName: s.name ?? null, latDeg: s.latDeg, lonDeg: s.lonDeg, landingMs: state.landingMs, stayDays: state.stayDays });
   }
+  // where the lander touched down (the lander page writes it into the mission, its link carries land=): shown on the
+  // map and used as the rover route's start, while it belongs to the selected site (within 30 km)
+  let landedKey = '';
+  function syncLanded(force = false) {
+    const s = state.site;
+    const key = `${s?.id ?? ''}:${s?.latDeg}:${s?.lonDeg}`;
+    if (!force && key === landedKey) return;
+    landedKey = key;
+    const m = readMission();
+    let l = landHash ?? landedFor(m);
+    if (l && s && moonKm(l.latDeg, l.lonDeg, s.latDeg, s.lonDeg) > 30) l = null;
+    const next = l && l.latDeg <= TERRAIN_MAX_LAT ? { ...l, x: toXY(l.latDeg, l.lonDeg)[0], y: toXY(l.latDeg, l.lonDeg)[1] } : null;
+    if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); }
+  }
+  window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
   function render() {
     saveMission();
+    syncLanded();
     derived = compute();
     if (mapView && !bigLayout()) mapView.setLayout(false);
     shell.sync(state, derived.figures);
@@ -1567,6 +1584,8 @@ function start() {
     if (location.hash === toHash(state)) return;
     // the stage bar's "3 Rover" inside this page: a hash change with plan=1, no reload
     const planNow = /(^|[#&])plan=1(&|$)/.test(location.hash);
+    const lh = landFromHash(location.hash);
+    if (lh) { landHash = lh; setTimeout(() => syncLanded(true), 0); }
     if (planNow) setTimeout(() => openPlanAtSite(), 0);
     const next = parseHash(location.hash, sites, eph);
     const openTab = next.sheet;
@@ -1622,7 +1641,8 @@ function start() {
     kind = 'route';
     update({ tool: 'route' });
     entryFold('route');
-    if (!rp.points) routePlanCard.update({ points: [toXY(state.site.latDeg, state.site.lonDeg)] });
+    // the rover starts where the lander touched down, else at the site
+    if (!rp.points) routePlanCard.update({ points: [rp.landed ? [rp.landed.x, rp.landed.y] : toXY(state.site.latDeg, state.site.lonDeg)] });
   }
   if (planOnLoad) openPlanAtSite();
   // the loading screen (boot.js): terrain is in; it lifts when the 2 km map of the stay is done (or after 20 s)

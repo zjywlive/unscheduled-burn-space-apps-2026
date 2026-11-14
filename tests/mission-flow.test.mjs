@@ -31,3 +31,16 @@ test('stage links carry the site and landing time to each page', () => {
 test('a custom site (no id) goes as coordinates', () => {
   assert.match(stageUrl('site', { latDeg: -87.25, lonDeg: 10.5, landingMs: T }), /site=-87\.2500,10\.5000&t=/);
 });
+
+test('the touchdown point: kept only for its own site, carried to the rover and 3D steps', async () => {
+  const { landedFor, landFromHash, moonKm } = await import('../demo/src/mission-flow.js');
+  const m = { siteId: 'shackleton', latDeg: -89.45, lonDeg: 222.69, landingMs: T, landed: { latDeg: -89.441, lonDeg: 222.4, siteId: 'shackleton', source: 'hazard-divert' } };
+  assert.equal(landedFor(m).source, 'hazard-divert');
+  assert.equal(landedFor({ ...m, siteId: 'haworth' }), null, 'another site');
+  assert.equal(landedFor({ ...m, siteId: null, landed: { ...m.landed, siteId: null }, latDeg: -85, lonDeg: 0 }), null, 'more than 30 km away');
+  assert.match(stageUrl('rover', m), /&plan=1&land=-89\.44100,222\.40000$/);
+  assert.match(stageUrl('3d', m), /^globe\.html#lat=-89\.4410&lon=222\.4000&dist=12/);
+  assert.deepEqual(landFromHash('#view=map&land=-89.44100,222.40000&plan=1'), { latDeg: -89.441, lonDeg: 222.4 });
+  assert.equal(landFromHash('#view=map'), null);
+  assert.ok(Math.abs(moonKm(-90, 0, -89, 0) - 30.32) < 0.01, 'one degree of latitude is 30.3 km');
+});

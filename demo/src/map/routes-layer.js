@@ -16,6 +16,7 @@
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
 //   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
+//   landed: { x, y, source } | null           where the lander touched down (the rover's start)
 //   havens: contingency.js findHavens() | null  phase 5: checkpoint → haven links, havens (H), checkpoints without one
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
@@ -109,7 +110,7 @@ export function placeLabel(points, toPx, name, frac, taken, width = Infinity, he
   return null;
 }
 
-export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null } = {}) {
+export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null, landed = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
@@ -206,6 +207,16 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
       if (Number.isFinite(x) && Number.isFinite(y)) g.append(s('g', { class: 'rp-empty', transform: `translate(${f1(x)} ${f1(y)})` }, s('circle', { r: 8 }), s('text', { y: 4, 'text-anchor': 'middle' }, '!')));
     }
     gEl.append(g);
+  }
+  // where the craft landed: a lander symbol (body on four legs) and its name
+  if (landed) {
+    const [x, y] = toPx(landed.x, landed.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      gEl.append(s('g', { class: 'rp-lander', transform: `translate(${f1(x)} ${f1(y)})` },
+        s('path', { class: 'rp-lander-legs', d: 'M-5 -2L-10 7M5 -2L10 7M-2 1L-4 8M2 1L4 8M-12 7H-8M8 7H12' }),
+        s('path', { class: 'rp-lander-body', d: 'M-6 -9H6L7 -2H-7Z' }),
+        s('text', { class: 'rp-lander-label', x: 14, y: -2 }, landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander')));
+    }
   }
   if (waypoints && waypoints.length) {
     const g = s('g', { class: 'rp-waypoints' });

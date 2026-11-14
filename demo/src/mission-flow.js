@@ -5,7 +5,9 @@
 // The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
 // small DOM builder with no dependencies, so any page can use it.
 //
-// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs }
+// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs,
+//             landed: { latDeg, lonDeg, tMs, siteId, missM, source } | null }   where the lander touched down
+//             (written by the lander page; the rover route starts there)
 
 export const MISSION_KEY = 'lsn-mission';
 export const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
@@ -36,6 +38,30 @@ export function hasRoute(storage) {
   try { return !!store(storage)?.getItem(ROUTE_KEY); } catch { return false; }
 }
 
+// Great-circle distance between two lat/lon points on the Moon, km.
+export function moonKm(aLat, aLon, bLat, bLon) {
+  const r = Math.PI / 180, R = 1737.4;
+  const s = Math.sin((bLat - aLat) * r / 2) ** 2 + Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin((bLon - aLon) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+// The mission's touchdown point when it belongs to the mission's site (same id, or within 30 km), else null.
+export function landedFor(m) {
+  const l = m?.landed;
+  if (!l || !Number.isFinite(l.latDeg) || !Number.isFinite(l.lonDeg)) return null;
+  if (l.siteId && m.siteId && l.siteId !== m.siteId) return null;
+  if (Number.isFinite(m.latDeg) && moonKm(l.latDeg, l.lonDeg, m.latDeg, m.lonDeg) > 30) return null;
+  return l;
+}
+
+// "land=lat,lon" in a hash → { latDeg, lonDeg } | null
+export function landFromHash(hash) {
+  const mm = /(?:^|[#&])land=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/.exec(String(hash));
+  if (!mm) return null;
+  const latDeg = Number(mm[1]), lonDeg = ((Number(mm[2]) % 360) + 360) % 360;
+  return latDeg >= -90 && latDeg <= 90 ? { latDeg, lonDeg } : null;
+}
+
 const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().slice(0, 16)}Z`;
 
 // The URL of a stage for a mission (relative to demo/). Without a mission, the bare page.
@@ -44,11 +70,13 @@ export function stageUrl(stage, m, { route = false } = {}) {
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
   if (stage === 'site') return nav();
-  if (stage === 'rover') return nav('&plan=1');
+  const landed = landedFor(m);
+  if (stage === 'rover') return nav(`&plan=1${landed ? `&land=${landed.latDeg.toFixed(5)},${landed.lonDeg.toFixed(5)}` : ''}`);
   if (stage === 'landing') return `lander.html${m?.siteId ? `?site=${encodeURIComponent(m.siteId)}${t ? `&t=${t}` : ''}` : ''}`;
   if (stage === '3d') {
     if (route) return 'globe.html#route=1';
-    return m ? `globe.html#lat=${m.latDeg.toFixed(4)}&lon=${m.lonDeg.toFixed(4)}&dist=45&tilt=50&heading=0` : 'globe.html';
+    const c = landed ?? m;
+    return c ? `globe.html#lat=${c.latDeg.toFixed(4)}&lon=${c.lonDeg.toFixed(4)}&dist=${landed ? 12 : 45}&tilt=50&heading=0` : 'globe.html';
   }
   return 'index.html';
 }

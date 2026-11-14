@@ -46,6 +46,8 @@
   .site { position: absolute; left: 0; top: 0; pointer-events: auto; font: 500 11px Inter, system-ui, sans-serif; color: #fff; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px; padding: 2px 8px 2px 16px; cursor: pointer; white-space: nowrap; margin: -10px 0 0 -6px; }
   .site::before { content: ""; position: absolute; left: 5px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #ffb74d; }
   .site[hidden] { display: none; }
+  .site-lander { color: #ffd23d; border-color: rgba(255, 210, 61, 0.6); }
+  .site-lander::before { background: #ffd23d; border-radius: 2px; }
   body:not(.ready) .panel, body:not(.ready) .readout { opacity: 0.5; }
   /* phase 6: route playback */
   .route-hud { left: 50%; transform: translateX(-50%); bottom: 16px; width: min(640px, calc(100vw - 600px)); min-width: 420px; padding: 10px 14px; display: none; gap: 8px; }
@@ -1704,7 +1706,9 @@ __m['mission-flow.js'] = (() => {
 // The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
 // small DOM builder with no dependencies, so any page can use it.
 //
-// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs }
+// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs,
+//             landed: { latDeg, lonDeg, tMs, siteId, missM, source } | null }   where the lander touched down
+//             (written by the lander page; the rover route starts there)
 
 const MISSION_KEY = 'lsn-mission';
 const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
@@ -1735,6 +1739,30 @@ function hasRoute(storage) {
   try { return !!store(storage)?.getItem(ROUTE_KEY); } catch { return false; }
 }
 
+// Great-circle distance between two lat/lon points on the Moon, km.
+function moonKm(aLat, aLon, bLat, bLon) {
+  const r = Math.PI / 180, R = 1737.4;
+  const s = Math.sin((bLat - aLat) * r / 2) ** 2 + Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin((bLon - aLon) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+// The mission's touchdown point when it belongs to the mission's site (same id, or within 30 km), else null.
+function landedFor(m) {
+  const l = m?.landed;
+  if (!l || !Number.isFinite(l.latDeg) || !Number.isFinite(l.lonDeg)) return null;
+  if (l.siteId && m.siteId && l.siteId !== m.siteId) return null;
+  if (Number.isFinite(m.latDeg) && moonKm(l.latDeg, l.lonDeg, m.latDeg, m.lonDeg) > 30) return null;
+  return l;
+}
+
+// "land=lat,lon" in a hash → { latDeg, lonDeg } | null
+function landFromHash(hash) {
+  const mm = /(?:^|[#&])land=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/.exec(String(hash));
+  if (!mm) return null;
+  const latDeg = Number(mm[1]), lonDeg = ((Number(mm[2]) % 360) + 360) % 360;
+  return latDeg >= -90 && latDeg <= 90 ? { latDeg, lonDeg } : null;
+}
+
 const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().slice(0, 16)}Z`;
 
 // The URL of a stage for a mission (relative to demo/). Without a mission, the bare page.
@@ -1743,11 +1771,13 @@ function stageUrl(stage, m, { route = false } = {}) {
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
   if (stage === 'site') return nav();
-  if (stage === 'rover') return nav('&plan=1');
+  const landed = landedFor(m);
+  if (stage === 'rover') return nav(`&plan=1${landed ? `&land=${landed.latDeg.toFixed(5)},${landed.lonDeg.toFixed(5)}` : ''}`);
   if (stage === 'landing') return `lander.html${m?.siteId ? `?site=${encodeURIComponent(m.siteId)}${t ? `&t=${t}` : ''}` : ''}`;
   if (stage === '3d') {
     if (route) return 'globe.html#route=1';
-    return m ? `globe.html#lat=${m.latDeg.toFixed(4)}&lon=${m.lonDeg.toFixed(4)}&dist=45&tilt=50&heading=0` : 'globe.html';
+    const c = landed ?? m;
+    return c ? `globe.html#lat=${c.latDeg.toFixed(4)}&lon=${c.lonDeg.toFixed(4)}&dist=${landed ? 12 : 45}&tilt=50&heading=0` : 'globe.html';
   }
   return 'index.html';
 }
@@ -1828,7 +1858,7 @@ function nextSteps(doc, after, { getMission = () => readMission(), className = '
   return row;
 }
 
-return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
+return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
 })();
 __m['boot.js'] = (() => {
 // Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
@@ -1900,7 +1930,7 @@ const { createGlobeView, cameraFromHash, cameraToHash } = __m['globe-view.js'];
 const { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } = __m['route3d.js'];
 const { createRouteLayer } = __m['globe-route.js'];
 const { createHiresSet } = __m['hires.js'];
-const { stageBar, readMission } = __m['mission-flow.js'];
+const { stageBar, readMission, landedFor } = __m['mission-flow.js'];
 const { bootScreen } = __m['boot.js'];
 
 function readJson(id) {
@@ -2045,10 +2075,38 @@ function startGlobe() {
       const fromHash = cameraFromHash(location.hash);
       // opened from the stage bar without a camera: start over the mission's site
       const mission = readMission();
-      const startAt = fromHash.lat === undefined && mission && !/(^|[#&])route=1/.test(location.hash) ? { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 } : fromHash;
+      const touch = landedFor(mission);   // where the lander came down, if it has
+      const startAt = fromHash.lat === undefined && mission && !/(^|[#&])route=1/.test(location.hash) ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
       view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
       view.onFrame(frame);
       window.__globe = { view, terrain, pyramid, hires };   // for debugging from the console
+      // where the lander touched down (written by the lander page): a lander on its legs, sized to the zoom
+      const landed = landedFor(readMission());
+      if (landed) {
+        const T = view.THREE, lander = new T.Group(), gold = new T.MeshBasicMaterial({ color: 0xffd23d });
+        const body = new T.Mesh(new T.CylinderGeometry(0.7, 0.9, 0.9, 8), gold); body.position.y = 1.35; lander.add(body);
+        for (let k = 0; k < 4; k++) {
+          const a = (k / 4) * Math.PI * 2 + Math.PI / 4, leg = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 1.5, 6), gold);
+          leg.position.set(Math.cos(a) * 0.95, 0.6, Math.sin(a) * 0.95); leg.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); lander.add(leg);
+        }
+        view.addObject(lander);
+        view.onFrame(() => {
+          const [x, y, z] = view.surface(landed.latDeg, landed.lonDeg, 0);
+          lander.position.set(x, y, z);
+          lander.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), lander.position.clone().normalize());
+          lander.scale.setScalar(view.kmPerPx() * 6);
+        });
+        const el = document.createElement('button');
+        el.type = 'button'; el.className = 'site site-lander'; el.textContent = landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander';
+        el.title = `Touchdown ${landed.latDeg.toFixed(4)}°, ${landed.lonDeg.toFixed(4)}°E`;
+        el.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
+        labels.appendChild(el);
+        labelEls.push({ s: { latDeg: landed.latDeg, lonDeg: landed.lonDeg }, el });
+        PRESETS.push({ id: 'lander', label: 'Lander', lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 });
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = 'Lander';
+        b.addEventListener('click', () => view.flyTo({ lat: landed.latDeg, lon: landed.lonDeg, dist: 3, tilt: 55 }));
+        chips.appendChild(b);
+      }
       window.addEventListener('hashchange', () => view.jumpTo(cameraFromHash(location.hash)));
       if (routeMode) startRoute(view, cameraFromHash(location.hash));
       document.body.classList.add('ready');

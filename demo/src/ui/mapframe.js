@@ -531,6 +531,7 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
       traps: rp?.plan?.traps ?? null,
       drive: rp?.energy?.drive ?? null,
       havens: rp?.havens?.result ?? null,
+      landed: rp?.landed ?? null,
       coverage: rp?.stationOff ? null : rp?.coverage ?? null,
       toPx: (x, y) => toPxView(sqView(view), S, x, y),
       width: S, height: S,

@@ -187,3 +187,8 @@
 .insp-next { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .insp-next a { font-size: var(--fs-small); color: var(--text); text-decoration: none; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--raised) 70%, transparent); }
 .insp-next a:hover { border-color: var(--text); }
+
+/* where the craft landed */
+.rp-lander-body { fill: #ffd23d; stroke: var(--ground); stroke-width: 1.5; }
+.rp-lander-legs { fill: none; stroke: #ffd23d; stroke-width: 1.75; stroke-linecap: round; paint-order: stroke; }
+.rp-lander-label { fill: #ffd23d; font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--ground); stroke-width: 3.5px; stroke-linejoin: round; }

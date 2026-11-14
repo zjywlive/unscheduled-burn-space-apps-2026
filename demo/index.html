@@ -1513,6 +1513,11 @@ button.relay-win:hover .relay-win-time { text-decoration: underline; text-underl
 .insp-next a { font-size: var(--fs-small); color: var(--text); text-decoration: none; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--raised) 70%, transparent); }
 .insp-next a:hover { border-color: var(--text); }
 
+/* where the craft landed */
+.rp-lander-body { fill: #ffd23d; stroke: var(--ground); stroke-width: 1.5; }
+.rp-lander-legs { fill: none; stroke: #ffd23d; stroke-width: 1.75; stroke-linecap: round; paint-order: stroke; }
+.rp-lander-label { fill: #ffd23d; font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--ground); stroke-width: 3.5px; stroke-linejoin: round; }
+
 /* styles/phase4-shapeentry.css */
 /* Fix R9: the Coordinates form (ui/shapeentry.js). Same compact rows as the Route plan points: tag,
    latitude, longitude, row tools. No background of its own, so it sits on the glass panel. */
@@ -2413,7 +2418,9 @@ __m['mission-flow.js'] = (() => {
 // The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
 // small DOM builder with no dependencies, so any page can use it.
 //
-// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs }
+// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs,
+//             landed: { latDeg, lonDeg, tMs, siteId, missM, source } | null }   where the lander touched down
+//             (written by the lander page; the rover route starts there)
 
 const MISSION_KEY = 'lsn-mission';
 const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
@@ -2444,6 +2451,30 @@ function hasRoute(storage) {
   try { return !!store(storage)?.getItem(ROUTE_KEY); } catch { return false; }
 }
 
+// Great-circle distance between two lat/lon points on the Moon, km.
+function moonKm(aLat, aLon, bLat, bLon) {
+  const r = Math.PI / 180, R = 1737.4;
+  const s = Math.sin((bLat - aLat) * r / 2) ** 2 + Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin((bLon - aLon) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+// The mission's touchdown point when it belongs to the mission's site (same id, or within 30 km), else null.
+function landedFor(m) {
+  const l = m?.landed;
+  if (!l || !Number.isFinite(l.latDeg) || !Number.isFinite(l.lonDeg)) return null;
+  if (l.siteId && m.siteId && l.siteId !== m.siteId) return null;
+  if (Number.isFinite(m.latDeg) && moonKm(l.latDeg, l.lonDeg, m.latDeg, m.lonDeg) > 30) return null;
+  return l;
+}
+
+// "land=lat,lon" in a hash → { latDeg, lonDeg } | null
+function landFromHash(hash) {
+  const mm = /(?:^|[#&])land=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/.exec(String(hash));
+  if (!mm) return null;
+  const latDeg = Number(mm[1]), lonDeg = ((Number(mm[2]) % 360) + 360) % 360;
+  return latDeg >= -90 && latDeg <= 90 ? { latDeg, lonDeg } : null;
+}
+
 const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().slice(0, 16)}Z`;
 
 // The URL of a stage for a mission (relative to demo/). Without a mission, the bare page.
@@ -2452,11 +2483,13 @@ function stageUrl(stage, m, { route = false } = {}) {
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
   if (stage === 'site') return nav();
-  if (stage === 'rover') return nav('&plan=1');
+  const landed = landedFor(m);
+  if (stage === 'rover') return nav(`&plan=1${landed ? `&land=${landed.latDeg.toFixed(5)},${landed.lonDeg.toFixed(5)}` : ''}`);
   if (stage === 'landing') return `lander.html${m?.siteId ? `?site=${encodeURIComponent(m.siteId)}${t ? `&t=${t}` : ''}` : ''}`;
   if (stage === '3d') {
     if (route) return 'globe.html#route=1';
-    return m ? `globe.html#lat=${m.latDeg.toFixed(4)}&lon=${m.lonDeg.toFixed(4)}&dist=45&tilt=50&heading=0` : 'globe.html';
+    const c = landed ?? m;
+    return c ? `globe.html#lat=${c.latDeg.toFixed(4)}&lon=${c.lonDeg.toFixed(4)}&dist=${landed ? 12 : 45}&tilt=50&heading=0` : 'globe.html';
   }
   return 'index.html';
 }
@@ -2537,7 +2570,7 @@ function nextSteps(doc, after, { getMission = () => readMission(), className = '
   return row;
 }
 
-return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
+return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
 })();
 __m['boot.js'] = (() => {
 // Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
@@ -8811,6 +8844,7 @@ __m['map/routes-layer.js'] = (() => {
 //   width, height: number,               frame size in px, to keep labels inside (optional)
 //   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
 //   coverage: comms.js coverage() | null        phase 4: the station's usable coverage, coloured by received power
+//   landed: { x, y, source } | null           where the lander touched down (the rover's start)
 //   havens: contingency.js findHavens() | null  phase 5: checkpoint → haven links, havens (H), checkpoints without one
 //   drive: route-energy.js Drive | null        phase 3: parking stops (P) and where the battery runs out (!)
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
@@ -8904,7 +8938,7 @@ function placeLabel(points, toPx, name, frac, taken, width = Infinity, height = 
   return null;
 }
 
-function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null } = {}) {
+function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null, drive = null, coverage = null, havens = null, landed = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
@@ -9001,6 +9035,16 @@ function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx,
       if (Number.isFinite(x) && Number.isFinite(y)) g.append(s('g', { class: 'rp-empty', transform: `translate(${f1(x)} ${f1(y)})` }, s('circle', { r: 8 }), s('text', { y: 4, 'text-anchor': 'middle' }, '!')));
     }
     gEl.append(g);
+  }
+  // where the craft landed: a lander symbol (body on four legs) and its name
+  if (landed) {
+    const [x, y] = toPx(landed.x, landed.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      gEl.append(s('g', { class: 'rp-lander', transform: `translate(${f1(x)} ${f1(y)})` },
+        s('path', { class: 'rp-lander-legs', d: 'M-5 -2L-10 7M5 -2L10 7M-2 1L-4 8M2 1L4 8M-12 7H-8M8 7H12' }),
+        s('path', { class: 'rp-lander-body', d: 'M-6 -9H6L7 -2H-7Z' }),
+        s('text', { class: 'rp-lander-label', x: 14, y: -2 }, landed.source && landed.source !== 'nominal' ? 'Lander (diverted)' : 'Lander')));
+    }
   }
   if (waypoints && waypoints.length) {
     const g = s('g', { class: 'rp-waypoints' });
@@ -9644,6 +9688,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
       traps: rp?.plan?.traps ?? null,
       drive: rp?.energy?.drive ?? null,
       havens: rp?.havens?.result ?? null,
+      landed: rp?.landed ?? null,
       coverage: rp?.stationOff ? null : rp?.coverage ?? null,
       toPx: (x, y) => toPxView(sqView(view), S, x, y),
       width: S, height: S,
@@ -19249,7 +19294,7 @@ return { createStoryMode };
 __m['main.js'] = (() => {
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
-const { writeMission } = __m['mission-flow.js'];
+const { writeMission, readMission, landedFor, landFromHash, moonKm } = __m['mission-flow.js'];
 const { bootScreen } = __m['boot.js'];
 const { createEphemeris, bodyAzEl } = __m['ephemeris.js'];
 const { summarize, summarizePair, sampleSeries } = __m['windows.js'];
@@ -19378,6 +19423,7 @@ function start() {
 
   // mission-flow.js: a link from the lander's "Plan the rover route" carries plan=1 (open the route card at the site)
   const planOnLoad = /(^|[#&])plan=1(&|$)/.test(location.hash);
+  let landHash = landFromHash(location.hash);   // where the lander touched down, from the lander's link
   let state = parseHash(location.hash, sites, eph);
   state.viewport = clampView(state.viewport);
   if (!state.windowOn) state.mapMode = 'now';   // no mission window: the Live view
@@ -20387,8 +20433,24 @@ function start() {
     missionKey = key;
     writeMission({ siteId: s.id ?? null, siteName: s.name ?? null, latDeg: s.latDeg, lonDeg: s.lonDeg, landingMs: state.landingMs, stayDays: state.stayDays });
   }
+  // where the lander touched down (the lander page writes it into the mission, its link carries land=): shown on the
+  // map and used as the rover route's start, while it belongs to the selected site (within 30 km)
+  let landedKey = '';
+  function syncLanded(force = false) {
+    const s = state.site;
+    const key = `${s?.id ?? ''}:${s?.latDeg}:${s?.lonDeg}`;
+    if (!force && key === landedKey) return;
+    landedKey = key;
+    const m = readMission();
+    let l = landHash ?? landedFor(m);
+    if (l && s && moonKm(l.latDeg, l.lonDeg, s.latDeg, s.lonDeg) > 30) l = null;
+    const next = l && l.latDeg <= TERRAIN_MAX_LAT ? { ...l, x: toXY(l.latDeg, l.lonDeg)[0], y: toXY(l.latDeg, l.lonDeg)[1] } : null;
+    if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); }
+  }
+  window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
   function render() {
     saveMission();
+    syncLanded();
     derived = compute();
     if (mapView && !bigLayout()) mapView.setLayout(false);
     shell.sync(state, derived.figures);
@@ -20816,6 +20878,8 @@ function start() {
     if (location.hash === toHash(state)) return;
     // the stage bar's "3 Rover" inside this page: a hash change with plan=1, no reload
     const planNow = /(^|[#&])plan=1(&|$)/.test(location.hash);
+    const lh = landFromHash(location.hash);
+    if (lh) { landHash = lh; setTimeout(() => syncLanded(true), 0); }
     if (planNow) setTimeout(() => openPlanAtSite(), 0);
     const next = parseHash(location.hash, sites, eph);
     const openTab = next.sheet;
@@ -20871,7 +20935,8 @@ function start() {
     kind = 'route';
     update({ tool: 'route' });
     entryFold('route');
-    if (!rp.points) routePlanCard.update({ points: [toXY(state.site.latDeg, state.site.lonDeg)] });
+    // the rover starts where the lander touched down, else at the site
+    if (!rp.points) routePlanCard.update({ points: [rp.landed ? [rp.landed.x, rp.landed.y] : toXY(state.site.latDeg, state.site.lonDeg)] });
   }
   if (planOnLoad) openPlanAtSite();
   // the loading screen (boot.js): terrain is in; it lifts when the 2 km map of the stay is done (or after 20 s)
