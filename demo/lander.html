@@ -3032,7 +3032,7 @@ function buildBranches(plan, { sites = [], skyOk = null } = {}) {
     }
     out.push({
       id, eventId: 'engine-underperformance', title: `Engine thrust ${Math.round((1 - k) * 100)} % low`, phase: 'braking', tMs: t.pdiMs + tDet * 1000,
-      decision: d, moonTrack: track, surfaceSamples: surface,
+      decision: d, moonTrack: track, surfaceSamples: surface, touchdown: surface ? low.touchdown : null,
       numbers: [`Δv left ${fmt(remMs)} m/s, Δv still needed ${Number.isFinite(toGo) ? fmt(toGo) : 'more than available'} m/s, reserve ${fmt(v.reserveDvMs)} m/s`, result, d.action === 'abort-to-orbit' ? '' : `costs ${fmt(extra)} m/s more than nominal (gravity losses of a longer burn)`].filter(Boolean),
     });
   }
@@ -3045,7 +3045,7 @@ function buildBranches(plan, { sites = [], skyOk = null } = {}) {
   const div = simulateDescent(v, { massKg: m0, lloAltKm: plan.options.lloAltKm, pdiAltKm: plan.options.pdiAltKm, siteHeightKm: plan.siteHeightKm, divert: { atS, crossrangeM: cross_, downrangeM: down } });
   out.push({
     id: 'hazard-divert', eventId: 'site-hazard', title: 'Boulders at the target (lidar)', phase: 'approach', tMs: t.pdiMs + (tHigh + atS) * 1000,
-    decision: dHaz, surfaceSamples: div.samples, surfaceTarget: div.site.r, moonTrack: null,
+    decision: dHaz, surfaceSamples: div.samples, surfaceTarget: div.site.r, moonTrack: null, touchdown: div.touchdown,
     numbers: [`new target ${fmt(dist)} m away, ${fmt(approachS - atS)} s of approach left`, `divert estimate ${fmt(divertDvMs(dist, approachS - atS))} m/s (budget 60 m/s); simulated ${fmt(div.dvUsedMs - nom.dvUsedMs, 1)} m/s more than nominal`, div.touchdown ? `touchdown ${fmt(Math.abs(div.touchdown.vVertMs), 2)} m/s vertical, ${fmt(div.touchdown.vHorizMs, 2)} m/s horizontal` : 'no touchdown'],
   });
 
@@ -3131,6 +3131,9 @@ __m['landing.js'] = (() => {
 const { bodyAzEl } = __m['../ephemeris.js'];
 const { toXY, fromXY } = __m['../terrain.js'];
 const { unitFromLonLat } = __m['../geometry.js'];
+const { inertialToFixedAt } = __m['mission.js'];
+const { R_MOON } = __m['constants.js'];
+const { cross, dot, norm } = __m['vec.js'];
 
 const DEG = 180 / Math.PI;
 const clearance = (r, mask) => r.elDeg - (typeof mask === 'function' ? mask(r.azDeg) : mask ?? 0);
@@ -3167,6 +3170,34 @@ function flattestNear(sample, site, { radiusKm = 0.5, stepKm = 0.02, baselineKm 
   const north = -Math.sin(phi) * Math.cos(lam) * dv[0] - Math.sin(phi) * Math.sin(lam) * dv[1] + Math.cos(phi) * dv[2];
   const az = ((Math.atan2(east, north) * DEG) + 360) % 360;
   return { latDeg, lonDeg, slopeDeg: best.sl, distM: best.d * 1000, azDeg: az, heightM: sample(best.x, best.y), ok: best.sl <= limitDeg };
+}
+
+// Where a simulated descent touched down, for the next steps (the rover starts there): the last descent sample
+// (PD frame, metres) → Moon-centred inertial → Moon-fixed with the landing-time rotation (the frame the descent was
+// planned and drawn in) → latitude, east longitude 0–360°. missM: great-circle distance from the target site at
+// its height. null without a touchdown or with one outside the vehicle's touchdown limits (not a landing to plan
+// a rover from). samples / touchdown default to the nominal descent; source names the branch flown.
+function touchdownPoint(plan, { samples = plan.descent.samples, touchdown = plan.descent.touchdown, source = 'nominal' } = {}) {
+  if (!touchdown || !touchdown.ok || !samples?.length) return null;
+  const f = inertialToFixedAt(plan.descentFrame.pdToMci(samples[samples.length - 1].r), plan.times.landingMs, plan.epochMs);
+  const latDeg = Math.atan2(f[2], Math.hypot(f[0], f[1])) * DEG;
+  const lonDeg = ((Math.atan2(f[1], f[0]) * DEG) % 360 + 360) % 360;
+  const u = unitFromLonLat(lonDeg, latDeg), s = unitFromLonLat(plan.site.lonDeg, plan.site.latDeg);
+  const missM = Math.atan2(norm(cross(u, s)), dot(u, s)) * (R_MOON + plan.siteHeightKm) * 1000;
+  return {
+    latDeg, lonDeg, tMs: plan.times.pdiMs + touchdown.tS * 1000,
+    siteId: plan.site.id === 'custom' ? null : plan.site.id, missM, source,
+  };
+}
+
+// The touchdown of what the page shows as flown: the selected contingency branch if it lands (its own touchdown,
+// e.g. the hazard divert), none if it does not (abort to orbit, wave-off, hold, retarget to a site not simulated),
+// otherwise the nominal descent (branches that leave the landing unchanged).
+function flownTouchdown(plan, branch = null) {
+  if (!branch) return touchdownPoint(plan);
+  if (['abort-to-orbit', 'wave-off', 'hold', 'retarget'].includes(branch.decision?.action)) return null;
+  if (branch.surfaceSamples?.length && branch.touchdown) return touchdownPoint(plan, { samples: branch.surfaceSamples, touchdown: branch.touchdown, source: branch.id });
+  return touchdownPoint(plan);
 }
 
 // Sun and Earth over the skyline at one instant. null outside the ephemeris.
@@ -3225,7 +3256,7 @@ function landingChecks({ eph, site, tMs, mask = 0, sample = null, stepKm = 0.12,
   return { checks: out, ok: out.every((c) => c.ok), sky, spot };
 }
 
-return { slopeDeg, flattestNear, skyAt, pickLandingTime, landingChecks };
+return { slopeDeg, flattestNear, touchdownPoint, flownTouchdown, skyAt, pickLandingTime, landingChecks };
 })();
 __m['terrain-local.js'] = (() => {
 // Terrain around one site for the descent scene, finest first: the site's high-resolution LOLA patch (5, 10 or
@@ -4136,7 +4167,7 @@ function renderBranches(el, branches, activeId, onSelect) {
   el.querySelectorAll('.card').forEach((c) => c.addEventListener('click', () => onSelect(c.dataset.b)));
 }
 
-function renderLanding(el, checks, plan, terrainNote, roverUrl = null) {
+function renderLanding(el, checks, plan, terrainNote, roverUrl = null, landed = undefined) {
   const rows = checks.checks.map((c) => `<tr><td>${esc(c.label)}<small>${esc(c.source)}</small></td><td class="r">${esc(c.value)}</td><td class="r muted">${esc(c.limit)}</td><td class="r ${c.ok ? 'ok' : 'neg'}">${c.ok ? 'OK' : 'NO'}</td></tr>`).join('');
   const s = checks.sky;
   el.innerHTML = `
@@ -4144,6 +4175,7 @@ function renderLanding(el, checks, plan, terrainNote, roverUrl = null) {
     <table class="tbl"><tbody>${rows}</tbody></table>
     ${s ? `<p class="note">At touchdown the Sun is at azimuth ${n0(s.sun.azDeg)}°, elevation ${n1(s.sun.elDeg, 2)}°; the Earth at ${n0(s.earth.azDeg)}°, ${n1(s.earth.elDeg, 2)}°. Clearance is measured above the LOLA skyline. Limits are assumptions for this vehicle (Apollo LM design: about 3 m/s vertical, 1.2 m/s horizontal, 12°).</p>` : ''}
     <p class="note">${esc(terrainNote)}</p>
+    ${landed === undefined ? '' : landed ? `<h3>Touchdown point <small>passed to the rover step</small></h3><dl class="kv"><dt>Latitude, longitude</dt><dd>${Math.abs(landed.latDeg).toFixed(5)}°${landed.latDeg < 0 ? 'S' : 'N'}, ${landed.lonDeg.toFixed(5)}°E</dd><dt>From the target</dt><dd>${n1(landed.missM, 1)} m</dd><dt>Time</dt><dd>${esc(fmtUtc(landed.tMs))}</dd><dt>Flown</dt><dd>${landed.source === 'nominal' ? 'nominal descent' : esc(landed.source.replace(/-/g, ' '))}</dd></dl>` : '<h3>Touchdown point</h3><p class="note">No touchdown in the selected contingency (it ends in orbit or waits); the rover step gets the target site only.</p>'}
     ${roverUrl ? `<p class="next-step"><a class="btn primary" href="${esc(roverUrl)}">Plan the rover route →</a><small>Step 2: the navigator's route card opens at this site and touchdown time.</small></p>` : ''}`;
 }
 
@@ -4176,7 +4208,9 @@ __m['../mission-flow.js'] = (() => {
 // The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
 // small DOM builder with no dependencies, so any page can use it.
 //
-// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs }
+// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs,
+//             landed: { latDeg, lonDeg, tMs, siteId, missM, source } | null }   where the lander touched down
+//             (written by the lander page; the rover route starts there)
 
 const MISSION_KEY = 'lsn-mission';
 const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
@@ -4207,6 +4241,31 @@ function hasRoute(storage) {
   try { return !!store(storage)?.getItem(ROUTE_KEY); } catch { return false; }
 }
 
+// Great-circle distance between two lat/lon points on the Moon, km.
+function moonKm(aLat, aLon, bLat, bLon) {
+  const r = Math.PI / 180, R = 1737.4;
+  const s = Math.sin((bLat - aLat) * r / 2) ** 2 + Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin((bLon - aLon) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+// The mission's touchdown point when it belongs to the mission's site (same id, or within 30 km), else null.
+function landedFor(m) {
+  const l = m?.landed;
+  if (!l || !Number.isFinite(l.latDeg) || !Number.isFinite(l.lonDeg)) return null;
+  if (l.siteId && m.siteId && l.siteId !== m.siteId) return null;
+  if (Number.isFinite(m.latDeg) && moonKm(l.latDeg, l.lonDeg, m.latDeg, m.lonDeg) > 30) return null;
+  return l;
+}
+
+// "land=lat,lon" in a hash → { latDeg, lonDeg } | null
+function landFromHash(hash) {
+  const mm = /(?:^|[#&])land=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/.exec(String(hash));
+  if (!mm) return null;
+  const latDeg = Number(mm[1]), raw = Number(mm[2]);
+  const lonDeg = raw >= 0 && raw < 360 ? raw : ((raw % 360) + 360) % 360;   // wrap only when needed (no float noise)
+  return latDeg >= -90 && latDeg <= 90 ? { latDeg, lonDeg } : null;
+}
+
 const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().slice(0, 16)}Z`;
 
 // The URL of a stage for a mission (relative to demo/). Without a mission, the bare page.
@@ -4215,11 +4274,13 @@ function stageUrl(stage, m, { route = false } = {}) {
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
   if (stage === 'site') return nav();
-  if (stage === 'rover') return nav('&plan=1');
+  const landed = landedFor(m);
+  if (stage === 'rover') return nav(`&plan=1${landed ? `&land=${landed.latDeg.toFixed(5)},${landed.lonDeg.toFixed(5)}` : ''}`);
   if (stage === 'landing') return `lander.html${m?.siteId ? `?site=${encodeURIComponent(m.siteId)}${t ? `&t=${t}` : ''}` : ''}`;
   if (stage === '3d') {
     if (route) return 'globe.html#route=1';
-    return m ? `globe.html#lat=${m.latDeg.toFixed(4)}&lon=${m.lonDeg.toFixed(4)}&dist=45&tilt=50&heading=0` : 'globe.html';
+    const c = landed ?? m;
+    return c ? `globe.html#lat=${c.latDeg.toFixed(4)}&lon=${c.lonDeg.toFixed(4)}&dist=${landed ? 12 : 45}&tilt=50&heading=0` : 'globe.html';
   }
   return 'index.html';
 }
@@ -4300,7 +4361,7 @@ function nextSteps(doc, after, { getMission = () => readMission(), className = '
   return row;
 }
 
-return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
+return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
 })();
 __m['../globe-terrain.js'] = (() => {
 // Global lunar terrain model (phase 1, docs/PHASES.md): one height for any latitude and longitude on the
@@ -4620,7 +4681,7 @@ const { hasData, readData, loadData } = __m['../data-loader.js'];
 const { planMission } = __m['mission.js'];
 const { powerTimeline } = __m['power-timeline.js'];
 const { buildBranches } = __m['branches.js'];
-const { pickLandingTime, landingChecks, skyAt } = __m['landing.js'];
+const { pickLandingTime, landingChecks, skyAt, flownTouchdown } = __m['landing.js'];
 const { loadSiteTerrain } = __m['terrain-local.js'];
 const { cleanVehicle, VEHICLE_DEFAULTS } = __m['vehicle.js'];
 const { three, bindControls, createLabels } = __m['view-common.js'];
@@ -4767,10 +4828,9 @@ function boot() {
     // the site and the requested landing time become the mission the next steps start from. Not the planned
     // touchdown: the planner moves it by up to half an orbit to an overhead pass, and storing that would move the
     // landing again on every visit (a request is a fixed point; a snapped time is not).
-    writeMission({ siteId: site.id === 'custom' ? null : site.id, siteName: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: S.landingMs });
-    stages.refresh();
-    next.href = roverUrl();
-    $('#next-where').textContent = `${site.name} · ${new Date(plan.times.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+    // and where the craft touched down (the rover is planned from there), even before the user plays to touchdown
+    writeMission({ siteId: site.id === 'custom' ? null : site.id, siteName: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: S.landingMs, landed: flownTouchdown(plan) });
+    showLanded();
     renderPanels();
     setBranches();
     resize();
@@ -4815,7 +4875,7 @@ function boot() {
     const body = $('#tab-body');
     if (tab === 'plan') renderPlan(body, S.plan, S.power);
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
-    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl());
+    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
     else if (tab === 'vehicle') renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
   }
 
@@ -4825,8 +4885,24 @@ function boot() {
     S.timeline.setBranches(S.branches, S.active);
   }
 
+  // the touchdown point of what is shown as flown, in the mission and on the page
+  function showLanded() {
+    const m = readMission();
+    const p = m?.landed ?? null;
+    const ll = p ? `${Math.abs(p.latDeg).toFixed(4)}°${p.latDeg < 0 ? 'S' : 'N'} ${p.lonDeg.toFixed(4)}°E` : null;
+    const via = p && p.source !== 'nominal' ? `, after the ${p.source.replace(/-/g, ' ')}` : '';
+    $('#next-where').textContent = p
+      ? `${S.site.name} · ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}`
+      : `${S.site.name} · no touchdown in the selected contingency`;
+    S.landed = p;
+    stages.refresh();
+    next.href = roverUrl();
+  }
+
   function selectBranch(id) {
     S.active = S.active === id ? null : id;
+    writeMission({ landed: flownTouchdown(S.plan, S.branches.find((x) => x.id === S.active) ?? null) });
+    showLanded();
     setBranches();
     const b = S.branches.find((x) => x.id === S.active);
     if (b) {

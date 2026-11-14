@@ -44,7 +44,7 @@ export function buildBranches(plan, { sites = [], skyOk = null } = {}) {
     }
     out.push({
       id, eventId: 'engine-underperformance', title: `Engine thrust ${Math.round((1 - k) * 100)} % low`, phase: 'braking', tMs: t.pdiMs + tDet * 1000,
-      decision: d, moonTrack: track, surfaceSamples: surface,
+      decision: d, moonTrack: track, surfaceSamples: surface, touchdown: surface ? low.touchdown : null,
       numbers: [`Δv left ${fmt(remMs)} m/s, Δv still needed ${Number.isFinite(toGo) ? fmt(toGo) : 'more than available'} m/s, reserve ${fmt(v.reserveDvMs)} m/s`, result, d.action === 'abort-to-orbit' ? '' : `costs ${fmt(extra)} m/s more than nominal (gravity losses of a longer burn)`].filter(Boolean),
     });
   }
@@ -57,7 +57,7 @@ export function buildBranches(plan, { sites = [], skyOk = null } = {}) {
   const div = simulateDescent(v, { massKg: m0, lloAltKm: plan.options.lloAltKm, pdiAltKm: plan.options.pdiAltKm, siteHeightKm: plan.siteHeightKm, divert: { atS, crossrangeM: cross_, downrangeM: down } });
   out.push({
     id: 'hazard-divert', eventId: 'site-hazard', title: 'Boulders at the target (lidar)', phase: 'approach', tMs: t.pdiMs + (tHigh + atS) * 1000,
-    decision: dHaz, surfaceSamples: div.samples, surfaceTarget: div.site.r, moonTrack: null,
+    decision: dHaz, surfaceSamples: div.samples, surfaceTarget: div.site.r, moonTrack: null, touchdown: div.touchdown,
     numbers: [`new target ${fmt(dist)} m away, ${fmt(approachS - atS)} s of approach left`, `divert estimate ${fmt(divertDvMs(dist, approachS - atS))} m/s (budget 60 m/s); simulated ${fmt(div.dvUsedMs - nom.dvUsedMs, 1)} m/s more than nominal`, div.touchdown ? `touchdown ${fmt(Math.abs(div.touchdown.vVertMs), 2)} m/s vertical, ${fmt(div.touchdown.vHorizMs, 2)} m/s horizontal` : 'no touchdown'],
   });
 

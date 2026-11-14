@@ -4,6 +4,9 @@
 import { bodyAzEl } from '../ephemeris.js';
 import { toXY, fromXY } from '../terrain.js';
 import { unitFromLonLat } from '../geometry.js';
+import { inertialToFixedAt } from './mission.js';
+import { R_MOON } from './constants.js';
+import { cross, dot, norm } from './vec.js';
 
 const DEG = 180 / Math.PI;
 const clearance = (r, mask) => r.elDeg - (typeof mask === 'function' ? mask(r.azDeg) : mask ?? 0);
@@ -40,6 +43,34 @@ export function flattestNear(sample, site, { radiusKm = 0.5, stepKm = 0.02, base
   const north = -Math.sin(phi) * Math.cos(lam) * dv[0] - Math.sin(phi) * Math.sin(lam) * dv[1] + Math.cos(phi) * dv[2];
   const az = ((Math.atan2(east, north) * DEG) + 360) % 360;
   return { latDeg, lonDeg, slopeDeg: best.sl, distM: best.d * 1000, azDeg: az, heightM: sample(best.x, best.y), ok: best.sl <= limitDeg };
+}
+
+// Where a simulated descent touched down, for the next steps (the rover starts there): the last descent sample
+// (PD frame, metres) → Moon-centred inertial → Moon-fixed with the landing-time rotation (the frame the descent was
+// planned and drawn in) → latitude, east longitude 0–360°. missM: great-circle distance from the target site at
+// its height. null without a touchdown or with one outside the vehicle's touchdown limits (not a landing to plan
+// a rover from). samples / touchdown default to the nominal descent; source names the branch flown.
+export function touchdownPoint(plan, { samples = plan.descent.samples, touchdown = plan.descent.touchdown, source = 'nominal' } = {}) {
+  if (!touchdown || !touchdown.ok || !samples?.length) return null;
+  const f = inertialToFixedAt(plan.descentFrame.pdToMci(samples[samples.length - 1].r), plan.times.landingMs, plan.epochMs);
+  const latDeg = Math.atan2(f[2], Math.hypot(f[0], f[1])) * DEG;
+  const lonDeg = ((Math.atan2(f[1], f[0]) * DEG) % 360 + 360) % 360;
+  const u = unitFromLonLat(lonDeg, latDeg), s = unitFromLonLat(plan.site.lonDeg, plan.site.latDeg);
+  const missM = Math.atan2(norm(cross(u, s)), dot(u, s)) * (R_MOON + plan.siteHeightKm) * 1000;
+  return {
+    latDeg, lonDeg, tMs: plan.times.pdiMs + touchdown.tS * 1000,
+    siteId: plan.site.id === 'custom' ? null : plan.site.id, missM, source,
+  };
+}
+
+// The touchdown of what the page shows as flown: the selected contingency branch if it lands (its own touchdown,
+// e.g. the hazard divert), none if it does not (abort to orbit, wave-off, hold, retarget to a site not simulated),
+// otherwise the nominal descent (branches that leave the landing unchanged).
+export function flownTouchdown(plan, branch = null) {
+  if (!branch) return touchdownPoint(plan);
+  if (['abort-to-orbit', 'wave-off', 'hold', 'retarget'].includes(branch.decision?.action)) return null;
+  if (branch.surfaceSamples?.length && branch.touchdown) return touchdownPoint(plan, { samples: branch.surfaceSamples, touchdown: branch.touchdown, source: branch.id });
+  return touchdownPoint(plan);
 }
 
 // Sun and Earth over the skyline at one instant. null outside the ephemeris.

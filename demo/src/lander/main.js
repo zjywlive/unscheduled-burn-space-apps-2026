@@ -8,7 +8,7 @@ import { hasData, readData, loadData } from '../data-loader.js';
 import { planMission } from './mission.js';
 import { powerTimeline } from './power-timeline.js';
 import { buildBranches } from './branches.js';
-import { pickLandingTime, landingChecks, skyAt } from './landing.js';
+import { pickLandingTime, landingChecks, skyAt, flownTouchdown } from './landing.js';
 import { loadSiteTerrain } from './terrain-local.js';
 import { cleanVehicle, VEHICLE_DEFAULTS } from './vehicle.js';
 import { three, bindControls, createLabels } from './view-common.js';
@@ -155,10 +155,9 @@ export function boot() {
     // the site and the requested landing time become the mission the next steps start from. Not the planned
     // touchdown: the planner moves it by up to half an orbit to an overhead pass, and storing that would move the
     // landing again on every visit (a request is a fixed point; a snapped time is not).
-    writeMission({ siteId: site.id === 'custom' ? null : site.id, siteName: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: S.landingMs });
-    stages.refresh();
-    next.href = roverUrl();
-    $('#next-where').textContent = `${site.name} · ${new Date(plan.times.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+    // and where the craft touched down (the rover is planned from there), even before the user plays to touchdown
+    writeMission({ siteId: site.id === 'custom' ? null : site.id, siteName: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: S.landingMs, landed: flownTouchdown(plan) });
+    showLanded();
     renderPanels();
     setBranches();
     resize();
@@ -203,7 +202,7 @@ export function boot() {
     const body = $('#tab-body');
     if (tab === 'plan') renderPlan(body, S.plan, S.power);
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
-    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl());
+    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
     else if (tab === 'vehicle') renderVehicle(body, S.plan.vehicle, (v) => { S.vehicle = cleanVehicle(v); replan({ keepTime: true }); });
   }
 
@@ -213,8 +212,24 @@ export function boot() {
     S.timeline.setBranches(S.branches, S.active);
   }
 
+  // the touchdown point of what is shown as flown, in the mission and on the page
+  function showLanded() {
+    const m = readMission();
+    const p = m?.landed ?? null;
+    const ll = p ? `${Math.abs(p.latDeg).toFixed(4)}°${p.latDeg < 0 ? 'S' : 'N'} ${p.lonDeg.toFixed(4)}°E` : null;
+    const via = p && p.source !== 'nominal' ? `, after the ${p.source.replace(/-/g, ' ')}` : '';
+    $('#next-where').textContent = p
+      ? `${S.site.name} · ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}`
+      : `${S.site.name} · no touchdown in the selected contingency`;
+    S.landed = p;
+    stages.refresh();
+    next.href = roverUrl();
+  }
+
   function selectBranch(id) {
     S.active = S.active === id ? null : id;
+    writeMission({ landed: flownTouchdown(S.plan, S.branches.find((x) => x.id === S.active) ?? null) });
+    showLanded();
     setBranches();
     const b = S.branches.find((x) => x.id === S.active);
     if (b) {

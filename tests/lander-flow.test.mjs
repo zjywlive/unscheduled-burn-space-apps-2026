@@ -12,6 +12,11 @@ import { createHiresSet, createPatch } from '../demo/src/hires.js';
 import { toXY } from '../demo/src/terrain.js';
 import { unitFromLonLat } from '../demo/src/geometry.js';
 import { R_MOON } from '../demo/src/lander/constants.js';
+import { createEphemeris } from '../demo/src/ephemeris.js';
+import { planMission, inertialToFixedAt } from '../demo/src/lander/mission.js';
+import { buildBranches } from '../demo/src/lander/branches.js';
+import { touchdownPoint, flownTouchdown } from '../demo/src/lander/landing.js';
+import { writeMission, readMission } from '../demo/src/mission-flow.js';
 
 const demo = new URL('../demo/', import.meta.url).pathname;
 const SITES = [
@@ -157,4 +162,57 @@ test('page: the shared loading screen is in the built page before any script, an
   assert.ok(body.includes('Lunar Lander') && body.includes('Show the map now'));
   assert.equal(page.split('id="lsn-boot"').length, 2, 'exactly one loading screen (the build is idempotent)');
   assert.ok(page.split('<!--LANDER:JS-->')[1].includes("__m['../boot.js']"));
+});
+
+// the touchdown point handed to the rover step, checked against the descent's own touchdown
+test('landed: the stored touchdown point is where the simulated descent touched down', () => {
+  const eph = createEphemeris(JSON.parse(readFileSync(join(demo, 'data', 'ephemeris.json'), 'utf8')));
+  const sites = JSON.parse(readFileSync(join(demo, 'data', 'sites.json'), 'utf8'));
+  const site = sites.find((x) => x.id === 'shackleton');
+  const plan = planMission({ eph, site, landingMs: Date.parse('2027-01-10T02:00:00Z') });
+  const branches = buildBranches(plan, { sites, skyOk: () => true });
+  const angle = (a, b) => Math.atan2(Math.hypot(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]), a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+  const rSite = (R_MOON + plan.siteHeightKm) * 1000;
+
+  // nominal: on the target, at the plan's landing time, matching the descent's own miss distance
+  const nom = touchdownPoint(plan);
+  assert.equal(nom.source, 'nominal');
+  assert.equal(nom.siteId, 'shackleton');
+  assert.ok(nom.lonDeg >= 0 && nom.lonDeg < 360);
+  assert.ok(Math.abs(nom.tMs - plan.times.landingMs) < 1000, 'touchdown time = landing time');
+  assert.ok(Math.abs(nom.missM - plan.descent.touchdown.missM) < 1, `miss ${nom.missM} vs ${plan.descent.touchdown.missM}`);
+  assert.ok(nom.missM < 5);
+  // the same point straight from the last descent sample, independently: PD → MCI → Moon-fixed at landing
+  const last = plan.descent.samples[plan.descent.samples.length - 1];
+  const f = inertialToFixedAt(plan.descentFrame.pdToMci(last.r), plan.times.landingMs, plan.epochMs);
+  assert.ok(angle(f, unitFromLonLat(nom.lonDeg, nom.latDeg)) * rSite < 0.01, 'lat/lon reproduce the touchdown vector');
+  assert.ok(Math.abs(nom.latDeg - site.latDeg) < 0.01);
+
+  // hazard divert: lands about 152 m (140 m cross-range, 60 m down-range) from the target
+  const hz = branches.find((b) => b.id === 'hazard-divert');
+  const div = flownTouchdown(plan, hz);
+  assert.equal(div.source, 'hazard-divert');
+  assert.ok(Math.abs(div.missM - Math.hypot(140, 60)) < 5, `divert miss ${div.missM}`);
+  const divTarget = inertialToFixedAt(plan.descentFrame.pdToMci(hz.surfaceTarget), plan.times.landingMs, plan.epochMs);
+  assert.ok(angle(divTarget, unitFromLonLat(div.lonDeg, div.latDeg)) * rSite < hz.touchdown.missM + 1, 'on the divert target');
+  assert.ok(Math.abs(div.tMs - nom.tMs) < 60e3, 'touchdown within a minute of nominal (the approach time is fixed)');
+
+  // no touchdown in the flown branch → null; branches that leave the landing alone → nominal
+  assert.equal(flownTouchdown(plan, branches.find((b) => b.id === 'engine-abort')), null);
+  assert.equal(flownTouchdown(plan, branches.find((b) => b.id === 'wave-off')), null);
+  assert.equal(flownTouchdown(plan, branches.find((b) => b.id === 'engine-low')).source, 'engine-low');
+  assert.equal(flownTouchdown(plan, branches.find((b) => b.id === 'leo-conjunction')).source, 'nominal');
+  assert.equal(flownTouchdown(plan, null).source, 'nominal');
+  // a hard landing outside the touchdown limits is not a place to plan a rover from
+  assert.equal(touchdownPoint(plan, { touchdown: { ...plan.descent.touchdown, ok: false } }), null);
+  assert.equal(touchdownPoint({ ...plan, site: { ...plan.site, id: 'custom' } }).siteId, null);
+
+  // stored through mission-flow: the record the navigator and globe read
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  writeMission({ siteId: 'shackleton', latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: Date.parse('2027-01-10T02:00:00Z'), landed: div }, storage);
+  assert.deepEqual(readMission(storage).landed, JSON.parse(JSON.stringify(div)));
+  writeMission({ landed: null }, storage);
+  assert.equal(readMission(storage).landed, null);
+  assert.equal(readMission(storage).siteId, 'shackleton', 'other fields kept');
 });

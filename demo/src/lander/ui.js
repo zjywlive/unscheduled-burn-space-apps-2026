@@ -124,7 +124,7 @@ export function renderBranches(el, branches, activeId, onSelect) {
   el.querySelectorAll('.card').forEach((c) => c.addEventListener('click', () => onSelect(c.dataset.b)));
 }
 
-export function renderLanding(el, checks, plan, terrainNote, roverUrl = null) {
+export function renderLanding(el, checks, plan, terrainNote, roverUrl = null, landed = undefined) {
   const rows = checks.checks.map((c) => `<tr><td>${esc(c.label)}<small>${esc(c.source)}</small></td><td class="r">${esc(c.value)}</td><td class="r muted">${esc(c.limit)}</td><td class="r ${c.ok ? 'ok' : 'neg'}">${c.ok ? 'OK' : 'NO'}</td></tr>`).join('');
   const s = checks.sky;
   el.innerHTML = `
@@ -132,6 +132,7 @@ export function renderLanding(el, checks, plan, terrainNote, roverUrl = null) {
     <table class="tbl"><tbody>${rows}</tbody></table>
     ${s ? `<p class="note">At touchdown the Sun is at azimuth ${n0(s.sun.azDeg)}°, elevation ${n1(s.sun.elDeg, 2)}°; the Earth at ${n0(s.earth.azDeg)}°, ${n1(s.earth.elDeg, 2)}°. Clearance is measured above the LOLA skyline. Limits are assumptions for this vehicle (Apollo LM design: about 3 m/s vertical, 1.2 m/s horizontal, 12°).</p>` : ''}
     <p class="note">${esc(terrainNote)}</p>
+    ${landed === undefined ? '' : landed ? `<h3>Touchdown point <small>passed to the rover step</small></h3><dl class="kv"><dt>Latitude, longitude</dt><dd>${Math.abs(landed.latDeg).toFixed(5)}°${landed.latDeg < 0 ? 'S' : 'N'}, ${landed.lonDeg.toFixed(5)}°E</dd><dt>From the target</dt><dd>${n1(landed.missM, 1)} m</dd><dt>Time</dt><dd>${esc(fmtUtc(landed.tMs))}</dd><dt>Flown</dt><dd>${landed.source === 'nominal' ? 'nominal descent' : esc(landed.source.replace(/-/g, ' '))}</dd></dl>` : '<h3>Touchdown point</h3><p class="note">No touchdown in the selected contingency (it ends in orbit or waits); the rover step gets the target site only.</p>'}
     ${roverUrl ? `<p class="next-step"><a class="btn primary" href="${esc(roverUrl)}">Plan the rover route →</a><small>Step 2: the navigator's route card opens at this site and touchdown time.</small></p>` : ''}`;
 }
 
