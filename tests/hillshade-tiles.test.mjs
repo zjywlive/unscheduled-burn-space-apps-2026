@@ -13,11 +13,16 @@ import { hillshade } from '../demo/src/map/layers.js';
 import { LEVEL_40, LEVEL_20, terrainM, makeTile, tilesMeeting, referenceDem, plainDem } from './helpers/tiles.mjs';
 
 const backup = new URL('../backups/phase3-final-2026-11-12.tar.gz', import.meta.url);
-const tmp = mkdtempSync(join(tmpdir(), 'lsn-phase3-'));
-execFileSync('tar', ['-xzf', backup.pathname, '-C', tmp, 'demo/src/map/layers.js', 'demo/src/map/view.js', 'demo/src/terrain.js']);
-const p3 = await import(pathToFileURL(join(tmp, 'demo/src/map/layers.js')).href);
-const p3t = await import(pathToFileURL(join(tmp, 'demo/src/terrain.js')).href);
-test.after(() => rmSync(tmp, { recursive: true, force: true }));
+// The tarball is not part of every checkout; without it the byte-identity test is skipped.
+const noBackup = !existsSync(backup) && 'backups/phase3-final-2026-11-12.tar.gz not in this checkout';
+let p3 = null, p3t = null;
+if (!noBackup) {
+  const tmp = mkdtempSync(join(tmpdir(), 'lsn-phase3-'));
+  execFileSync('tar', ['-xzf', backup.pathname, '-C', tmp, 'demo/src/map/layers.js', 'demo/src/map/view.js', 'demo/src/terrain.js']);
+  p3 = await import(pathToFileURL(join(tmp, 'demo/src/map/layers.js')).href);
+  p3t = await import(pathToFileURL(join(tmp, 'demo/src/terrain.js')).href);
+  test.after(() => rmSync(tmp, { recursive: true, force: true }));
+}
 
 const real = (name) => { const b = readFileSync(new URL(`../demo/data/${name}.bin`, import.meta.url)); return new Int16Array(b.buffer, b.byteOffset, b.length / 2); };
 const d480data = real('dem_480m'), d120data = real('dem_120m');
@@ -25,7 +30,7 @@ const same = (a, b) => a.length === b.length && Buffer.from(a.buffer, a.byteOffs
 function maxDiff(a, b) { let w = 0; for (let i = 0; i < a.length; i++) w = Math.max(w, Math.abs(a[i] - b[i])); return w; }
 function zeros(a) { let n = 0; for (const v of a) if (v === 0) n++; return n; }
 
-test('square form: byte-identical to the phase 3 hillshade (synthetic, real 480 m and real 120 m, centred and offset)', () => {
+test('square form: byte-identical to the phase 3 hillshade (synthetic, real 480 m and real 120 m, centred and offset)', { skip: noBackup }, () => {
   // both DEMs from the same arrays, each through its own version's createDem
   const cases = [
     [{ data: d480data, size: 1906, kmPerPixel: 0.48, dnToMeters: 0.5 }, [{ size: 1000, halfKm: 320 }, { size: 777, halfKm: 53.3, cx: -11.3, cy: -12.3 }, { size: 333, halfKm: 320 / 7.5, cx: 120.25, cy: -64 }]],

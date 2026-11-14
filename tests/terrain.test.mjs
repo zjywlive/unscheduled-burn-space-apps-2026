@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { toXY, fromXY, createDem, horizonProfile, horizonAt, skylineFor } from '../demo/src/terrain.js';
 
 const R = 1737.4;
@@ -53,8 +53,9 @@ test('outside the terrain a skyline is flat zero', () => {
   assert.notEqual(skylineFor(dem, { latDeg: -89, lonDeg: 0 }).profile, null);
 });
 
-test('real LOLA grid: landmarks sit where the map says they do', () => {
-  const buf = readFileSync(new URL('../data-raw/lola/ldem_75s_240m.img', import.meta.url));
+const LOLA_240 = new URL('../data-raw/lola/ldem_75s_240m.img', import.meta.url);
+test('real LOLA grid: landmarks sit where the map says they do', { skip: !existsSync(LOLA_240) && 'data-raw/lola/ldem_75s_240m.img not in this checkout' }, () => {
+  const buf = readFileSync(LOLA_240);
   const dem = createDem({ data: new Int16Array(buf.buffer, buf.byteOffset, buf.length / 2), size: 3812, kmPerPixel: 0.24 });
   assert.ok(dem.heightAt(-89.67, 129.78) < -1500);   // Shackleton floor
   assert.ok(dem.heightAt(-89.45, 222.69) > 0);       // ridge by Shackleton

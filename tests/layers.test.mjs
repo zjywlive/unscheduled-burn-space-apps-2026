@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,13 +14,18 @@ import { renderOverlay } from '../demo/src/map/overlay.js';
 import { toPx } from '../demo/src/map/view.js';
 
 const backup = new URL('../backups/phase2-final-2026-11-12.tar.gz', import.meta.url);
-const tmp = mkdtempSync(join(tmpdir(), 'lsn-phase2-'));
-execFileSync('tar', ['-xzf', backup.pathname, '-C', tmp, 'demo/src/map/layers.js', 'demo/src/map/overlay.js', 'demo/src/terrain.js', 'demo/src/ui/dom.js']);
-const old = (p) => import(pathToFileURL(join(tmp, 'demo/src', p)).href);
-const oldLayers = await old('map/layers.js');
-const oldOverlay = await old('map/overlay.js');
-const oldTerrain = await old('terrain.js');
-test.after(() => rmSync(tmp, { recursive: true, force: true }));
+// The tarball is not part of every checkout; without it the phase 2 comparison tests are skipped.
+const noBackup = !existsSync(backup) && 'backups/phase2-final-2026-11-12.tar.gz not in this checkout';
+let oldLayers = null, oldOverlay = null, oldTerrain = null;
+if (!noBackup) {
+  const tmp = mkdtempSync(join(tmpdir(), 'lsn-phase2-'));
+  execFileSync('tar', ['-xzf', backup.pathname, '-C', tmp, 'demo/src/map/layers.js', 'demo/src/map/overlay.js', 'demo/src/terrain.js', 'demo/src/ui/dom.js']);
+  const old = (p) => import(pathToFileURL(join(tmp, 'demo/src', p)).href);
+  oldLayers = await old('map/layers.js');
+  oldOverlay = await old('map/overlay.js');
+  oldTerrain = await old('terrain.js');
+  test.after(() => rmSync(tmp, { recursive: true, force: true }));
+}
 
 // Synthetic DEM: rolling hills, a crater and a ridge, 400² pixels of 1.6 km (±320 km).
 function synthData(size = 400) {
@@ -39,7 +44,7 @@ const demOf = (mod, extra = {}) => mod.createDem({ data: synth, size: 400, kmPer
 const real = readFileSync(new URL('../demo/data/dem_480m.bin', import.meta.url));
 const realData = new Int16Array(real.buffer, real.byteOffset, real.length / 2);
 
-test('hillshade: phase 2 calls give byte-identical output (synthetic DEM and the real 480 m grid)', () => {
+test('hillshade: phase 2 calls give byte-identical output (synthetic DEM and the real 480 m grid)', { skip: noBackup }, () => {
   for (const size of [500, 333, 1000]) {
     const ref = oldLayers.hillshade(demOf(oldTerrain), { size, halfKm: 320 });
     const now = hillshade(demOf({ createDem }), { size, halfKm: 320 });
@@ -80,7 +85,7 @@ test('hillshade 1000×1000 timing (reported, not asserted)', (t) => {
   }
 });
 
-test('heatColour: unchanged for the phase 2 modes; score uses the Both colour and five steps', () => {
+test('heatColour: unchanged for the phase 2 modes; score uses the Both colour and five steps', { skip: noBackup }, () => {
   const colours = { sun: [1, 2, 3], earth: [4, 5, 6], both: [7, 8, 9], negative: [10, 11, 12] };
   const cases = [['both', { value: 0.33 }], ['sun', { value: 0.9 }], ['earth', { value: 0 }], ['now', { state: 3 }], ['now', { state: 0 }],
     ['change', { delta: -0.3 }], ['change', { delta: 0.01 }], ['sun', { value: NaN }]];
@@ -111,7 +116,7 @@ const alt = Float32Array.from(values, (v, k) => v + ((k % 5) - 2) * 0.1);
 const inside = Uint8Array.from({ length: G * G }, (_, k) => (k % 13 ? 1 : 0));
 const shade = Uint8ClampedArray.from({ length: 64 * 64 }, (_, k) => 8 + (k % 37));
 
-test('paintHeat: phase 2 calls draw exactly what they did', () => withCanvas(() => {
+test('paintHeat: phase 2 calls draw exactly what they did', { skip: noBackup }, () => withCanvas(() => {
   const calls = [
     { mode: 'both', values, gridSize: G, canvasSize: 64, inside, colours },
     { mode: 'sun', values, gridSize: G, canvasSize: 64, rows: 10, inside, colours, shade },
@@ -125,7 +130,7 @@ test('paintHeat: phase 2 calls draw exactly what they did', () => withCanvas(() 
   }
 }));
 
-test('paintHeat: the full view, or a rect covering the grid, gives the same picture as phase 2', () => withCanvas(() => {
+test('paintHeat: the full view, or a rect covering the grid, gives the same picture as phase 2', { skip: noBackup }, () => withCanvas(() => {
   const p = { mode: 'both', values, gridSize: G, canvasSize: 64, rows: 12, inside, colours };
   const a = fakeCtx(); oldLayers.paintHeat(a, p);
   const want = a.calls.find((c) => c[0] === 'draw');
@@ -220,7 +225,7 @@ const labels = (svg) => {
   walk(svg); return out;
 };
 
-test('renderOverlay: without a view, and with the full view, the output is the phase 2 output', () => {
+test('renderOverlay: without a view, and with the full view, the output is the phase 2 output', { skip: noBackup }, () => {
   for (const extra of [{}, { sizePx: 333 }, { selected: null, alternative: null, cursorCell: null, top: [] }]) {
     const ref = serial(render(oldOverlay, params(extra)));
     assert.equal(serial(render({ renderOverlay }, params(extra))), ref);
