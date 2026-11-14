@@ -1550,6 +1550,20 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
   return {
     flyTo, pick, project, projectWorld, invalidate,
     jumpTo(c) { fly = null; Object.assign(cam, c); dirty = true; },
+    // a follow camera's target: centre and heading (and tilt, when given) without cancelling a glide in progress,
+    // so a zoom or tilt button still glides while the camera rides along
+    followTo({ lat, lon, heading, tilt }) {
+      if (fly) {
+        for (const k of ['from', 'to']) { fly[k].lat = lat; fly[k].lon = lon; fly[k].heading = heading; }
+      } else {
+        cam.lat = lat; cam.lon = lon; cam.heading = heading;
+        if (Number.isFinite(tilt)) cam.tilt = Math.max(0, Math.min(maxTilt(), tilt));
+      }
+      dirty = true;
+    },
+    get flying() { return !!fly; },
+    // where the camera was at the last drawn frame (km, world frame)
+    get cameraPosition() { return camera.position.clone(); },
     // phase 6: extra objects in the scene, and points on the terrain surface (km, world frame)
     THREE,
     addObject(o) { scene.add(o); dirty = true; },
@@ -1892,6 +1906,17 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
   const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.06, 0.08, 20), bodyMat);
   dish.rotation.x = Math.PI / 2; dish.position.set(-0.7, -0.35, 1.3); rover.add(dish);
   box(-0.7, -0.35, 1.12, 0.04, 0.04, 0.3, darkMat);
+  // the x-ray outline: the same parts in flat gold drawn over everything, shown while terrain hides the rover
+  const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false });
+  const ghost = new THREE.Group();
+  for (const m of [...rover.children]) {
+    if (!m.isMesh) continue;
+    const g = new THREE.Mesh(m.geometry, ghostMat);
+    g.position.copy(m.position); g.quaternion.copy(m.quaternion); g.scale.copy(m.scale); g.renderOrder = 20;
+    ghost.add(g);
+  }
+  ghost.visible = false;
+  rover.add(ghost);
   // frame axes (x red, y green, z blue), shown with the labels
   const axes = new THREE.Group();
   const axis = (x, y, z, dir, color, len) => {
@@ -1973,6 +1998,10 @@ function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
       return Object.entries(FRAMES).map(([name, [x, y, z]]) => ({ name, p: new THREE.Vector3(x, y, z).applyMatrix4(rover.matrixWorld) }));
     },
     get scaleUp() { return roverScale / 0.001; },
+    // the top of the mast above the ground, km (as drawn), for line-of-sight checks
+    get topKm() { return roverScale * 2.1; },
+    setHidden(on) { if (ghost.visible !== !!on) { ghost.visible = !!on; view.redraw(); } },
+    get hidden() { return ghost.visible; },
     hasTraps: !!payload.traps?.cells?.length,
     hasSearch: !!payload.autonav,
     dispose() { view.removeObject(group); },
@@ -3346,7 +3375,7 @@ __m['globe-main.js'] = (() => {
 const { loadData } = __m['data-loader.js'];
 const { createDem, createPyramid, createTiledDem } = __m['terrain.js'];
 const { createGlobeTerrain } = __m['globe-terrain.js'];
-const { createGlobeView, cameraFromHash, cameraToHash } = __m['globe-view.js'];
+const { createGlobeView, cameraFromHash, cameraToHash, toLatLon } = __m['globe-view.js'];
 const { ROUTE3D_KEY, FLAGS, parsePayload, timeSpan, roverAt, frameRoute } = __m['route3d.js'];
 const { createRouteLayer } = __m['globe-route.js'];
 const { createAttitudePanel, createMinimap } = __m['globe-route-hud.js'];
@@ -3702,11 +3731,13 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
     dirtyHud = false;
   }
 
-  // ---- follow: the camera rides behind the rover; position exact, heading eased, zoom and tilt left to the user ----
-  let followHead = null, followFrom = 0;
+  // ---- follow: the camera rides behind the rover; position exact, heading eased, zoom and tilt left to the user,
+  // except that it tilts down towards overhead while terrain hides the rover, and back once the way is clear ----
+  let followHead = null, followFrom = 0, userTilt = null, setTilt = null, clearFor = 0, lastBlocked = -1e9;
   function startFollow() {
     const c = view.camera, h = headingAhead(cur.km, 0.2) ?? head;
     followHead = h; followFrom = performance.now() + 950;
+    userTilt = Math.max(c.tilt, 55); setTilt = null; clearFor = 0;
     view.flyTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: h, dist: Math.min(c.dist, 2.5), tilt: Math.max(c.tilt, 55), ms: 900 });
   }
   function stopFollow() { if (follow.checked) { follow.checked = false; dirtyHud = true; } }
@@ -3811,6 +3842,35 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
   recCsv.addEventListener('click', () => { const r = record(); downloadText(document, fileName(r, 'motion.csv'), recordingCSV(r.recording), 'text/csv'); });
   showRec();
 
+  // ---- keeping the rover in sight: the least clearance (km, as drawn) of the line from the camera to the top of
+  // the rover's mast over the terrain; below zero, terrain hides the rover ----
+  const T3 = view.THREE, sightP = new T3.Vector3();
+  function sightClearance() {
+    const cp = view.cameraPosition, top = new T3.Vector3(...view.surface(cur.latDeg, cur.lonDeg, layer.topKm));
+    let least = Infinity;
+    const N = 40;
+    for (let k = 2; k < N; k++) {
+      sightP.copy(top).lerp(cp, k / N);
+      const { latDeg, lonDeg } = toLatLon(sightP.x, sightP.y, sightP.z);
+      const ground = Math.hypot(...view.surface(latDeg, lonDeg, 0));
+      least = Math.min(least, sightP.length() - ground);
+    }
+    return least;
+  }
+  // the tilt that keeps it in sight: down at 50°/s while hidden; back up towards the user's tilt at 8°/s once the
+  // line has been clear by a margin for a while (and not just after it was hidden), so it does not see-saw
+  function sightTilt(c, least, now, dt) {
+    if (setTilt !== null && Math.abs(c.tilt - setTilt) > 0.3) userTilt = c.tilt;   // the user tilted
+    if (userTilt === null) userTilt = c.tilt;
+    let want = setTilt ?? c.tilt;
+    const margin = 0.02 * c.dist + 0.5 * layer.topKm;
+    if (least < 0) { want -= 50 * dt; clearFor = 0; lastBlocked = now; }
+    else if (least > margin) { clearFor += dt; if (clearFor > 0.8 && now - lastBlocked > 2500 && want < userTilt) want = Math.min(userTilt, want + 8 * dt); }
+    want = Math.max(3, Math.min(view.maxTilt(), want));
+    setTilt = want;
+    return want;
+  }
+
   // ---- every frame ----
   let stamp = '', lastFrame = performance.now();
   view.onFrame(() => {
@@ -3830,18 +3890,21 @@ function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
     const want = headingAhead(cur.km, 0.06);
     if (want !== null) { const d = ((want - head + 540) % 360) - 180; head = (head + d * (1 - Math.exp(-dt / 0.35)) + 360) % 360; }
     if (dirtyHud || lastHudHead === null || Math.abs(((head - lastHudHead + 540) % 360) - 180) > 0.3) updateHud();
+    const least = sightClearance();
+    layer.setHidden(least < 0);   // the x-ray outline while terrain hides the rover
     if (follow.checked && now >= followFrom) {
       const target = headingAhead(cur.km, Math.max(0.08, Math.min(0.6, view.kmPerPx() * 120)));
       if (followHead === null) followHead = target ?? head;
       if (target !== null) { const d = ((target - followHead + 540) % 360) - 180; followHead = (followHead + d * (1 - Math.exp(-dt / 0.9)) + 360) % 360; }
-      const c = view.camera;
-      view.jumpTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: followHead, dist: c.dist, tilt: c.tilt });
+      // a zoom or tilt glide in progress keeps its own tilt; the camera still rides along
+      const tilt = view.flying ? undefined : sightTilt(view.camera, least, now, dt);
+      view.followTo({ lat: cur.latDeg, lon: cur.lonDeg, heading: followHead, tilt });
     }
     placeLabels();
     sample();
   });
   function stopPlay() { playing = false; play.textContent = '▶'; play.setAttribute('aria-label', 'Play'); if (rec?.on) recBtn.click(); }
-  window.__globe.route = { payload, layer, stopFollow, seekKm, get rover() { return cur; }, get recording() { return rec; } };
+  window.__globe.route = { payload, layer, stopFollow, seekKm, sightClearance, get rover() { return cur; }, get recording() { return rec; }, get tilts() { return { userTilt, setTilt }; } };
   updateHud();
 }
 

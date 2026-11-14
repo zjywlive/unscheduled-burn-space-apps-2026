@@ -143,6 +143,17 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
   const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.06, 0.08, 20), bodyMat);
   dish.rotation.x = Math.PI / 2; dish.position.set(-0.7, -0.35, 1.3); rover.add(dish);
   box(-0.7, -0.35, 1.12, 0.04, 0.04, 0.3, darkMat);
+  // the x-ray outline: the same parts in flat gold drawn over everything, shown while terrain hides the rover
+  const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false });
+  const ghost = new THREE.Group();
+  for (const m of [...rover.children]) {
+    if (!m.isMesh) continue;
+    const g = new THREE.Mesh(m.geometry, ghostMat);
+    g.position.copy(m.position); g.quaternion.copy(m.quaternion); g.scale.copy(m.scale); g.renderOrder = 20;
+    ghost.add(g);
+  }
+  ghost.visible = false;
+  rover.add(ghost);
   // frame axes (x red, y green, z blue), shown with the labels
   const axes = new THREE.Group();
   const axis = (x, y, z, dir, color, len) => {
@@ -224,6 +235,10 @@ export function createRouteLayer(view, payload, { roverPx = 90 } = {}) {
       return Object.entries(FRAMES).map(([name, [x, y, z]]) => ({ name, p: new THREE.Vector3(x, y, z).applyMatrix4(rover.matrixWorld) }));
     },
     get scaleUp() { return roverScale / 0.001; },
+    // the top of the mast above the ground, km (as drawn), for line-of-sight checks
+    get topKm() { return roverScale * 2.1; },
+    setHidden(on) { if (ghost.visible !== !!on) { ghost.visible = !!on; view.redraw(); } },
+    get hidden() { return ghost.visible; },
     hasTraps: !!payload.traps?.cells?.length,
     hasSearch: !!payload.autonav,
     dispose() { view.removeObject(group); },

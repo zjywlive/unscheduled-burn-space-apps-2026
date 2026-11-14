@@ -553,6 +553,20 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   return {
     flyTo, pick, project, projectWorld, invalidate,
     jumpTo(c) { fly = null; Object.assign(cam, c); dirty = true; },
+    // a follow camera's target: centre and heading (and tilt, when given) without cancelling a glide in progress,
+    // so a zoom or tilt button still glides while the camera rides along
+    followTo({ lat, lon, heading, tilt }) {
+      if (fly) {
+        for (const k of ['from', 'to']) { fly[k].lat = lat; fly[k].lon = lon; fly[k].heading = heading; }
+      } else {
+        cam.lat = lat; cam.lon = lon; cam.heading = heading;
+        if (Number.isFinite(tilt)) cam.tilt = Math.max(0, Math.min(maxTilt(), tilt));
+      }
+      dirty = true;
+    },
+    get flying() { return !!fly; },
+    // where the camera was at the last drawn frame (km, world frame)
+    get cameraPosition() { return camera.position.clone(); },
     // phase 6: extra objects in the scene, and points on the terrain surface (km, world frame)
     THREE,
     addObject(o) { scene.add(o); dirty = true; },
