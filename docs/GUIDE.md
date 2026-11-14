@@ -47,6 +47,8 @@ becomes the rover's start.
   and sites are chosen, trajectory design, landing accuracy, CLPS robotic landers, surface operations; for each, which
   part of this tool does it and what it simplifies. With sources.
 * **[Glossary](guide/glossary.md)** — PSR, skyline, libration, NRHO, Δv, ellipse, B-RRT\* and more, in plain words.
+* **[Challenge coverage](guide/challenge-coverage.md)** — each official objective and consideration, what covers it, and the
+  remaining gaps.
 * **[Troubleshooting and FAQ](guide/faq.md)** — no data north of 80°S, dates outside 2026–2028, slow first load,
   cleared storage.
 * Reference: [VARIABLES.md](VARIABLES.md) (every number the tool uses and its source), [LANDER.md](LANDER.md)

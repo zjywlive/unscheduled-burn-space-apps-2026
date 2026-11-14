@@ -208,7 +208,7 @@ opens the route card with the site as the start, **See it in 3D →** opens the 
 | | |
 |---|---|
 | ![Evidence and limits](../img/guide/nav-evidence.png) | **Evidence** — who the tool is for, what goes in and out, which step depends on NASA data, and the check behind the main claim: the angles were requested from Horizons a second time with the observer on the surface at four sites; across 968 comparisons the largest difference was 0.006°. |
-| ![The challenge brief](../img/guide/nav-brief.png) | **Brief** — the Space Apps challenge, a table of the official objectives with what the demo does for each (Done / Partial) and what a longer build would add. |
+| ![The challenge brief](../img/guide/nav-brief.png) | **Brief** — the Space Apps challenge, a table of the seven official objectives with what the tool does for each, what is still left, and open questions for the team. The full check is in [challenge-coverage.md](challenge-coverage.md). |
 | ![Tour menu](../img/guide/nav-tour-menu.png) | **Tour** — three two-minute stories (*Why the Sun never climbs here*, *Why Earth can set*, *What a two-week slip does*) and a *Tour of the controls*. |
 | ![Ask panel](../img/guide/nav-ask-answer.png) | **Ask** — questions in plain words. By default it is a **scripted offline demo**: the answers come from the page's own commands (here "Show the best 3 cells in this mode"). With your own key it can use an Anthropic or OpenAI-compatible model (Settings). |
 | ![Settings](../img/guide/nav-settings.png) | **Settings** — colour preset (default, colour-blind safe, high contrast), smooth heat map, panel transparency, scale bar, sky dial, reduce motion; the AI provider; data sources; export, import and reset. Saved in this browser only. |
