@@ -20,16 +20,17 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 |---|---|---|---|---|---|
 | Elevation (DEM) | m | data: LOLA global DEMs (7.6 km / 1.9 km / 474 m) + polar DEMs (south 20–480 m, north 480 m) | ✅ | `globe-terrain.js` `heightAt`, `terrain.js` | One height for any lat/lon from the finest level loaded; see PHASES.md phase 1 |
 | Slope magnitude | deg | derived from DEM | ✅ | `route-plan.js`, `data/slope_*` | per node, plus a 3 × 3 mean for the "flat" cost |
-| Rover max climb slope | deg | assumed (default 15°) | 🟡 | `route-plan.js` `DEFAULT_MAX_SLOPE` | one cap for both directions today |
-| **Directional (non-reversible) slope** | deg | derived: slope along the direction of travel | ⬜ | | A slope the rover can drive down but not back up. The route needs a separate **descent limit** and **climb limit**, and the search must check that a return path exists (one-way edges in A*) |
-| Rover max descent slope | deg | assumed | ⬜ | | needed for the row above |
-| **Dips and valleys (local minima / traps)** | m, km² | derived from DEM | ⬜ | | Flag closed depressions the rover could enter but not leave within the climb limit. Valleys also block line of sight to Earth and relays (see §4) |
+| Rover max climb slope | deg | assumed (default 15°) | ✅ | `route-plan.js` `DEFAULT_MAX_SLOPE`, `edgeTest` | the card's Climb limit; checked against the grade along each move |
+| **Directional (non-reversible) slope** | deg | derived: gradient projected on each move | ✅ | `route-plan.js` `edgeTest`, `legStats` | Directed graph; per route `oneWayKm` / `oneWay` (descending steeper than the climb limit) and per plan `returnable`. Switchbacks limited to 16 directions (conservative) |
+| Rover max descent slope | deg | assumed (default 20°) | ✅ | `route-plan.js` `MOBILITY_DEFAULTS` | card: Descent |
+| Rover max cross-slope | deg | assumed (default 12°) | ✅ | `route-plan.js` `MOBILITY_DEFAULTS` | card: Across; slope across each move (tipping, sliding) |
+| **Dips and valleys (local minima / traps)** | km² | derived: directed reachability in the search corridor | ✅ | `route-plan.js` `reach`, `trapPatches` | Ground reachable from the start with no way on to the end or back to the start; patches under 4 nodes left out. Line-of-sight effects of valleys are §4 |
 | Roughness / rock hazard | — | data (LROC / Diviner rock abundance) | ⬜ | | not loaded yet |
 | Path length | km | derived | ✅ | `route-plan.js` | "short" candidate |
 | Waypoints | lat/lon | input (2–8 points) | ✅ | `route-plan.js` `MIN_POINTS` / `MAX_POINTS` | |
 | Max leg length | km | assumed (160 km) | ✅ | `route-plan.js` `MAX_LEG_KM` | |
 | Route cost weights | — | assumed | ✅ | `route-plan.js` `COSTS`, `SUNNY_WEIGHTS` | short / flat / sunny |
-| Rover speed | km/h | input | ⬜ | | needed to turn km into hours (energy, comms windows, night arrival) |
+| Rover speed | km/h | assumed (default 0.8) | ✅ | `route-plan.js` `speedFactor` | card: Speed; drive time per route, half speed at the climb limit, 70 % at the descent limit (assumed) |
 | 3D route view (2D topo → 3D) | — | derived from DEM | 🟡 | `globe-view.js`, `map/` | 3D terrain globe built (phase 1); route ribbon on it is phase 6 |
 
 ## 2. Sunlight and thermal

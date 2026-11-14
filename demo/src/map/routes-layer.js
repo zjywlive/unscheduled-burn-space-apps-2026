@@ -14,6 +14,7 @@
 //   waypoints: [[xKm, yKm], …] | null,   numbered markers; Start and End as rings
 //   labels: boolean,                     route names next to the lines (default true)
 //   width, height: number,               frame size in px, to keep labels inside (optional)
+//   traps: { cells: [[x, y], …], cellKm } | null   phase 2: trap ground, drawn as red cells under the routes
 //   avoid: [{ x, y, w, h }] | 'dom',     boxes in the group's px frame that labels must not cover; 'dom' (the
 //                                        default) reads the site names, dots and feature names on the page
 // }
@@ -104,10 +105,23 @@ export function placeLabel(points, toPx, name, frac, taken, width = Infinity, he
   return null;
 }
 
-export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom' } = {}) {
+export function drawRoutes(gEl, { routes = null, selected = null, hovered = null, toPx, waypoints = null, labels = true, width = Infinity, height = Infinity, avoid = 'dom', traps = null } = {}) {
   clear(gEl);
   gEl.setAttribute('class', 'routes-layer');
   gEl.setAttribute('aria-hidden', 'true');
+  // phase 2: trap cells (one path of squares), under everything else
+  if (traps?.cells?.length) {
+    const h = traps.cellKm / 2;
+    let d = '';
+    for (const [x, y] of traps.cells) {
+      const [ax, ay] = toPx(x - h, y + h), [bx, by] = toPx(x + h, y - h);
+      if (![ax, ay, bx, by].every(Number.isFinite)) continue;
+      const w = bx - ax, hh = by - ay;
+      if (Math.abs(w) < 0.3 && Math.abs(hh) < 0.3) { d += `M${f1(ax)} ${f1(ay)}h0.6v0.6h-0.6z`; continue; }
+      d += `M${f1(ax)} ${f1(ay)}h${f1(w)}v${f1(hh)}h${f1(-w)}z`;
+    }
+    if (d) gEl.append(s('path', { class: 'rp-traps', d }));
+  }
   const list = (routes ?? []).filter((r) => r && r.points && r.points.length >= 2 && (!r.sameAs || r.id === selected));
   // unselected first, so the selected line sits on top
   const order = [...list].sort((a, b) => (a.id === selected) - (b.id === selected) || ROUTE_IDS.indexOf(a.id) - ROUTE_IDS.indexOf(b.id));
@@ -117,6 +131,11 @@ export function drawRoutes(gEl, { routes = null, selected = null, hovered = null
     const sel = r.id === selected, hov = r.id === hovered;
     const g = s('g', { class: `rp-route rp-route-${r.id}${sel ? ' is-selected' : ''}${hov ? ' is-hovered' : ''}` });
     g.append(s('path', { class: 'rp-casing', d }), s('path', { class: `rp-line rp-line-${r.id}`, d }));
+    // phase 2: the selected route's one-way stretches over its line
+    if (sel && r.oneWay?.length) {
+      const od = r.oneWay.map((seg) => routePathD(seg, toPx)).join('');
+      if (od) g.append(s('path', { class: 'rp-oneway', d: od }));
+    }
     gEl.append(g);
   }
   if (labels && list.length) {

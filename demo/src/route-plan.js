@@ -8,7 +8,11 @@
 //                heightAtXY, grid? }). Graph nodes are its pixel centres, so the slope baseline is its pixel size.
 //   sunAt        (xKm, yKm) → share of the stay sunlit 0–1, or NaN where unknown; optional (see sunFromJobs)
 //   isPsr        (xKm, yKm) → true inside the official PSR (psr.js); optional
-//   maxSlopeDeg  slope limit in degrees (an assumption, default 15)
+//   maxSlopeDeg  slope limit in degrees (an assumption, default 15); with mobility it is the climb limit
+//   mobility     optional (phase 2, docs/PHASES.md): { descentDeg, crossDeg, speedKmh } (the climb limit is
+//                maxSlopeDeg). Moves are then checked by direction: the grade along the move against the climb
+//                and descent limits, the slope across it against the cross-slope limit. Adds to the plan
+//                `returnable`, `traps` and per route the directional figures (see MOBILITY_DEFAULTS, below).
 //   onProgress(fraction 0–1), signal (AbortSignal: rejects with an AbortError), sliceMs (default 12),
 //   yieldFn() → Promise (default: setImmediate in Node, a MessageChannel hop in the browser)
 //
@@ -23,6 +27,12 @@
 //              unavailable (a sentence | null), takenFrom (fix R1: the search whose route this label shows,
 //              when it is not its own; absent otherwise) }],
 //   limitDeg, baselineKm, waypoints: [[x, y], …], nodes (graph nodes searched), ms
+//   with mobility, also: mobility (the limits used), returnable (true when the rover could drive from the end
+//   back to the start within the limits, by any way), traps: { km2, cellKm, cells: [[x, y], …] } (ground in the
+//   search corridors the rover can drive into from the start but from which it can reach neither the end nor
+//   the start: dips and valleys it would not climb out of; patches under TRAP_MIN_NODES grid nodes are left out), and per route climbMaxDeg, descentMaxDeg,
+//   crossMaxDeg, oneWayKm, oneWay: [[[x, y], [x, y]], …] (stretches descending more steeply than the climb
+//   limit: the rover could not come back up them), hours (drive time at speedKmh, slower on slopes)
 // }
 // Statistics come from the unsimplified path, sampled every quarter node spacing.
 import { toXY } from './terrain.js';
@@ -31,6 +41,26 @@ const R = 1737.4;
 const DEG = 180 / Math.PI;
 
 export const DEFAULT_MAX_SLOPE = 15;
+// Phase 2 rover limits. All are assumptions the user can change, not data: a slow solar rover of the VIPER
+// class (descending steeper than it climbs, a lower limit across a slope against tipping and sliding).
+export const MOBILITY_DEFAULTS = Object.freeze({ descentDeg: 20, crossDeg: 12, speedKmh: 0.8 });
+// The limits of a plan, or null without mobility. climbDeg is the planner's maxSlopeDeg.
+export function cleanMobility(m, climbDeg) {
+  if (!m) return null;
+  const num = (v, lo, hi, d) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(hi, Math.max(lo, Number(v))) : d);
+  return {
+    climbDeg: Number(climbDeg),
+    descentDeg: num(m.descentDeg, 1, 45, MOBILITY_DEFAULTS.descentDeg),
+    crossDeg: num(m.crossDeg, 1, 45, MOBILITY_DEFAULTS.crossDeg),
+    speedKmh: num(m.speedKmh, 0.01, 50, MOBILITY_DEFAULTS.speedKmh),
+  };
+}
+// Drive speed factor on a grade (tan): slower uphill (half speed at the climb limit), a little slower
+// downhill (70 % at the descent limit). An assumption, like the limits.
+export function speedFactor(pitchTan, mob) {
+  const deg = Math.atan(pitchTan) * DEG;
+  return deg >= 0 ? Math.max(0.3, 1 - 0.5 * deg / mob.climbDeg) : Math.max(0.3, 1 - 0.3 * -deg / mob.descentDeg);
+}
 export const MIN_POINTS = 2;
 export const MAX_POINTS = 8;
 export const MAX_LEG_KM = 160;
@@ -169,6 +199,26 @@ const MOVES = [
   [1, 2, [[0, 1], [1, 1]]], [-1, 2, [[0, 1], [-1, 1]]], [1, -2, [[0, -1], [1, -1]]], [-1, -2, [[0, -1], [-1, -1]]],
 ];
 
+const OPP = MOVES.map(([dx, dy]) => MOVES.findIndex(([ex, ey]) => ex === -dx && ey === -dy));
+
+// Phase 2: the directional test of a move from node n to node m. The grade along the move (the mean of
+// the two nodes' gradients projected on its direction) must stay under the climb limit uphill and the
+// descent limit downhill; the slope across it (the larger of the two nodes) under the cross-slope limit.
+// → (n, m) => boolean
+export function edgeTest(cor, mob) {
+  const tc = Math.tan(mob.climbDeg / DEG), td = Math.tan(mob.descentDeg / DEG), tx = Math.tan(mob.crossDeg / DEG);
+  const { W, gxs, gys } = cor;
+  return (n, m) => {
+    const un = n % W, vn = (n - un) / W, um = m % W, vm = (m - um) / W;
+    let dx = um - un, dy = vn - vm;                      // map direction (+y is up a row)
+    const L = Math.hypot(dx, dy); dx /= L; dy /= L;
+    const pitch = 0.5 * (gxs[n] * dx + gys[n] * dy + gxs[m] * dx + gys[m] * dy);
+    if (!(pitch <= tc && -pitch <= td)) return false;
+    const cross = Math.max(Math.abs(gxs[n] * dy - gys[n] * dx), Math.abs(gxs[m] * dy - gys[m] * dx));
+    return cross <= tx;
+  };
+}
+
 // ---------- the corridor graph of one leg ----------
 // Nodes are DEM pixel centres (col c0 + u, row r0 + v). slope: degrees (Infinity off the terrain);
 // inv: ground km per map km (1 / stereographic scale factor); sun: 0–1 or NaN.
@@ -195,6 +245,7 @@ function buildCorridor(dem, a, b, padKm, sunAt) {
     for (let j = 0; j < HH; j++) for (let i = 0; i < HW; i++) { const v = dem.heightAtXY(xs[i], ys[j]); hts[j * HW + i] = v === null || v === undefined ? NaN : v; }
   }
   const slope = new Float32Array(N), inv = new Float32Array(N), sun = new Float32Array(N);
+  const gxs = new Float32Array(N), gys = new Float32Array(N);   // ground gradient (tan) along map +x and +y
   let invMin = Infinity;
   for (let v = 0; v < H; v++) {
     const y = yOf(v);
@@ -207,11 +258,12 @@ function buildCorridor(dem, a, b, padKm, sunAt) {
       const gx = (hts[m + 1] - hts[m - 1]) / span, gy = (hts[m - HW] - hts[m + HW]) / span;
       const s = Math.atan(Math.hypot(gx, gy)) * DEG;
       slope[n] = s === s && hts[m] === hts[m] ? s : Infinity;
+      gxs[n] = gx; gys[n] = gy;
       sun[n] = sunAt ? sunAt(x, y) : NaN;
     }
   }
   return {
-    W, H, N, kpp, c0, r0, slope, inv, sun, invMin, xOf, yOf,
+    W, H, N, kpp, c0, r0, slope, inv, sun, gxs, gys, invMin, xOf, yOf,
     nodeAt: (x, y) => {
       const u = Math.round(colOf(x)) - c0, v = Math.round(rowOf(y)) - r0;
       return u >= 0 && v >= 0 && u < W && v < H ? v * W + u : -1;
@@ -294,9 +346,54 @@ async function bottleneck(cor, startDisk, goalDisk, ctl) {
   return Infinity;
 }
 
+// Phase 2: nodes reachable from seeds by allowed moves (reverse: nodes from which a seed can be reached).
+async function reach(cor, seeds, lim, edgeOk, reverse, ctl) {
+  const { W, H, slope } = cor, seen = new Uint8Array(cor.N), stack = [];
+  for (const n of seeds) if (slope[n] <= lim && !seen[n]) { seen[n] = 1; stack.push(n); }
+  let pops = 0;
+  while (stack.length) {
+    const a = stack.pop(), u = a % W, v = (a - u) / W;
+    for (let k = 0; k < 16; k++) {
+      const uu = u + MOVES[k][0], vv = v + MOVES[k][1];
+      if (uu < 0 || vv < 0 || uu >= W || vv >= H) continue;
+      const b = vv * W + uu;
+      if (seen[b] || !(slope[b] <= lim)) continue;
+      // forward a → b; reverse: is b → a allowed?
+      const ms = reverse ? moveSlope(cor, uu, vv, OPP[k]) : moveSlope(cor, u, v, k);
+      if (!(ms <= lim) || !(reverse ? edgeOk(b, a) : edgeOk(a, b))) continue;
+      seen[b] = 1; stack.push(b);
+    }
+    if ((++pops & 8191) === 0) await ctl.tick(0.5);
+  }
+  return seen;
+}
+
+// Trap nodes (reachable from the start, no way on to the end or back to the start), in 8-connected patches of
+// at least TRAP_MIN_NODES nodes: smaller pits are at the limit of what the grid resolves, so they are left out.
+export const TRAP_MIN_NODES = 4;
+function trapPatches(cor, fwd, out) {
+  const { W, H, N } = cor, seen = new Uint8Array(N), keep = [];
+  for (let n0 = 0; n0 < N; n0++) {
+    if (seen[n0] || !fwd[n0] || out[n0]) continue;
+    const patch = [n0];
+    seen[n0] = 1;
+    for (let i = 0; i < patch.length; i++) {
+      const a = patch[i], u = a % W, v = (a - u) / W;
+      for (let dv = -1; dv <= 1; dv++) for (let du = -1; du <= 1; du++) {
+        const uu = u + du, vv = v + dv;
+        if (uu < 0 || vv < 0 || uu >= W || vv >= H) continue;
+        const b = vv * W + uu;
+        if (!seen[b] && fwd[b] && !out[b]) { seen[b] = 1; patch.push(b); }
+      }
+    }
+    if (patch.length >= TRAP_MIN_NODES) keep.push(...patch);
+  }
+  return keep;
+}
+
 // A* from any passable node of the start disk to any passable node of the goal disk under slope cap lim,
 // cost per ground km = factor[node]. → { nodes: Int32Array, g: Float64Array (cumulative cost) } | null
-async function search(cor, startDisk, goalDisk, goalXY, lim, factor, ctl) {
+async function search(cor, startDisk, goalDisk, goalXY, lim, factor, ctl, edgeOk = null) {
   const { W, H, N, kpp, inv, slope } = cor;
   const g = new Float64Array(N).fill(Infinity), parent = new Int32Array(N).fill(-1), closed = new Uint8Array(N), goal = new Uint8Array(N);
   for (const q of goalDisk) if (slope[q.n] <= lim) goal[q.n] = 1;
@@ -326,6 +423,7 @@ async function search(cor, startDisk, goalDisk, goalXY, lim, factor, ctl) {
       if (closed[m]) continue;
       const s = moveSlope(cor, u, v, k);
       if (!(s <= lim)) continue;
+      if (edgeOk && !edgeOk(n, m)) continue;
       const c = gn + len[k] * 0.5 * (iv + inv[m]) * 0.5 * (fn + factor[m]);
       if (c < g[m]) { g[m] = c; parent[m] = n; heap.push(c + hOf(m), m); }
     }
@@ -342,7 +440,7 @@ async function search(cor, startDisk, goalDisk, goalXY, lim, factor, ctl) {
 // visit(n, groundKm) per step; returns false as soon as a node is off the grid or steeper than lim,
 // including the nodes a diagonal step passes between. subst maps a waypoint's own node (when it is steeper
 // than lim) to the node the route starts or ends on, as the connector rule says.
-function walk(cor, ax, ay, bx, by, lim, visit, subst) {
+function walk(cor, ax, ay, bx, by, lim, visit, subst, edgeOk = null) {
   const L = Math.hypot(bx - ax, by - ay);
   const steps = Math.max(1, Math.ceil(L / (cor.kpp * 0.25)));
   const dl = L / steps;
@@ -356,6 +454,7 @@ function walk(cor, ax, ay, bx, by, lim, visit, subst) {
       const pu = prev % cor.W, pv = (prev - pu) / cor.W, u = n % cor.W, v = (n - u) / cor.W;
       if (Math.abs(pu - u) > 1 || Math.abs(pv - v) > 1) return false;      // a substituted jump
       if (pu !== u && pv !== v && !(cor.slope[pv * cor.W + u] <= lim && cor.slope[v * cor.W + pu] <= lim)) return false;
+      if (edgeOk && !edgeOk(prev, n)) return false;
     }
     prev = n;
     if (visit) visit(n, dl * cor.inv[n]);
@@ -369,7 +468,7 @@ function walk(cor, ax, ay, bx, by, lim, visit, subst) {
 // (by its own cost) worse. The first and last segments, when not replaced, are connectors: a waypoint to the
 // node the search started or ended on, measured with that node's values.
 // → { line: [[x, y], …], fixed: { segmentIndex: node }, subst }
-function smooth(cor, path, a, b, lim, factor) {
+function smooth(cor, path, a, b, lim, factor, edgeOk = null) {
   const { nodes, g } = path, K = nodes.length;
   const P = (n) => { const u = n % cor.W; return [cor.xOf(u), cor.yOf((n - u) / cor.W)]; };
   const pts = [a, ...Array.from(nodes, P), b];
@@ -388,7 +487,7 @@ function smooth(cor, path, a, b, lim, factor) {
     for (let j = i + 2; j < pts.length && j <= i + LOOK; j++) {
       const [bx, by] = pts[j];
       let cost = 0;
-      const ok = walk(cor, ax, ay, bx, by, lim, (n, km) => { cost += km * factor[n]; }, subst);
+      const ok = walk(cor, ax, ay, bx, by, lim, (n, km) => { cost += km * factor[n]; }, subst, edgeOk);
       // relative tolerance: a segment along the grid path itself costs the same up to rounding
       if (ok && cost <= (gs[j] - gs[i]) * (1 + 1e-6) + 1e-9) { best = j; misses = 0; } else if (++misses >= 16) break;
     }
@@ -402,20 +501,34 @@ function smooth(cor, path, a, b, lim, factor) {
 
 // Statistics of a leg's polyline, sampled every quarter node; a fixed (connector) segment takes the values
 // of its node, a waypoint's own steep node those of its substitute.
-function legStats(cor, line, fixed, subst, isPsr) {
+function legStats(cor, line, fixed, subst, isPsr, mob = null) {
   let len = 0, maxS = 0, slopeSum = 0, sunLen = 0, sunSum = 0, psrKm = 0;
+  let climb = 0, descent = 0, cross = 0, hours = 0, oneWayKm = 0, run = null;
+  const oneWay = [], tc = mob ? Math.tan(mob.climbDeg / DEG) : 0;
   for (let k = 0; k + 1 < line.length; k++) {
     const [ax, ay] = line[k], [bx, by] = line[k + 1];
     const L = Math.hypot(bx - ax, by - ay);
     if (!(L > 0)) continue;
     const steps = Math.max(1, Math.ceil(L / (cor.kpp * 0.25)));
-    const fx = fixed[k] ?? -1;
+    const fx = fixed[k] ?? -1, ux = (bx - ax) / L, uy = (by - ay) / L;
     for (let i = 0; i < steps; i++) {
       const t = (i + 0.5) / steps, x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
       let n = fx >= 0 ? fx : cor.nodeAt(x, y);
       if (n >= 0 && subst.has(n)) n = subst.get(n);
       if (n < 0) continue;
       const km = (L / steps) * cor.inv[n], s = cor.slope[n], sun = cor.sun[n];
+      if (mob) {
+        const pitch = cor.gxs[n] * ux + cor.gys[n] * uy, across = Math.abs(cor.gxs[n] * uy - cor.gys[n] * ux);
+        if (pitch > climb) climb = pitch;
+        if (-pitch > descent) descent = -pitch;
+        if (across > cross) cross = across;
+        hours += km / (mob.speedKmh * speedFactor(pitch, mob));
+        const h = (L / steps) / 2, p0 = [x - ux * h, y - uy * h], p1 = [x + ux * h, y + uy * h];
+        if (-pitch > tc) {
+          oneWayKm += km;
+          if (run) run[1] = p1; else { run = [p0, p1]; oneWay.push(run); }
+        } else run = null;
+      }
       len += km;
       if (s > maxS) maxS = s;
       slopeSum += s * km;
@@ -423,7 +536,8 @@ function legStats(cor, line, fixed, subst, isPsr) {
       if (isPsr && isPsr(x, y)) psrKm += km;
     }
   }
-  return { len, maxS, slopeSum, sunLen, sunSum, psrKm };
+  const deg = (v) => Math.atan(v) * DEG;
+  return { len, maxS, slopeSum, sunLen, sunSum, psrKm, ...(mob ? { climb: deg(climb), descent: deg(descent), cross: deg(cross), hours, oneWayKm, oneWay } : {}) };
 }
 
 // Douglas–Peucker, tolerance in km.
@@ -450,16 +564,19 @@ export function simplify(points, tolKm) {
 }
 
 // ---------- the planner ----------
-export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxSlopeDeg = DEFAULT_MAX_SLOPE } = {}, opts = {}) {
+export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxSlopeDeg = DEFAULT_MAX_SLOPE, mobility = null } = {}, opts = {}) {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const { onProgress = null, signal = null, sliceMs = 12, yieldFn = defaultYield } = opts;
-  const lim = Number(maxSlopeDeg);
-  const base = { ok: false, error: null, blocked: null, routes: [], limitDeg: lim, baselineKm: dem?.kmPerPixel ?? null, waypoints: [], nodes: 0, ms: 0 };
+  const climbLim = Number(maxSlopeDeg);
+  const mob = climbLim > 0 && climbLim < 90 ? cleanMobility(mobility, climbLim) : null;
+  // the node cap: without mobility the slope limit; with it, the steepest ground any direction may cross
+  const lim = mob ? Math.max(mob.climbDeg, mob.descentDeg, mob.crossDeg) : climbLim;
+  const base = { ok: false, error: null, blocked: null, routes: [], limitDeg: climbLim, baselineKm: dem?.kmPerPixel ?? null, waypoints: [], nodes: 0, ms: 0, ...(mob ? { mobility: mob } : {}) };
   const fail = (error) => ({ ...base, error, ms: Math.round(now() - t0) });
   if (signal?.aborted) throw abortError();
   if (!dem || !(dem.kmPerPixel > 0) || !(dem.halfKm > 0)) return fail('The terrain grid is not loaded yet.');
-  if (!(lim > 0 && lim < 90)) return fail('Set a slope limit between 1° and 89°.');
+  if (!(climbLim > 0 && climbLim < 90)) return fail('Set a slope limit between 1° and 89°.');
   const wps = [];
   for (const p of points ?? []) {
     const q = toPoint(p);
@@ -500,7 +617,7 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
 
   // corridor and minimax slope of every leg; widen a blocked corridor once
   const legData = [];
-  let worst = null;
+  let worst = null, directional = null;
   for (let i = 0; i < legs; i++) {
     const a = wps[i], b = wps[i + 1];
     const legKm = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -515,9 +632,26 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
       pad *= 2;
     }
     base.nodes += cor.N;
-    legData.push({ a, b, cor, need, sd, gd });
+    const leg = { a, b, cor, need, sd, gd };
+    if (mob && need <= lim) {
+      // directional reachability: can the end be reached, can the start be reached back, and the traps
+      leg.edgeOk = edgeTest(cor, mob);
+      const seeds = (disk) => disk.map((q) => q.n);
+      const fwd = await reach(cor, seeds(sd), lim, leg.edgeOk, false, ctl);
+      if (!gd.some((q) => fwd[q.n])) { directional ??= i; }
+      else {
+        const back = await reach(cor, seeds(gd), lim, leg.edgeOk, false, ctl);
+        leg.returnable = sd.some((q) => back[q.n]);
+        const out = await reach(cor, [...seeds(gd), ...seeds(sd)], lim, leg.edgeOk, true, ctl);
+        leg.traps = trapPatches(cor, fwd, out);
+      }
+    }
+    legData.push(leg);
     if (need > lim && (!worst || need > worst.need)) worst = { need, leg: i };
     await advance();
+  }
+  if (directional !== null && !worst) {
+    return fail(`No route keeps within the climb (${mob.climbDeg}°), descent (${mob.descentDeg}°) and cross-slope (${mob.crossDeg}°) limits${legs > 1 ? ` on leg ${directional + 1}` : ''}. Raise a limit or move a point.`);
   }
   if (worst) {
     const finite = Number.isFinite(worst.need);
@@ -532,7 +666,7 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
   }
 
   // the candidates, leg by leg
-  const acc = Object.fromEntries(specs.map((p) => [p.key, { line: [], len: 0, maxS: 0, slopeSum: 0, sunLen: 0, sunSum: 0, psrKm: 0 }]));
+  const acc = Object.fromEntries(specs.map((p) => [p.key, { line: [], len: 0, maxS: 0, slopeSum: 0, sunLen: 0, sunSum: 0, psrKm: 0, climb: 0, descent: 0, cross: 0, hours: 0, oneWayKm: 0, oneWay: [] }]));
   for (const L of legData) {
     const { cor, a, b, sd, gd, need } = L;
     const blurred = {};
@@ -548,10 +682,10 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
         const sn = sl[n] === sl[n] ? sl[n] : cor.slope[n];
         factor[n] = !Number.isFinite(cor.slope[n]) ? 1 : target === null ? fn(sn, su[n], lim, w) : sunnyTargetCost(sn, su[n], lim, target);
       }
-      const path = await search(cor, sd, gd, b, cap, factor, ctl);
+      const path = await search(cor, sd, gd, b, cap, factor, ctl, L.edgeOk ?? null);
       if (!path) return fail('The search found no path although the slope check passed; try again with a higher limit.');
-      const { line, fixed, subst } = smooth(cor, path, a, b, cap, factor);
-      const st = legStats(cor, line, fixed, subst, isPsr);
+      const { line, fixed, subst } = smooth(cor, path, a, b, cap, factor, L.edgeOk ?? null);
+      const st = legStats(cor, line, fixed, subst, isPsr, mob);
       if (st.sunLen > 0 && st.sunSum / st.sunLen > legBest) legBest = st.sunSum / st.sunLen;
       const t = acc[key];
       // simplified per leg, so every waypoint stays a vertex
@@ -559,6 +693,10 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
       t.line.push(...(t.line.length ? shown.slice(1) : shown));
       t.len += st.len; t.slopeSum += st.slopeSum; t.sunLen += st.sunLen; t.sunSum += st.sunSum; t.psrKm += st.psrKm;
       if (st.maxS > t.maxS) t.maxS = st.maxS;
+      if (mob) {
+        t.climb = Math.max(t.climb, st.climb); t.descent = Math.max(t.descent, st.descent); t.cross = Math.max(t.cross, st.cross);
+        t.hours += st.hours; t.oneWayKm += st.oneWayKm; t.oneWay.push(...st.oneWay);
+      }
       await advance();
     }
   }
@@ -570,6 +708,7 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
     sunShare: t.sunLen > 0 ? t.sunSum / t.sunLen : null,
     sunKnown: t.len > 0 ? t.sunLen / t.len : 0,
     psrKm: isPsr ? t.psrKm : null,
+    ...(mob ? { climbMaxDeg: t.climb, descentMaxDeg: t.descent, crossMaxDeg: t.cross, hours: t.hours, oneWayKm: t.oneWayKm, oneWay: t.oneWay } : {}),
   });
   // the searched routes: short, flat and the sunniest of the sunny weights (ties: the lower weight)
   const raw = {};
@@ -580,7 +719,7 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
   const pool = ids.map((id) => raw[id]);
   const routes = [];
   for (const c of CANDIDATES) {
-    if (!raw[c.id]) { routes.push({ id: c.id, label: c.label, points: null, lengthKm: null, maxSlopeDeg: null, meanSlopeDeg: null, sunShare: null, sunKnown: 0, psrKm: null, sameAs: null, unavailable: 'Needs the sunlight figures of the planned stay.' }); continue; }
+    if (!raw[c.id]) { routes.push({ id: c.id, label: c.label, points: null, lengthKm: null, maxSlopeDeg: null, meanSlopeDeg: null, sunShare: null, sunKnown: 0, psrKm: null, sameAs: null, unavailable: 'Needs the sunlight figures of the planned stay.', ...(mob ? { climbMaxDeg: null, descentMaxDeg: null, crossMaxDeg: null, hours: null, oneWayKm: null, oneWay: [] } : {}) }); continue; }
     // the label stays true: the best searched route by this label's figure, its own on a tie
     const best = pickByMetric(pool, c.id, ids.indexOf(c.id));
     const { from, ...f } = best;
@@ -590,7 +729,24 @@ export async function planRoutes({ points, dem, sunAt = null, isPsr = null, maxS
     routes.push(r);
   }
   onProgress?.(1);
-  return { ...base, ok: true, routes, ms: Math.round(now() - t0) };
+  const extra = {};
+  if (mob) {
+    extra.returnable = legData.every((L) => L.returnable);
+    // trap nodes of all legs, as map points (a node shared by two corridors counts once)
+    const seen = new Set(), cells = [];
+    let km2 = 0;
+    for (const L of legData) {
+      const c = L.cor;
+      for (const n of L.traps ?? []) {
+        const u = n % c.W, v = (n - u) / c.W, x = c.xOf(u), y = c.yOf(v), key = `${Math.round(x / c.kpp)},${Math.round(y / c.kpp)}`;
+        if (seen.has(key)) continue;
+        seen.add(key); cells.push([x, y]);
+        km2 += (c.kpp * c.inv[n]) ** 2;
+      }
+    }
+    extra.traps = { km2, cellKm: dem.kmPerPixel, cells };
+  }
+  return { ...base, ok: true, routes, ...extra, ms: Math.round(now() - t0) };
 }
 
 // The best of routes by a label's figure: 'short' the least lengthKm, 'flat' the least meanSlopeDeg,

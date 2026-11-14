@@ -115,3 +115,20 @@
 @media (prefers-reduced-motion: reduce) {
   .rp-choice, .rp-tool { transition: none; }
 }
+
+/* ---------- phase 2: rover limits and figures ---------- */
+.rp-rover { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.rp-rover-field { display: grid; gap: 3px; min-width: 0; }
+.rp-rover-name { color: var(--faint); font-size: var(--fs-small); }
+.rp-rover-box { display: flex; align-items: center; gap: 4px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; height: 30px; }
+.rp-rover-box:focus-within { border-color: var(--text); }
+.rp-rover-input { width: 100%; min-width: 0; background: none; border: 0; color: var(--text); font: inherit; outline: none; -moz-appearance: textfield; }
+.rp-rover-input::-webkit-outer-spin-button, .rp-rover-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.rp-rover-unit { color: var(--faint); font-size: var(--fs-small); }
+.rp-rover-result { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--raised) 70%, transparent); }
+.rp-rover-title { margin: 0 0 6px; font-weight: 600; }
+.rp-rover-result ul { margin: 0; padding: 0 0 0 14px; display: grid; gap: 4px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.rp-rover-result li.is-warn { color: var(--text); }
+.rp-rover-result li.is-warn::marker { color: #ff9f43; }
+.rp-oneway { fill: none; stroke: #ff9f43; stroke-width: 6; stroke-linecap: round; }
+.rp-traps { fill: rgba(255, 82, 82, 0.38); stroke: none; }

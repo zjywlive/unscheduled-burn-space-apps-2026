@@ -62,11 +62,27 @@ served by us.
 - Not yet: the globe is a separate page and is not built into the navigator; the light is a display light
   rather than the real Sun at a chosen time; it has not been tried on a phone.
 
-## Phase 2: rover mobility on real terrain
+## Phase 2: rover mobility on real terrain (done 14 Nov, 17:40 GMT)
 
 Directional (non-reversible) slopes with separate climb and descent limits, cross-slope limit,
 one-way route segments ("point of no return") and trap detection for dips and valleys. Rover profile:
 speed, power in watts, mass.
+
+**Status (14 Nov).** Built in the navigator's route planner (`demo/src/route-plan.js`, option `mobility`):
+- Each move is checked by direction: the gradient projected on the move against the climb and descent limits,
+  the slope across it against the cross-slope limit. The graph is directed.
+- Per route: steepest climb, descent and cross-slope, one-way stretches (descending more steeply than the
+  climb limit; drawn orange), drive time at the set speed (slower on slopes). Per plan: whether the rover could
+  drive from the end back to the start by any way; trap ground (reachable from the start, no way on to the end
+  or back; drawn red; patches under 4 grid nodes left out).
+- Card: Climb limit slider plus Descent, Across, Speed inputs (all labelled assumptions); a "Rover on the …
+  route" summary under the candidates.
+- Tests (`tests/route-mobility.test.mjs`): a 19° scarp is one-way and unclimbable, a 16° one is climbable by
+  switchbacks, a steep bowl is reported as a trap and avoided, flat ground has none of these, and Shackleton to
+  de Gerlache on real terrain. Checked in headless Chrome on that route: 2.0 km one-way, return possible,
+  de Gerlache's floor shows as a trap.
+- Known limits: switchbacks use the planner's 16 move directions, so some slopes that could be climbed at an
+  in-between heading count as one-way (conservative); power and mass are not used yet (phase 3).
 
 ## Phase 3: energy along the route
 

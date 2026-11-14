@@ -7,7 +7,8 @@
 // deps: { maxPoints?: number (default 8), maxLatDeg?: number (default −80, the terrain grid's edge) }
 // callbacks: {
 //   onPoints(points)                    the edited waypoints, [[xKm, yKm], …], whenever every row is valid
-//   onPlan({ points, maxSlopeDeg })     Plan pressed (or "Plan at N°" after a blocked plan)
+//   onPlan({ points, maxSlopeDeg, mobility })  Plan pressed (or "Plan at N°" after a blocked plan); mobility is
+//                                       { descentDeg, crossDeg, speedKmh } (phase 2), the climb limit being maxSlopeDeg
 //   onCancel()                          Cancel pressed while planning
 //   onPick(routeId)                     a candidate chosen: 'short' | 'flat' | 'sunny'
 //   onHover(routeId | null)             a candidate under the pointer or keyboard focus
@@ -24,7 +25,7 @@
 import { h, s, clear } from './dom.js';
 import { fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { parseLatLon, formatLat, formatLon } from '../coords.js';
-import { DEFAULT_MAX_SLOPE, MAX_POINTS, MIN_POINTS } from '../route-plan.js';
+import { DEFAULT_MAX_SLOPE, MAX_POINTS, MIN_POINTS, MOBILITY_DEFAULTS } from '../route-plan.js';
 
 const LIMIT = { min: 5, max: 30, step: 1 };
 const kmFmt = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -70,6 +71,27 @@ export function routeFigures(r) {
   };
 }
 
+// Phase 2: the rover figures of one candidate under a plan with mobility, as display lines.
+export function roverLines(plan, r) {
+  if (!plan?.mobility || !r || r.unavailable || !ok(r.hours)) return [];
+  const m = plan.mobility, d1 = (v) => `${(Math.round(v * 10) / 10).toFixed(1)}°`;
+  const hrs = r.hours >= 48 ? `${(r.hours / 24).toFixed(1)} days` : `${r.hours.toFixed(r.hours < 10 ? 1 : 0)} h`;
+  const lines = [
+    { key: 'time', text: `Drive time ${hrs} at ${m.speedKmh} km/h, slower on slopes.` },
+    { key: 'grades', text: `Steepest along it: up ${d1(r.climbMaxDeg)}, down ${d1(r.descentMaxDeg)}, across ${d1(r.crossMaxDeg)}.` },
+    r.oneWayKm > 0.05
+      ? { key: 'oneway', warn: true, text: `One-way: ${kmFmt.format(r.oneWayKm)} km in ${r.oneWay.length} stretch${r.oneWay.length === 1 ? '' : 'es'} going down more steeply than the ${m.climbDeg}° climb limit. The rover could not come back up them (orange on the map).` }
+      : { key: 'oneway', text: 'No one-way stretches: every part could be driven back up within the limits.' },
+    plan.returnable
+      ? { key: 'return', text: 'Driving back from the end to the start is possible within the limits.' }
+      : { key: 'return', warn: true, text: 'No way back: from the end, the rover could not return to the start within the limits.' },
+    plan.traps?.km2 > 0.05
+      ? { key: 'traps', warn: true, text: `Traps: ${kmFmt.format(plan.traps.km2)} km² in the search area the rover could drive into but not out of (red on the map).` }
+      : { key: 'traps', text: 'No traps in the search area.' },
+  ];
+  return lines;
+}
+
 // One sentence for screen readers.
 export function routeSentence(r, names) {
   if (r.unavailable) return `${r.label}: ${r.unavailable}`;
@@ -79,11 +101,13 @@ export function routeSentence(r, names) {
 }
 
 // Whether a plan answers these points and this limit.
-export function planMatches(plan, points, limitDeg) {
+export function planMatches(plan, points, limitDeg, mobility = null) {
   if (!plan || !points || plan.limitDeg !== limitDeg) return false;
+  if (mobility && plan.mobility && ['descentDeg', 'crossDeg', 'speedKmh'].some((k) => plan.mobility[k] !== mobility[k])) return false;
   const w = plan.waypoints ?? [];
   if (w.length !== points.length) return false;
-  return w.every((p, i) => Math.abs(p[0] - points[i][0]) < 1e-6 && Math.abs(p[1] - points[i][1]) < 1e-6);
+  // within 50 m: the rows show 3-decimal degrees (≤ ~30 m), so a plan restored from a link still matches them
+  return w.every((p, i) => Math.abs(p[0] - points[i][0]) < 0.05 && Math.abs(p[1] - points[i][1]) < 0.05);
 }
 
 // ---------- the card ----------
@@ -100,6 +124,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   let rows = [{ lat: '', lon: '' }, { lat: '', lon: '' }];
   let errs = new Map();          // `${index}:${field}` → message
   let limit = DEFAULT_MAX_SLOPE;
+  let mobility = { ...MOBILITY_DEFAULTS };   // phase 2: the rest of the rover limits
   let lastPoints = null, emitted = null;
   let running = false, progress = 0, plan = null, selected = null, hovered = null;
   let validPoints = null;        // the rows as points when all are valid
@@ -117,6 +142,20 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   limitInput.addEventListener('input', () => { limit = Number(limitInput.value); renderLimit(); renderResults(); });
   limitInput.addEventListener('change', () => callbacks.onLimit?.(limit));   // fix R (for L5): report the limit for the hash
 
+  // phase 2: descent and cross-slope limits and speed, next to the climb limit they go with
+  const roverInput = (key, label, unit, min, max, step) => {
+    const inp = h('input', { type: 'number', class: 'rp-rover-input num', id: `${id}-${key}`, min, max, step, value: mobility[key], inputmode: 'decimal' });
+    inp.addEventListener('change', () => {
+      const v = Number(inp.value);
+      mobility = { ...mobility, [key]: Number.isFinite(v) && v >= min && v <= max ? v : MOBILITY_DEFAULTS[key] };
+      inp.value = String(mobility[key]);
+      renderResults();
+    });
+    return h('label', { class: 'rp-rover-field', for: `${id}-${key}` }, h('span', { class: 'rp-rover-name' }, label), h('span', { class: 'rp-rover-box' }, inp, h('span', { class: 'rp-rover-unit' }, unit)));
+  };
+  const roverRow = h('div', { class: 'rp-rover' },
+    roverInput('descentDeg', 'Descent', '°', 1, 45, 1), roverInput('crossDeg', 'Across', '°', 1, 45, 1), roverInput('speedKmh', 'Speed', 'km/h', 0.05, 20, 0.05));
+
   const planBtn = h('button', { type: 'submit', class: 'btn btn-primary rp-plan' }, 'Plan routes');   // stays enabled: planning again restarts
   const cancelBtn = h('button', { type: 'button', class: 'btn rp-cancel', hidden: true, onclick: () => callbacks.onCancel?.() }, 'Cancel');
   const formError = h('p', { class: 'field-error rp-form-error', id: `${id}-form-error`, hidden: true });
@@ -128,8 +167,9 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     list,
     h('div', { class: 'rp-add-row' }, addBtn),
     h('div', { class: 'filter rp-limit' },
-      h('div', { class: 'filter-head' }, h('label', { for: `${id}-limit` }, 'Slope limit ', h('span', { class: 'rp-assumed' }, 'assumed')), limitOut),
-      limitInput),
+      h('div', { class: 'filter-head' }, h('label', { for: `${id}-limit` }, 'Climb limit ', h('span', { class: 'rp-assumed' }, 'assumed')), limitOut),
+      limitInput,
+      roverRow),
     formError,
     h('div', { class: 'rp-actions' }, planBtn, cancelBtn));
 
@@ -266,7 +306,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     }
     formError.hidden = true;
     emitPoints();
-    callbacks.onPlan?.({ points: r.points, maxSlopeDeg: limit });
+    callbacks.onPlan?.({ points: r.points, maxSlopeDeg: limit, mobility: { ...mobility } });
   }
 
   function renderLimit() {
@@ -338,7 +378,7 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   }
 
   function renderResults() {
-    const stale = !!plan?.ok && !planMatches(plan, validPoints ?? lastPoints, limit);
+    const stale = !!plan?.ok && !planMatches(plan, validPoints ?? lastPoints, limit, mobility);
     renderStatus(stale);
     const show = !!plan?.ok && !running;
     const key = show ? plan : null;
@@ -350,6 +390,22 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     }
     results.querySelector('.rp-rows')?.classList.toggle('is-stale', stale);
     syncRows();
+    renderRover();
+  }
+
+  // phase 2: the selected route's rover figures under the rows
+  let roverKey = null;
+  const roverBox = h('div', { class: 'rp-rover-result', 'aria-live': 'polite' });
+  function renderRover() {
+    const r = plan?.ok && !running ? plan.routes.find((x) => x.id === selected) : null;
+    const key = r ? `${plan.ms}:${plan.nodes}:${selected}` : null;
+    if (key === roverKey) return;
+    roverKey = key;
+    clear(roverBox);
+    const lines = roverLines(plan, r);
+    if (!lines.length) { roverBox.remove(); return; }
+    roverBox.append(h('p', { class: 'rp-rover-title' }, `Rover on the ${names[r.id] ?? r.label} route`), h('ul', null, ...lines.map((l) => h('li', { class: l.warn ? 'is-warn' : null, 'data-key': l.key }, l.text))));
+    if (!roverBox.isConnected || roverBox.parentNode !== results) results.append(roverBox);
   }
 
   function buildRows() {
@@ -398,7 +454,8 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     clear(notes);
     notes.append(
       h('li', null, `Slopes come from the ${baseText()} terrain grid. Rover-scale slopes are steeper; this cannot tell whether a vehicle can drive the route.`),
-      h('li', null, 'Illustrative only. No speed, travel time or energy is modelled.'),
+      h('li', null, 'Illustrative only. Drive time uses the speed set above, slower on slopes; energy is not modelled yet. Descent, across and speed are assumptions, like the climb limit.'),
+      h('li', null, 'Moves are checked by direction: the grade along the move against the climb and descent limits, the slope across it against the across limit. Switchbacks are limited to 16 directions, so some climbable slopes count as one-way.'),
       h('li', null, 'Max and Mean: the steepest and the mean slope along the route. Sun: share of the length lit during the planned stay, from the 2 km map of the stay at any zoom. PSR: km inside the official permanently shadowed regions.'),
       h('li', null, 'Each name shows the best of the searched routes by its own figure; when one route is best on two, both rows show it.'));
   }

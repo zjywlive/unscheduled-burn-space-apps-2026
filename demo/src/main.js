@@ -373,7 +373,7 @@ function start() {
   const routePlanCard = mapView ? createRoutePlanCard({}, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
-    onPlan: ({ points, maxSlopeDeg }) => { runPlan(points, maxSlopeDeg).catch(() => {}); },
+    onPlan: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility }; runPlan(points, maxSlopeDeg).catch(() => {}); },
     onCancel: () => rpAbort?.abort(),
     onPick: (id) => { pickPlanned(id); fitPlanned(id); },
     onHover: (id) => { rp = { ...rp, hovered: id }; routePlanCard.update({ hovered: id }); redrawRoutes(); },
@@ -398,7 +398,8 @@ function start() {
       // fix R2 (workstream R): always the full 2 km map job of the stay, never the viewport's 1 km job,
       // so the sunlit figures and the sunny search do not depend on the zoom at which Plan was pressed
       const sunAt = sunFromJobs(plan);
-      const result = await planRoutes({ points, dem, sunAt, isPsr: psr ? (x, y) => psr.isPsr(x, y) : null, maxSlopeDeg },
+      // phase 2: always with the rover's directional limits (the card's values, or the defaults)
+      const result = await planRoutes({ points, dem, sunAt, isPsr: psr ? (x, y) => psr.isPsr(x, y) : null, maxSlopeDeg, mobility: rp.mobility ?? {} },
         { signal: ac.signal, onProgress: (f) => routePlanCard.update({ progress: f }) });
       const first = result.ok ? (result.routes.some((r) => r.id === pick && r.points?.length) ? pick : 'short') : null;
       rp = { ...rp, points, maxSlopeDeg, plan: result, selected: first, hovered: null };
