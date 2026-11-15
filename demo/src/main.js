@@ -370,8 +370,15 @@ function start() {
     globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
     globeMap.onLandSpot = (n) => selectLanding(n);
     // a click on a region's outline or on a route: the panel turns to it (a candidate route is chosen as well)
+    globeMap.isDrawing = () => !!mapView?.drawing;
     globeMap.onFocus = (f) => {
-      if (f.kind === 'region') { kind = 'region'; update({ slot: f.slot }); return; }
+      if (f.kind === 'region') {
+        kind = 'region';
+        // with a region tool on, the tool follows the focused shape (its form shows; the next click draws that kind into that slot)
+        const sh = shapes[f.slot], regionTool = ['rect', 'circle', 'polygon'].includes(state.tool);
+        update(regionTool && sh ? { slot: f.slot, tool: sh.type } : { slot: f.slot });
+        return;
+      }
       kind = 'route';
       if (f.id && f.id !== rp.selected) pickPlanned(f.id);
       update({});
@@ -1351,7 +1358,7 @@ function start() {
       alternative: state.altSite !== 'same' ? altScenario.site : null,
       top, best,
       filters: filterParams(), filtersActive: filtersActive() && rankedMode(), weights: state.weights, showPsr,
-      regions: polarShapes(), route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
+      regions: polarShapes(), hasRegions: { A: !!shapes.A, B: !!shapes.B }, route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
       pointInfo: {
         name: state.site.name,
         coords: `${formatCoords(state.site)}${state.site.verified ? '' : ' approx.'}`,

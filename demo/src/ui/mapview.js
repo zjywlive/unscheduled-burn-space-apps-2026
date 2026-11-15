@@ -394,7 +394,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   applyTerrain();
 
   function syncTools() {
-    lastTools = { tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!last.regions?.A, hasB: !!last.regions?.B, hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi };
+    lastTools = { tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!(last.hasRegions?.A ?? last.regions?.A), hasB: !!(last.hasRegions?.B ?? last.regions?.B), hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi };
     tools.update({ ...lastTools, dialOn: dialPressed });
     // "Click sets" belongs to the Select tool; with a drawing tool it stays in place, greyed, and says why
     const off = last.tool !== 'select';
@@ -766,6 +766,8 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   return {
     update,
     frameUpdate,
+    // a shape is half drawn on the polar map (the globe leaves a click on an outline to it then)
+    get drawing() { return !!last.drawing; },
     // light paths: cards that change while jobs run, without rebuilding the rest
     setTop(top, best) { last = { ...last, top }; frame.redrawOverlay({ top }); renderBest(best); },
     setCards({ regionCard: rc, routeCard: rtc, regionBest, filters: f }) {

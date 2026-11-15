@@ -451,7 +451,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (now - moveAt < 30) return;
     moveAt = now;
     // the Select tool: a pointer over an outline or a route says it can be clicked to focus it
-    if (!down) canvas.style.cursor = (getState().tool ?? 'select') === 'select' && focusAt(e) ? 'pointer' : '';
+    if (!down) canvas.style.cursor = !draft && !rdraft && !api.isDrawing?.() && focusAt(e) ? 'pointer' : '';
     const h = hit(e);
     if (!h) return;
     if (draft) { draft.cursor = snapped(e, h); drawDraft(); }
@@ -470,9 +470,19 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (!d) return;
     const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4;
     const h = hit(e);
-    if (d.tool === 'route') { if (!moved && h) addDraftPoint(snapped(e, h)); return; }
+    // with no shape half drawn, a click on an outline or a route focuses it, whatever the tool (a click elsewhere draws)
+    const idle = !draft && !rdraft && !api.isDrawing?.();
+    if (d.tool === 'route') {
+      if (moved || !h) return;
+      const f = idle ? focusAt(e) : null;
+      if (f) { api.onFocus?.(f); return; }
+      addDraftPoint(snapped(e, h));
+      return;
+    }
     if (d.tool !== 'select') {
       if (moved || !h) return;
+      const f = idle ? focusAt(e) : null;
+      if (f) { api.onFocus?.(f); return; }
       // north of 80°S (or once started there) the shape is clicked out on the globe in latitude and longitude
       if (rdraft || h.latDeg > POLAR_LAT) { addRegionPoint(d.tool, { latDeg: h.latDeg, lonDeg: h.lonDeg }, e); return; }
       const at = frameClient(h.latDeg, h.lonDeg);
@@ -845,7 +855,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     onRouteDrawn: null,
     onRegionDrawn: null,
     onFocus: null,
-    onLandSpot: null,   // (n) a numbered Where to land spot clicked
+    onLandSpot: null,
+    isDrawing: null,   // () → a shape is half drawn on the polar map (main.js: mapView.drawing)   // (n) a numbered Where to land spot clicked
     setLanding: (d) => { ready.then(() => setLanding(d)); },   // ({ pick, box, spots: [{ n, latDeg, lonDeg, grade, title }], sel } | null)   // ({ kind: 'region', slot } | { kind: 'route', id }) an outline or a route clicked with the Select tool   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
     // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
