@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>Lander Path: Earth to the South Pole</title>
+<title>Mission execution · Lunar Landing Site Navigator</title>
 <!-- Built page: edit the markup and CSS here; the marked blocks are written by `node tools/build-lander.mjs`. -->
 <!--LANDER:BOOTCSS-->
 <style>
@@ -210,6 +210,39 @@
   #plan-site { background: rgba(242, 179, 61, 0.16); border-color: rgba(242, 179, 61, 0.55); color: #ffe2a8; }
   #plan-site:hover { background: rgba(242, 179, 61, 0.26); }
 
+  /* execution: the frozen configuration's chip, the six mission phases, surface operations, no configuration */
+  .cfg-chip { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: var(--radius-control); border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--muted); font-size: 12px; white-space: nowrap; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+  .cfg-chip b { color: var(--text); font-weight: 600; }
+  .cfg-chip .id { font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ok); }
+  .cfg-chip.rehearsal .id { color: var(--sun); }
+  .cfg-chip .stale { color: var(--sun); }
+  .phases { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-control); }
+  .phases button { position: relative; height: 30px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .phases button .n { display: inline-grid; place-items: center; width: 15px; height: 15px; margin-right: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.1); font-size: 9.5px; font-weight: 700; vertical-align: 1px; }
+  .phases button:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+  .phases button.done { color: #d6d6d6; }
+  .phases button.done .n { background: rgba(127, 209, 139, 0.3); }
+  .phases button[aria-current="step"] { background: #fff; color: #000; }
+  .phases button[aria-current="step"] .n { background: #000; color: #fff; }
+  .phases .ph-s { display: none; }
+  .surface { position: fixed; left: 16px; right: 16px; top: var(--top); bottom: 16px; z-index: 4; display: flex; flex-direction: column; gap: 8px; }
+  .surface[hidden] { display: none; }
+  .surface iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: #000; }
+  .sf-bar { position: static; order: -1; display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 14px; }
+  .sf-bar #sf-info { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.surface-on .hud, body.surface-on .side, body.surface-on #side-toggle, body.surface-on .timeline, body.surface-on .camctl, body.surface-on .terrkey, body.surface-on .labels, body.surface-on #view { visibility: hidden; }
+  body.surface-on #actbar { display: none; }
+  .noconfig { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); padding: 16px; }
+  .noconfig[hidden] { display: none; }
+  .nc-card { position: static; max-width: 520px; padding: 22px 24px; }
+  .nc-card h2 { margin: 0 0 8px; font-size: 18px; }
+  .nc-card p { color: var(--muted); }
+  .nc-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .nc-act .btn { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
+  .nc-act .btn.primary { color: #000; }
+  a.btn { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
+  @media (max-width: 1600px) { .phases .ph-l { display: none; } .phases .ph-s { display: inline; } }
+
   /* landing-site planner: the map as the hero, the scores in a column */
   .planner { position: fixed; inset: 0; z-index: 20; background: #050506; display: grid; grid-template-columns: 1fr 420px; }
   .planner[hidden] { display: none; }
@@ -346,8 +379,14 @@
     #find { order: 1; margin-left: auto; }
     .field { order: 2; flex: 1 1 130px; }
     .field select, .field input { width: 100%; max-width: none; }
-    #scenes { order: 3; flex: 1 1 auto; }
-    #scenes button { flex: 1; padding: 0 8px; }
+    #cfg-chip { order: 1; flex: 1 1 auto; max-width: none; min-width: 0; }
+    #back-plan { order: 1; }
+    #phases { order: 3; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
+    #phases button { flex: 1 0 auto; padding: 0 7px; }
+    #phases button .n { display: none; }
+    .surface { left: 8px; right: 8px; bottom: 8px; }
+    .sf-bar #sf-info { display: none; }
+    .sf-bar b { flex: 1; }
     #auto { order: 4; }
     #plan-site { order: 1; }
     .ab { order: 9; gap: 2px; }
@@ -382,7 +421,7 @@
 <body>
 <!--LANDER:BOOT-->
 <div id="lsn-boot" role="status" aria-live="polite" aria-label="Loading">
-<div class="boot-card"><div class="boot-moon" aria-hidden="true"></div><h1>Lunar Lander</h1><p class="boot-sub">Earth orbit to a south-pole touchdown</p>
+<div class="boot-card"><div class="boot-moon" aria-hidden="true"></div><h1>Mission execution</h1><p class="boot-sub">The frozen mission, launch to surface operations</p>
 <div class="boot-bar is-wait"><i></i></div><div class="boot-text">Loading the trajectory and terrain…</div>
 <button type="button" onclick="this.closest('#lsn-boot').classList.add('is-done')">Show the map now</button></div></div>
 <!--/LANDER:BOOT-->
@@ -394,15 +433,11 @@
 <header id="top" class="glass top">
   <div id="stages" class="stages"></div>
   <div class="grp">
-    <label class="field"><span>Site</span><select id="site" aria-label="Landing site"></select></label>
-    <label class="field"><span>Landing (UTC)</span><input id="when" type="datetime-local" step="60" aria-label="Requested landing time, UTC"></label>
-    <button id="find" class="btn" title="Next time with the Sun and the Earth above the skyline" aria-label="Next lit window"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 4.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7zM8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M13 3l-1.1 1.1M4.1 11.9L3 13"/></svg><span class="btn-l">Next lit window</span></button>
-    <button id="plan-site" class="btn" title="Choose where to land: map, scores and better spots nearby" aria-label="Choose where to land"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5s-4.5-4.4-4.5-8a4.5 4.5 0 0 1 9 0c0 3.6-4.5 8-4.5 8zM8 4.6a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 1 0 0-3.8z"/></svg><span class="btn-l">Where to land</span></button>
+    <span id="cfg-chip" class="cfg-chip" title="The frozen mission configuration this page flies"></span>
+    <a id="back-plan" class="btn" href="index.html" title="Back to planning (the Map). The frozen configuration stays until you finalise again."><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg><span class="btn-l">Planning</span></a>
   </div>
   <div class="grp view">
-    <div class="seg" id="scenes" role="group" aria-label="View">
-      <button data-scene="earth" class="on">Transfer</button><button data-scene="moon"><span class="wide">Lunar orbit</span><span class="narrow">Orbit</span></button><button data-scene="surface">Descent</button>
-    </div>
+    <nav id="phases" class="phases" aria-label="Mission phases"></nav>
     <button id="auto" class="btn toggle on" title="Follow the lander and switch views by phase">Auto<span class="wide"> camera</span></button>
   </div>
   <div id="actbar" class="ab" role="toolbar" aria-label="Lander actions">
@@ -413,11 +448,10 @@
     <div id="ab-branches" class="ab-seg" role="group" aria-label="Contingency to fly"></div>
     <select id="ab-branch-sel" class="ab-sel" aria-label="Contingency to fly"></select>
     <span class="ab-div" aria-hidden="true"></span>
-    <button id="ab-replan" class="ab-btn" title="Plan the mission again with the vehicle numbers in the Vehicle tab"><svg class="ab-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg><span class="ab-l">Replan</span></button>
-    <button id="ab-save" class="ab-btn" title="Save this plan as a JSON file (site, times, Δv budget, descent, contingencies)"><svg class="ab-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10"/></svg><span class="ab-l">Save plan</span></button>
+    <button id="ab-save" class="ab-btn" title="Save this flight as a JSON file (frozen configuration, times, Δv budget, descent, contingency flown)"><svg class="ab-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10"/></svg><span class="ab-l">Save flight log</span></button>
     <span class="ab-div" aria-hidden="true"></span>
     <span id="ab-touch" class="ab-hint"></span>
-    <a id="ab-rover" class="ab-btn ab-primary" href="index.html" title="Step 2: plan the rover route from the touchdown point (navigator)"><span class="ab-l">Plan the rover route</span><span class="ab-short">Rover</span> →</a>
+    <button id="ab-rover" class="ab-btn ab-primary" type="button" title="Surface operations: the rover drive planned on the Map, from the touchdown point at the planned departure"><span class="ab-l">Surface operations</span><span class="ab-short">Surface</span> →</button>
   </div>
 </header>
 
@@ -435,7 +469,16 @@
   <div class="track"><div class="segs"></div><div class="ticks"></div><div class="cursor"></div></div>
 </footer>
 <div id="status" class="status" hidden></div>
-<section id="planner" class="planner" hidden aria-label="Choose where to land"></section>
+<section id="surface" class="surface" hidden aria-label="Surface operations">
+  <div class="sf-bar glass"><b>Surface operations</b><span id="sf-info"></span><button id="sf-close" class="btn" type="button">Back to the landing</button></div>
+</section>
+<section id="noconfig" class="noconfig" hidden aria-label="No finalised mission">
+  <div class="nc-card glass">
+    <h2>No finalised mission yet</h2>
+    <p>This page flies a frozen mission configuration: plan the mission on the <b>Map</b> (step 1), then <b>Finalise</b> it (step 2).</p>
+    <div class="nc-act"><a class="btn primary" id="nc-map" href="index.html">Open the Map</a><a class="btn" id="nc-final" href="finalise.html">Finalise</a><a class="btn" id="nc-demo" href="lander.html?site=shackleton&amp;t=2027-01-10T02:00Z">Fly a rehearsal at Shackleton ridge</a></div>
+  </div>
+</section>
 <div id="terrkey" class="glass terrkey" hidden>
   <div class="tk-row"><div class="seg tk-modes" role="group" aria-label="Terrain colour"><button data-tmode="plain" class="on">Plain</button><button data-tmode="height">Height</button><button data-tmode="slope">Slope</button></div><label class="tk-check"><input type="checkbox" id="tk-contours" checked> Contours</label></div>
   <div id="tk-body"></div>
@@ -4862,27 +4905,39 @@ function vehicleFromForm(el, vehicle) {
   return out;
 }
 
-return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, vehicleFromForm };
+return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderHud, renderPlan, renderBranches, renderLanding, FIELDS, renderVehicle, vehicleFromForm };
 })();
 __m['../mission-flow.js'] = (() => {
-// One mission across the pages (navigator, lander, 3D globe): the chosen landing site and time travel from
-// step to step, and every page shows the same stage bar
-//   1 Landing (lander.html: site, time, descent) → 2 Rover (index.html: site analysis and the route card)
-//   → 3 3D (globe.html).
-// The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
-// small DOM builder with no dependencies, so any page can use it.
+// One mission across the pages. Everything is planned before launch, then frozen and flown:
+//   PLAN  1 Map (index.html: the whole Moon → a region → the south-pole site analysis, the landing spot, timing,
+//         the rover route)  →  2 Finalise (finalise.html: go/no-go checks, the vehicle, freeze)
+//   FLY   3 Execute (lander.html: the frozen configuration flown from launch to surface operations).
+// The planning state lives in localStorage (per browser, per origin; works from file:// too); the frozen
+// configuration the execution page flies is in mission-config.js. Pure helpers plus one small DOM builder with
+// no dependencies, so any page can use it.
 //
-// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs,
+// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, vehicle?, updatedMs,
 //             landed: { latDeg, lonDeg, tMs, siteId, missM, source } | null }   where the lander touched down
-//             (written by the lander page; the rover route starts there)
+//             (written by the execution page; the 3D globe draws the lander there)
 
 const MISSION_KEY = 'lsn-mission';
 const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
+const CONFIG_KEY = 'lsn-config';   // mission-config.js CONFIG_KEY (the frozen configuration)
 const STAGES = Object.freeze([
-  { id: 'landing', n: 1, label: 'Landing', title: 'Choose the site and time and fly the lander down (lander)' },
-  { id: 'rover', n: 2, label: 'Rover', title: 'Check the site and plan the rover route from it (navigator, route card)' },
-  { id: '3d', n: 3, label: '3D', title: 'See the site and the route on the 3D Moon (globe)' },
+  { id: 'map', n: 1, group: 'Plan', label: 'Map', title: 'Plan the whole mission: the site anywhere on the Moon, its timing, the landing spot and the rover route (navigator)' },
+  { id: 'finalise', n: 2, group: 'Plan', label: 'Finalise', title: 'Check go / no-go and freeze the mission configuration (site, landing time and window, stay, vehicle, rover route)' },
+  { id: 'execute', n: 3, group: 'Fly', label: 'Execute', title: 'Fly the frozen mission: launch, spaceflight, orbital manoeuvres, lunar orbit insertion, landing, surface operations' },
 ]);
+// The six phases the execution page flies, in order (lander.html; the phase ids of lander/mission.js in each)
+const EXEC_PHASES = Object.freeze([
+  { id: 'launch', label: 'Launch', short: 'Launch', from: ['leo'] },
+  { id: 'spaceflight', label: 'Spaceflight', short: 'Spaceflight', from: ['tli', 'coast'] },
+  { id: 'orbit', label: 'Orbital manoeuvres', short: 'Manoeuvres', from: ['approach-moon'] },
+  { id: 'loi', label: 'Lunar orbit insertion', short: 'LOI', from: ['loi', 'llo'] },
+  { id: 'landing', label: 'Landing', short: 'Landing', from: ['doi', 'descent-coast', 'braking', 'approach', 'terminal', 'landed'] },
+  { id: 'surface', label: 'Surface operations', short: 'Surface', from: [] },
+]);
+const execPhaseOf = (landerPhaseId) => EXEC_PHASES.find((p) => p.from.includes(landerPhaseId))?.id ?? null;
 
 const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
 
@@ -4903,6 +4958,10 @@ function writeMission(patch, storage) {
 
 function hasRoute(storage) {
   try { return !!store(storage)?.getItem(ROUTE_KEY); } catch { return false; }
+}
+
+function hasConfig(storage) {
+  try { return !!store(storage)?.getItem(CONFIG_KEY); } catch { return false; }
 }
 
 // Great-circle distance between two lat/lon points on the Moon, km.
@@ -4932,15 +4991,20 @@ function landFromHash(hash) {
 
 const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().slice(0, 16)}Z`;
 
-// The URL of a stage for a mission (relative to demo/). Without a mission, the bare page.
+// The URL of a stage (or of a planning tool) for a mission, relative to demo/. Without a mission, the bare page.
+//   map, site   the Map at the site and time          rover    the Map with the route card open at the site
+//   region      the "Where to land" planner           finalise / execute   their pages (they read the storage)
+//   3d          the globe at the site (or the route)
 function stageUrl(stage, m, { route = false } = {}) {
-  const site = m?.siteId ? encodeURIComponent(m.siteId) : m ? `${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;
+  const site = m?.siteId ? encodeURIComponent(m.siteId) : m ? `c:${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;   // the navigator's custom site
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
-  if (stage === 'site') return nav();
+  if (stage === 'map' || stage === 'site') return nav();
   const landed = landedFor(m);
   if (stage === 'rover') return nav(`&plan=1${landed ? `&land=${landed.latDeg.toFixed(5)},${landed.lonDeg.toFixed(5)}` : ''}`);
-  if (stage === 'landing') return `lander.html${m?.siteId ? `?site=${encodeURIComponent(m.siteId)}${t ? `&t=${t}` : ''}` : ''}`;
+  if (stage === 'region') return `planner.html${m ? `?at=${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}${t ? `&t=${t}` : ''}` : ''}`;
+  if (stage === 'finalise') return 'finalise.html';
+  if (stage === 'execute') return 'lander.html';
   if (stage === '3d') {
     if (route) return 'globe.html#route=1';
     const c = landed ?? m;
@@ -4954,32 +5018,46 @@ const STAGE_CSS = `
 .lsn-stages a { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; border-radius: 999px; color: #9aa0a6; text-decoration: none; white-space: nowrap; }
 .lsn-stages a:hover { color: #e8eaed; background: rgba(255,255,255,0.08); }
 .lsn-stages a[aria-current="step"] { color: #0b0c0e; background: #e8eaed; }
+.lsn-stages a[data-locked] { opacity: 0.55; }
 .lsn-stages .n { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 700; background: rgba(255,255,255,0.12); color: inherit; }
 .lsn-stages a[aria-current="step"] .n { background: #0b0c0e; color: #e8eaed; }
 .lsn-stages .sep { color: rgba(255,255,255,0.25); font-size: 10px; }
+.lsn-stages .grp { padding: 0 2px 0 8px; color: rgba(255,255,255,0.38); font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.lsn-stages .grp + a { margin-left: 2px; }
 .lsn-stages .where { margin-left: 4px; padding: 0 8px 0 4px; color: #9aa0a6; font-weight: 400; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lsn-stages.compact .grp { display: none; }
 `;
 
-// The stage bar: <nav> with the four stages as links (the current one marked), and the mission's site and
-// date. Links are rebuilt from the stored mission when clicked, so they follow changes made on the page.
-function stageBar(doc, current, { getMission = () => readMission(), compact = false } = {}) {
+// The stage bar: <nav> with the steps as links under their group (Plan: Map, Finalise; Fly: Execute), the current
+// one marked, and the mission's site and date. Execute is marked locked until a configuration is frozen (its link
+// still opens the page, which says so). Links are rebuilt from the stored mission when used, so they follow
+// changes made on the page.
+function stageBar(doc, current, { getMission = () => readMission(), compact = false, locked = () => !hasConfig() } = {}) {
   if (!doc.getElementById('lsn-stages-css')) {
     const st = doc.createElement('style'); st.id = 'lsn-stages-css'; st.textContent = STAGE_CSS; (doc.head ?? doc.documentElement).appendChild(st);
   }
   const nav = doc.createElement('nav');
-  nav.className = 'lsn-stages';
+  nav.className = `lsn-stages${compact ? ' compact' : ''}`;
   nav.setAttribute('aria-label', 'Mission steps');
   const links = [];
+  let group = null;
   STAGES.forEach((s, i) => {
-    if (i) { const sep = doc.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
+    if (s.group !== group) {
+      group = s.group;
+      const g = doc.createElement('span'); g.className = 'grp'; g.textContent = s.group; g.setAttribute('aria-hidden', 'true'); nav.appendChild(g);
+    } else if (i) { const sep = doc.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
     const a = doc.createElement('a');
     a.dataset.stage = s.id;
-    a.title = s.title;
     const showLabel = !compact || s.id === current;   // compact: numbers only, but the current step keeps its name
     a.innerHTML = `<span class="n">${s.n}</span>${showLabel ? s.label : ''}`;
     if (!showLabel) a.setAttribute('aria-label', `Step ${s.n}: ${s.label}`);
     if (s.id === current) a.setAttribute('aria-current', 'step');
-    const refresh = () => { a.href = stageUrl(s.id, getMission(), { route: s.id === '3d' && hasRoute() }); };
+    const refresh = () => {
+      a.href = stageUrl(s.id, getMission());
+      const lock = s.id === 'execute' && s.id !== current && locked();
+      a.toggleAttribute('data-locked', lock);
+      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : s.title;
+    };
     refresh();
     a.addEventListener('pointerenter', refresh);
     a.addEventListener('focus', refresh);
@@ -4987,7 +5065,7 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
     links.push(refresh);
     nav.appendChild(a);
   });
-  const listen = (fn) => { try { doc.defaultView?.addEventListener('lsn-mission', fn); } catch { /* no window */ } };
+  const listen = (fn) => { try { doc.defaultView?.addEventListener('lsn-mission', fn); doc.defaultView?.addEventListener('storage', fn); } catch { /* no window */ } };
   if (compact) { nav.refresh = () => links.forEach((f) => f()); listen(nav.refresh); return nav; }
   const where = doc.createElement('span');
   where.className = 'where';
@@ -5003,29 +5081,182 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
   return nav;
 }
 
-// The next steps after a stage as a row of links (for a page's own panel): e.g. from the navigator's site panel
-// (after 'site', which is not a stage, so every stage is listed), "Plan the landing",
-// "Plan the rover route", "See in 3D". Links are rebuilt from the stored mission when used.
-const NEXT_LABELS = Object.freeze({ landing: 'Plan the landing', rover: 'Plan the rover route', '3d': 'See it in 3D' });
-function nextSteps(doc, after, { getMission = () => readMission(), className = 'lsn-next' } = {}) {
-  const at = STAGES.findIndex((s) => s.id === after);
-  const row = doc.createElement('div');
-  row.className = className;
-  for (const s of STAGES.slice(at + 1)) {
-    const a = doc.createElement('a');
-    a.dataset.stage = s.id;
-    a.title = s.title;
-    a.textContent = `${NEXT_LABELS[s.id] ?? s.label} →`;
-    const refresh = () => { a.href = stageUrl(s.id, getMission(), { route: s.id === '3d' && hasRoute() }); };
-    refresh();
-    a.addEventListener('pointerenter', refresh); a.addEventListener('focus', refresh); a.addEventListener('click', refresh);
-    try { doc.defaultView?.addEventListener('lsn-mission', refresh); } catch { /* no window */ }
-    row.appendChild(a);
-  }
-  return row;
+return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
+})();
+__m['../mission-config.js'] = (() => {
+// The frozen mission configuration: what step 2 (Finalise, finalise.html) hands to step 3 (Execute, lander.html).
+// Everything is decided while planning (the Map); finalising copies the decisions into one record, stamps it with
+// an id made from its content, and stores it. The execution page flies only this record: it never reads the
+// planning state, so later changes on the Map do not move a mission that is already finalised. The Map and the
+// Finalise page compare the planning state with it and say when it has changed since ("finalise again").
+// Pure helpers (browser and Node); the storage is localStorage unless one is passed.
+//
+// Config = { v: 1, id, frozenMs,
+//   site: { id | null, name, latDeg, lonDeg },
+//   landing: { requestedMs, windowStartMs | null, windowEndMs | null, earth: bool },   Sun (and Earth) above the skyline
+//   stayDays, vehicle (lander/vehicle.js fields, cleaned),
+//   route: route3d.js payload | null,  departMs | null,
+//   checks: [{ id, label, value, ok, level: 'go' | 'warn' | 'no-go', note }] }
+
+const CONFIG_KEY = 'lsn-config';
+const CONFIG_VERSION = 1;
+
+const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+
+// FNV-1a over a string → 8 hex digits (a short, stable name for a configuration; not a security hash)
+function hash32(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
 }
 
-return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
+// the content that names a configuration: the decisions, not when they were frozen or the check texts
+function configId(c) {
+  const r = c.route;
+  const route = r ? { label: r.label, lengthKm: r.lengthKm, departMs: r.departMs ?? null, n: r.pts?.length ?? 0, a: r.pts?.[0]?.slice(0, 2), b: r.pts?.[r.pts.length - 1]?.slice(0, 2) } : null;
+  return hash32(JSON.stringify([c.site?.id ?? null, c.site?.latDeg, c.site?.lonDeg, c.landing?.requestedMs, c.stayDays, c.vehicle ?? null, route, c.departMs ?? null])).slice(0, 6);
+}
+
+// Builds the record from the planning state. mission: mission-flow.js mission; vehicle: cleaned vehicle;
+// route: the route3d payload chosen on the Map (or null); window: { startMs, endMs, earth } around the landing.
+function buildConfig({ mission, vehicle, route = null, window = null, checks = [], nowMs = Date.now() }) {
+  if (!mission || !Number.isFinite(mission.latDeg) || !Number.isFinite(mission.lonDeg)) throw new Error('No site chosen: pick one on the Map first.');
+  if (!Number.isFinite(mission.landingMs)) throw new Error('No landing time set: set one on the Map first.');
+  const c = {
+    v: CONFIG_VERSION, id: '', frozenMs: nowMs,
+    site: { id: mission.siteId ?? null, name: mission.siteName ?? `${mission.latDeg.toFixed(3)}°, ${mission.lonDeg.toFixed(3)}°`, latDeg: mission.latDeg, lonDeg: mission.lonDeg },
+    landing: { requestedMs: mission.landingMs, windowStartMs: window?.startMs ?? null, windowEndMs: window?.endMs ?? null, earth: window ? !!window.earth : null },
+    stayDays: Number.isFinite(mission.stayDays) ? mission.stayDays : 14,
+    vehicle: vehicle ?? null,
+    route: route ?? null,
+    departMs: route?.departMs ?? null,
+    checks,
+  };
+  c.id = configId(c);
+  return c;
+}
+
+function readConfig(storage) {
+  try {
+    const c = JSON.parse(store(storage)?.getItem(CONFIG_KEY) ?? 'null');
+    return c && c.v === CONFIG_VERSION && c.site && Number.isFinite(c.site.latDeg) && Number.isFinite(c.landing?.requestedMs) ? c : null;
+  } catch { return null; }
+}
+
+function writeConfig(c, storage) {
+  store(storage)?.setItem(CONFIG_KEY, JSON.stringify(c));   // throws when storage is full or blocked: the page says so
+  try { if (!storage && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('lsn-mission', { detail: null })); } catch { /* no window */ }
+  return c;
+}
+
+function clearConfig(storage) {
+  try { store(storage)?.removeItem(CONFIG_KEY); } catch { /* blocked */ }
+}
+
+// What changed on the Map since the configuration was frozen: [] when nothing did. mission: the planning
+// mission; route: the route3d payload on the Map now (undefined when unknown, then the route is not compared);
+// vehicle: the planning vehicle (undefined: not compared).
+function changesSince(c, mission, { route, vehicle } = {}) {
+  if (!c) return [];
+  const out = [];
+  if (!mission) return out;
+  const near = (a, b, eps) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= eps;
+  if ((c.site.id ?? null) !== (mission.siteId ?? null) || !near(c.site.latDeg, mission.latDeg, 1e-6) || !near(c.site.lonDeg, mission.lonDeg, 1e-6)) out.push('site');
+  if (!near(c.landing.requestedMs, mission.landingMs, 30e3)) out.push('landing time');
+  if (Number.isFinite(mission.stayDays) && mission.stayDays !== c.stayDays) out.push('stay');
+  if (vehicle !== undefined && JSON.stringify(vehicle ?? null) !== JSON.stringify(c.vehicle ?? null)) out.push('vehicle');
+  if (route !== undefined) {
+    const a = route ? configId({ route }) : null, b = c.route ? configId({ route: c.route }) : null;
+    if (a !== b) out.push('rover route');
+  }
+  return out;
+}
+
+// The window around tMs in which clear(t) holds (stepping stepMs out each way, at most maxMs): { startMs, endMs }
+// or null when clear(tMs) does not hold. A window that reaches maxMs is open-ended on that side (its edge is the cap).
+function windowAround(tMs, clear, { stepMs = 3600e3, maxMs = 20 * 86400e3 } = {}) {
+  if (!clear(tMs)) return null;
+  let a = tMs, b = tMs;
+  while (tMs - a < maxMs && clear(a - stepMs)) a -= stepMs;
+  while (b - tMs < maxMs && clear(b + stepMs)) b += stepMs;
+  return { startMs: a, endMs: b };
+}
+
+// Overall verdict from the go / no-go rows: 'no-go' if any row is, else 'warn' if any row is, else 'go'.
+function verdictOf(checks) {
+  if (checks.some((c) => c.level === 'no-go')) return 'no-go';
+  if (checks.some((c) => c.level === 'warn')) return 'warn';
+  return 'go';
+}
+
+// The rover route as the Finalise page and the execution page show it (route3d.js payload v1). pts[i] =
+// [lat, lon, km, tMs, soc, flags, …], flags 1 lit, 2 Earth, 4 station. belongs: it starts within 30 km of the site.
+function routeSummary(p, site) {
+  if (!p?.pts?.length) return null;
+  const R = 1737.4, r = Math.PI / 180;
+  const km = (a, b) => 2 * R * Math.asin(Math.min(1, Math.sqrt(Math.sin((b[0] - a[0]) * r / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin((b[1] - a[1]) * r / 2) ** 2)));
+  const socs = p.pts.map((q) => q[4]).filter(Number.isFinite);
+  const share = (bit) => p.pts.filter((q) => q[5] & bit).length / p.pts.length;
+  const startKm = site ? km([site.latDeg, site.lonDeg], p.pts[0]) : 0;
+  return {
+    label: p.label ?? 'Route', lengthKm: p.lengthKm ?? p.pts[p.pts.length - 1][2],
+    departMs: Number.isFinite(p.departMs) ? p.departMs : null, arriveMs: Number.isFinite(p.arriveMs) ? p.arriveMs : null,
+    minSoc: socs.length ? Math.min(...socs) : null, reserve: p.reserve ?? 0.2,
+    litShare: share(1), earthShare: share(2), stationShare: share(4),
+    havens: p.havens?.length ?? 0, emptyAt: p.emptyAt ?? null, startKm, belongs: startKm <= 30,
+  };
+}
+
+// The go / no-go rows of the Finalise page from what it computed. Levels: 'go', 'warn' (flown anyway, said
+// so), 'no-go' (a real problem; freezing is still allowed except without a site or a landing time, which
+// buildConfig refuses). Inputs: site { latDeg, polar, resKm }, sky at the landing { sun, earth } clearances in
+// degrees (null: outside the ephemeris), window (windowAround) | null, plan (lander/mission.js; null when it failed,
+// planError then), checks (lander landingChecks rows) | null, route (routeSummary) | null.
+function goNoGoRows({ site, sky, window, plan, planError = null, checks = null, route = null }) {
+  const rows = [];
+  const add = (id, label, value, level, note = '') => rows.push({ id, label, value, level, ok: level === 'go', note });
+  const h = (ms) => `${Math.round(ms / 3600e3)} h`;
+  add('terrain', 'Terrain at the site', site.polar ? `LOLA polar, ${Math.round(site.resKm * 1000)} m and finer near the listed sites` : `global LOLA ${Math.round(site.resKm * 1000)} m, skyline computed`,
+    site.polar ? 'go' : 'warn', site.polar ? '' : 'Lander-scale hazards (rocks, small craters, slopes under ~1 km) are not resolved here; the rover planner needs the polar data south of 80°S.');
+  if (!sky) add('sky', 'Sun and Earth at landing', 'outside the ephemeris (Nov 2026 – Dec 2028)', 'no-go');
+  else {
+    const sun = sky.sun > 0, earth = sky.earth > 0;
+    add('sky', 'Sun and Earth at landing', `${sun ? 'Sun up' : 'Sun down'} (${sky.sun.toFixed(1)}°) · ${earth ? 'Earth up' : 'no Earth'} (${sky.earth.toFixed(1)}°) over the skyline`,
+      sun && earth ? 'go' : sun ? 'warn' : 'no-go', sun && !earth ? 'No direct link to Earth at touchdown: a relay is needed.' : !sun ? 'Touchdown in the dark: no solar power and no lit terrain for the hazard camera.' : '');
+  }
+  add('window', 'Landing window', window ? `${h(window.endMs - window.startMs)} with the bodies up around the landing` : 'none: the bodies are not both up at the landing time', window && window.endMs - window.startMs >= 6 * 3600e3 ? 'go' : 'warn',
+    window ? 'A slip inside the window keeps the same lighting; outside it, plan again.' : '');
+  if (!plan) add('dv', 'Trajectory and Δv', planError ?? 'not planned', 'no-go');
+  else {
+    const m = plan.budget.marginMs;
+    add('dv', 'Δv margin (lander)', `${Math.round(m)} m/s after a ${plan.budget.reserveDvMs} m/s reserve`, m >= 0 ? 'go' : 'no-go', m >= 0 ? '' : 'Not enough propellant: change the vehicle (more propellant, higher Isp, lighter) or the site.');
+  }
+  if (checks) {
+    const bad = checks.filter((c) => !c.ok);
+    add('landing', 'Landing checks', bad.length ? `${checks.length - bad.length} of ${checks.length} pass` : `all ${checks.length} pass`, bad.length ? 'warn' : 'go', bad.map((c) => `${c.label}: ${c.value} (limit ${c.limit})`).join('; '));
+  }
+  if (!route) add('route', 'Rover route', 'none planned', 'warn', 'Surface operations will keep the lander at the site. Plan a route on the Map (route card) to drive it.');
+  else if (!route.belongs) add('route', 'Rover route', `starts ${route.startKm.toFixed(0)} km from the site`, 'warn', 'This route was planned for another site and is left out. Plan one from this site on the Map.');
+  else {
+    add('route', 'Rover route', `${route.label}, ${route.lengthKm.toFixed(1)} km${route.departMs ? '' : ', no departure time'}`, route.departMs ? 'go' : 'warn', route.departMs ? '' : 'Set the departure time in the route card (the drive is simulated from it).');
+    if (route.minSoc !== null) add('battery', 'Rover battery', route.emptyAt ? `runs out at km ${route.emptyAt.km.toFixed(1)}` : `lowest ${Math.round(route.minSoc * 100)} %`, route.emptyAt || route.minSoc < route.reserve ? 'no-go' : 'go', route.emptyAt ? 'Pick another departure time or route on the Map.' : '');
+    add('comms', 'Rover comms', `Earth in view on ${Math.round(route.earthShare * 100)} % of the drive${route.stationShare ? `, station on ${Math.round(route.stationShare * 100)} %` : ''}`, route.earthShare >= 0.5 || route.stationShare >= 0.5 ? 'go' : 'warn');
+  }
+  return rows;
+}
+
+// Where the execution page's lander touched down for a configuration (the nominal descent, or the contingency
+// flown): { configId, landed: { latDeg, lonDeg, tMs, missM, source } | null }. The globe draws the lander there in
+// surface operations. Kept apart from the planning mission, which execution never changes.
+const FLOWN_KEY = 'lsn-flown';
+function writeFlown(configId, landed, storage) {
+  try { store(storage)?.setItem(FLOWN_KEY, JSON.stringify({ configId, landed: landed ?? null })); } catch { /* blocked */ }
+}
+function readFlown(configId, storage) {
+  try { const f = JSON.parse(store(storage)?.getItem(FLOWN_KEY) ?? 'null'); return f && f.configId === configId ? f.landed ?? null : null; } catch { return null; }
+}
+
+return { CONFIG_KEY, CONFIG_VERSION, hash32, configId, buildConfig, readConfig, writeConfig, clearConfig, changesSince, windowAround, verdictOf, routeSummary, goNoGoRows, FLOWN_KEY, writeFlown, readFlown };
 })();
 __m['closeup.js'] = (() => {
 // Close-up of the lander at real size (top of the Vehicle tab): the model in its own small scene, lit by the Sun
@@ -5145,145 +5376,6 @@ function createCloseup(doc = document) {
 }
 
 return { createCloseup };
-})();
-__m['../psr.js'] = (() => {
-// Permanently shadowed regions (task book phase 4 §3 T.5, contract §4.2): the official PSR bitmap
-// (Mazarico et al. 2011, 2016 update; 120 m) as a lookup and as a restrained map layer.
-// The pack psr_120m is size × size bits, row by row, high bit first; row 0 at the top (+y), as the DEMs;
-// pixel (row, col) covers x ∈ [−halfKm + col·k, −halfKm + (col+1)·k), y ∈ (halfKm − (row+1)·k, halfKm − row·k].
-// A set bit is permanent shadow.
-
-const PSR_PACK = 'psr_120m';
-const PSR_DEFAULTS = Object.freeze({ size: 5400, kmPerPixel: 0.12, halfKm: 324 });
-
-// bytes: the pack (Uint8Array); meta: terrain.json `psr` (size, kmPerPixel, halfKm), defaults per §4.2.
-function createPsr(bytes, meta = {}) {
-  const size = meta.size ?? PSR_DEFAULTS.size, k = meta.kmPerPixel ?? PSR_DEFAULTS.kmPerPixel, halfKm = meta.halfKm ?? PSR_DEFAULTS.halfKm;
-  const need = Math.ceil((size * size) / 8);
-  if (!bytes || bytes.length < need) throw new Error(`psr: ${bytes?.length ?? 0} bytes, expected ${need}`);
-  const bitAt = (row, col) => {
-    const idx = row * size + col;
-    return (bytes[idx >> 3] >> (7 - (idx & 7))) & 1;
-  };
-  // true inside a PSR pixel; false elsewhere, including off the bitmap
-  function isPsr(xKm, yKm) {
-    const col = Math.floor((xKm + halfKm) / k), row = Math.floor((halfKm - yKm) / k);
-    if (!(col >= 0 && row >= 0 && col < size && row < size)) return false;
-    return bitAt(row, col) === 1;
-  }
-  return { size, kmPerPixel: k, halfKm, bytes, isPsr, bitAt };
-}
-
-// The PSR mask under a canvas: Uint8Array(width × height), 0 = none, 1 = inside, 2 = outline.
-// geom: { width, height, kmPerPx, cx, cy } (the hillshade rectangle form, canvas px).
-// - Each pixel takes the strict majority of up to 4 × 4 samples spread over its footprint (one sample when a
-//   pixel is smaller than a PSR pixel), so zooming out does not alias.
-// - Restraint: a patch (8-connected) narrower than minPx in either direction, or smaller than minPx²
-//   pixels, is left out, so the zoomed-out map shows no speckle.
-// - Outline: kept pixels with a 4-neighbour outside the kept set (the canvas edge does not count).
-function psrMask(psr, { width, height, kmPerPx, cx = 0, cy = 0 }, { minPx = 2 } = {}) {
-  const raw = new Uint8Array(width * height);
-  const { size, kmPerPixel: k, halfKm, bitAt } = psr;
-  const foot = kmPerPx / k;                                  // PSR pixels per canvas pixel
-  const n = foot <= 1 ? 1 : Math.min(4, Math.ceil(foot));    // samples per axis
-  const x0 = cx - (width * kmPerPx) / 2, y0 = cy + (height * kmPerPx) / 2;
-  // sample columns once per canvas column (and rows once per row): PSR pixel indices, −1 off the bitmap
-  const colIdx = new Int32Array(width * n), rowIdx = new Int32Array(height * n);
-  for (let c = 0; c < width; c++) for (let s = 0; s < n; s++) {
-    const v = Math.floor((x0 + (c + (s + 0.5) / n) * kmPerPx + halfKm) / k);
-    colIdx[c * n + s] = v >= 0 && v < size ? v : -1;
-  }
-  for (let r = 0; r < height; r++) for (let s = 0; s < n; s++) {
-    const v = Math.floor((halfKm - (y0 - (r + (s + 0.5) / n) * kmPerPx)) / k);
-    rowIdx[r * n + s] = v >= 0 && v < size ? v : -1;
-  }
-  const half = (n * n) / 2;
-  let any = false;
-  for (let r = 0; r < height; r++) {
-    for (let c = 0; c < width; c++) {
-      let hits = 0;
-      for (let sr = 0; sr < n; sr++) {
-        const pr = rowIdx[r * n + sr];
-        if (pr < 0) continue;
-        for (let sc = 0; sc < n; sc++) { const pc = colIdx[c * n + sc]; if (pc >= 0) hits += bitAt(pr, pc); }
-      }
-      if (hits > half) { raw[r * width + c] = 1; any = true; }
-    }
-  }
-  if (!any) return raw;
-  // patches: breadth-first fill (the queue doubles as the member list), drop the small ones
-  const keep = new Uint8Array(width * height);
-  const queue = new Int32Array(width * height);
-  for (let start = 0; start < raw.length; start++) {
-    if (raw[start] !== 1) continue;
-    let head = 0, tail = 0;
-    let minX = width, maxX = -1, minY = height, maxY = -1;
-    queue[tail++] = start; raw[start] = 3;               // 3: visited
-    while (head < tail) {
-      const p = queue[head++];
-      const x = p % width, y = (p - x) / width;
-      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
-      for (let dy = -1; dy <= 1; dy++) {
-        const yy = y + dy;
-        if (yy < 0 || yy >= height) continue;
-        for (let dx = -1; dx <= 1; dx++) {
-          const xx = x + dx;
-          if (xx < 0 || xx >= width) continue;
-          const q = yy * width + xx;
-          if (raw[q] === 1) { raw[q] = 3; queue[tail++] = q; }
-        }
-      }
-    }
-    if (maxX - minX + 1 < minPx || maxY - minY + 1 < minPx || tail < minPx * minPx) continue;
-    for (let m = 0; m < tail; m++) keep[queue[m]] = 1;
-  }
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const p = y * width + x;
-      if (!keep[p]) continue;
-      const out = (x > 0 && !keep[p - 1]) || (x < width - 1 && !keep[p + 1]) || (y > 0 && !keep[p - width]) || (y < height - 1 && !keep[p + width]);
-      keep[p] = out ? 2 : 1;
-    }
-  }
-  return keep;
-}
-
-// RGBA (Uint8ClampedArray, width × height × 4) for the layer: a fine outline and a faint diagonal hatch
-// in one neutral colour (default: the Both ink of readColours, the existing neutral; no new hue). The
-// hatch is fixed to the ground, so it moves with the map instead of shimmering over it.
-function psrRaster(psr, geom, { colour = [230, 230, 230], minPx = 2, hatchPx = 6, outlineAlpha = 0.6, hatchAlpha = 0.22 } = {}) {
-  const { width, height, kmPerPx, cx = 0, cy = 0 } = geom;
-  const mask = psrMask(psr, geom, { minPx });
-  const out = new Uint8ClampedArray(width * height * 4);
-  const phase = Math.round((cx - cy) / kmPerPx - (width + height) / 2);
-  const step = Math.max(2, Math.round(hatchPx));
-  const aOut = Math.round(outlineAlpha * 255), aHatch = Math.round(hatchAlpha * 255);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const m = mask[y * width + x];
-      if (!m) continue;
-      let a = 0;
-      if (m === 2) a = aOut;
-      else if ((((x + y + phase) % step) + step) % step === 0) a = aHatch;
-      if (!a) continue;
-      const o = 4 * (y * width + x);
-      out[o] = colour[0]; out[o + 1] = colour[1]; out[o + 2] = colour[2]; out[o + 3] = a;
-    }
-  }
-  return out;
-}
-
-// Draws the layer over what is on ctx (composited, not replaced). geom as psrMask.
-function paintPsr(ctx, psr, geom, opts) {
-  const { width, height } = geom;
-  const img = new ImageData(width, height);
-  img.data.set(psrRaster(psr, geom, opts));
-  const tmp = new OffscreenCanvas(width, height);
-  tmp.getContext('2d').putImageData(img, 0, 0);
-  ctx.drawImage(tmp, 0, 0);
-}
-
-return { PSR_PACK, PSR_DEFAULTS, createPsr, psrMask, psrRaster, paintPsr };
 })();
 __m['../globe-terrain.js'] = (() => {
 // Global lunar terrain model (phase 1, docs/PHASES.md): one height for any latitude and longitude on the
@@ -5541,1196 +5633,6 @@ function subPoint(v) {
 
 return { horizonProfileLL, skylineLL, distanceBearing, destination, subPoint };
 })();
-__m['gazetteer.js'] = (() => {
-// Major named lunar features for the whole-Moon map labels. Names and centre coordinates from the IAU /
-// USGS Gazetteer of Planetary Nomenclature (planetarynames.wr.usgs.gov), accessed 2026-11-14; each value is the one
-// each feature's own page shows by default (control network "LOLA 2011"). The pages give coordinates as
-// "Planetographic, +East, -180 - 180"; the Moon's IAU reference surface is a sphere, so that latitude is also the
-// planetocentric latitude. Longitudes here are east 0–360° (page value + 360 where it was negative); diameter in km
-// as listed there. Rounded to 0.01°, which is how the pages list them.
-// type: 'mare' / 'oceanus' follow the gazetteer feature type. The gazetteer types every other entry here as
-// "Crater, craters"; those listed at 300 km or more (the usual lower bound for a lunar impact basin) are tagged
-// 'basin', the rest 'crater'. South Pole-Aitken basin has no gazetteer entry, so it is not included.
-const GAZETTEER_SOURCE = 'IAU/USGS Gazetteer of Planetary Nomenclature, https://planetarynames.wr.usgs.gov (accessed 2026-11-14)';
-const GAZETTEER = Object.freeze([
-  { name: 'Mare Imbrium', type: 'mare', latDeg: 34.72, lonDeg: 345.09, diameterKm: 1145.53, url: 'https://planetarynames.wr.usgs.gov/Feature/3678' },
-  { name: 'Mare Serenitatis', type: 'mare', latDeg: 27.29, lonDeg: 18.36, diameterKm: 674.28, url: 'https://planetarynames.wr.usgs.gov/Feature/3686' },
-  { name: 'Mare Tranquillitatis', type: 'mare', latDeg: 8.35, lonDeg: 30.83, diameterKm: 875.75, url: 'https://planetarynames.wr.usgs.gov/Feature/3691' },
-  { name: 'Mare Crisium', type: 'mare', latDeg: 16.18, lonDeg: 59.1, diameterKm: 555.92, url: 'https://planetarynames.wr.usgs.gov/Feature/3671' },
-  { name: 'Mare Fecunditatis', type: 'mare', latDeg: -7.83, lonDeg: 53.67, diameterKm: 840.35, url: 'https://planetarynames.wr.usgs.gov/Feature/3673' },
-  { name: 'Mare Nectaris', type: 'mare', latDeg: -15.19, lonDeg: 34.6, diameterKm: 339.39, url: 'https://planetarynames.wr.usgs.gov/Feature/3683' },
-  { name: 'Mare Nubium', type: 'mare', latDeg: -20.59, lonDeg: 342.71, diameterKm: 714.5, url: 'https://planetarynames.wr.usgs.gov/Feature/3684' },
-  { name: 'Mare Humorum', type: 'mare', latDeg: -24.48, lonDeg: 321.43, diameterKm: 419.67, url: 'https://planetarynames.wr.usgs.gov/Feature/3677' },
-  { name: 'Mare Frigoris', type: 'mare', latDeg: 57.59, lonDeg: 359.99, diameterKm: 1446.41, url: 'https://planetarynames.wr.usgs.gov/Feature/3674' },
-  { name: 'Oceanus Procellarum', type: 'oceanus', latDeg: 20.67, lonDeg: 303.32, diameterKm: 2592.24, url: 'https://planetarynames.wr.usgs.gov/Feature/4395' },
-  { name: 'Mare Orientale', type: 'mare', latDeg: -19.87, lonDeg: 265.33, diameterKm: 294.16, url: 'https://planetarynames.wr.usgs.gov/Feature/3685' },
-  { name: 'Mare Moscoviense', type: 'mare', latDeg: 27.28, lonDeg: 148.12, diameterKm: 275.57, url: 'https://planetarynames.wr.usgs.gov/Feature/3682' },
-  { name: 'Mare Australe', type: 'mare', latDeg: -47.77, lonDeg: 91.99, diameterKm: 996.84, url: 'https://planetarynames.wr.usgs.gov/Feature/3665' },
-  { name: 'Mare Smythii', type: 'mare', latDeg: -1.71, lonDeg: 87.05, diameterKm: 373.97, url: 'https://planetarynames.wr.usgs.gov/Feature/3689' },
-  { name: 'Mare Marginis', type: 'mare', latDeg: 12.7, lonDeg: 86.52, diameterKm: 357.63, url: 'https://planetarynames.wr.usgs.gov/Feature/3681' },
-  { name: 'Tycho', type: 'crater', latDeg: -43.3, lonDeg: 348.78, diameterKm: 85.29, url: 'https://planetarynames.wr.usgs.gov/Feature/6163' },
-  { name: 'Copernicus', type: 'crater', latDeg: 9.62, lonDeg: 339.92, diameterKm: 96.07, url: 'https://planetarynames.wr.usgs.gov/Feature/1296' },
-  { name: 'Kepler', type: 'crater', latDeg: 8.12, lonDeg: 321.99, diameterKm: 29.49, url: 'https://planetarynames.wr.usgs.gov/Feature/2990' },
-  { name: 'Aristarchus', type: 'crater', latDeg: 23.73, lonDeg: 312.51, diameterKm: 39.99, url: 'https://planetarynames.wr.usgs.gov/Feature/380' },
-  { name: 'Plato', type: 'crater', latDeg: 51.62, lonDeg: 350.62, diameterKm: 100.68, url: 'https://planetarynames.wr.usgs.gov/Feature/4757' },
-  { name: 'Clavius', type: 'crater', latDeg: -58.62, lonDeg: 345.27, diameterKm: 230.77, url: 'https://planetarynames.wr.usgs.gov/Feature/1236' },
-  { name: 'Grimaldi', type: 'crater', latDeg: -5.38, lonDeg: 291.64, diameterKm: 235, url: 'https://planetarynames.wr.usgs.gov/Feature/2252' },
-  { name: 'Langrenus', type: 'crater', latDeg: -8.86, lonDeg: 61.04, diameterKm: 131.98, url: 'https://planetarynames.wr.usgs.gov/Feature/3273' },
-  { name: 'Petavius', type: 'crater', latDeg: -25.39, lonDeg: 60.78, diameterKm: 184.06, url: 'https://planetarynames.wr.usgs.gov/Feature/4668' },
-  { name: 'Ptolemaeus', type: 'crater', latDeg: -9.16, lonDeg: 358.16, diameterKm: 153.67, url: 'https://planetarynames.wr.usgs.gov/Feature/4860' },
-  { name: 'Theophilus', type: 'crater', latDeg: -11.45, lonDeg: 26.28, diameterKm: 98.59, url: 'https://planetarynames.wr.usgs.gov/Feature/5965' },
-  { name: 'Shackleton', type: 'crater', latDeg: -89.67, lonDeg: 129.78, diameterKm: 20.92, url: 'https://planetarynames.wr.usgs.gov/Feature/5450' },
-  { name: 'Von Kármán', type: 'crater', latDeg: -44.45, lonDeg: 176.25, diameterKm: 186.35, url: 'https://planetarynames.wr.usgs.gov/Feature/6440' },
-  { name: 'Hertzsprung', type: 'basin', latDeg: 1.37, lonDeg: 231.34, diameterKm: 536.37, url: 'https://planetarynames.wr.usgs.gov/Feature/2482' },
-  { name: 'Korolev', type: 'basin', latDeg: -4.19, lonDeg: 202.59, diameterKm: 423.41, url: 'https://planetarynames.wr.usgs.gov/Feature/3090' },
-  { name: 'Apollo', type: 'basin', latDeg: -35.69, lonDeg: 208.52, diameterKm: 524.23, url: 'https://planetarynames.wr.usgs.gov/Feature/326' },
-  { name: 'Schrödinger', type: 'basin', latDeg: -74.73, lonDeg: 132.93, diameterKm: 316.39, url: 'https://planetarynames.wr.usgs.gov/Feature/5381' },
-]);
-
-return { GAZETTEER_SOURCE, GAZETTEER };
-})();
-__m['../score.js'] = (() => {
-// Per-cell filters and the suitability score (task book phase 3 §4.3, §4.4, §5.4).
-// All arrays are one value per heat-grid cell, indexed j × size + i like heat.js.
-
-const DEFAULT_WEIGHTS = { sun: 40, earth: 30, slope: 20, shadow: 10 };
-const SLOPE_SCALE_DEG = 20;
-const SHADOW_SCALE_KM = 50;
-
-// Decodes a static per-cell byte grid: slope bytes × 0.25 = degrees, shadow bytes × 1 = km.
-function staticGrid(bytes, scale) {
-  const out = new Float32Array(bytes.length);
-  for (let k = 0; k < bytes.length; k++) out[k] = bytes[k] * scale;
-  return out;
-}
-
-// null (or undefined) limit means Any. Limits are inclusive. A value that is not a finite number
-// cannot be shown to pass, so it fails any active limit.
-function passes(slopeDeg, darkH, { maxSlope = null, maxDark = null } = {}) {
-  if (maxSlope != null && !(typeof slopeDeg === 'number' && slopeDeg <= maxSlope)) return false;
-  if (maxDark != null && !(typeof darkH === 'number' && darkH <= maxDark)) return false;
-  return true;
-}
-
-// 1 = filtered out, 0 = passes. An active limit whose array is missing filters every cell out.
-function filterMask({ slope = null, dark = null, maxSlope = null, maxDark = null, count }) {
-  const n = count ?? slope?.length ?? dark?.length ?? 0;
-  const out = new Uint8Array(n);
-  if (maxSlope == null && maxDark == null) return out;
-  const limits = { maxSlope, maxDark };
-  for (let k = 0; k < n; k++) out[k] = passes(slope ? slope[k] : NaN, dark ? dark[k] : NaN, limits) ? 0 : 1;
-  return out;
-}
-
-// Accepts { sun, earth, slope, shadow } or [sun, earth, slope, shadow] (the hash order).
-// Negative or non-numeric weights count as 0.
-function weightsOf(w) {
-  const v = Array.isArray(w) ? { sun: w[0], earth: w[1], slope: w[2], shadow: w[3] } : (w ?? DEFAULT_WEIGHTS);
-  const f = (x) => Math.max(0, +x || 0);
-  return { sun: f(v.sun), earth: f(v.earth), slope: f(v.slope), shadow: f(v.shadow) };
-}
-
-const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-
-// Weighted mean of four 0–1 terms: sun fraction, Earth fraction, clamp(1 − slope/20°),
-// clamp(1 − shadowKm/50 km), except that a cell inside persistent shadow (shadowKm 0) scores 0 on the
-// shadow term: the term rewards sunlit ground within reach of shadow, not the shadow itself (task book
-// revision, wave 2). Terms with weight 0 are ignored (their arrays may be null).
-// All NaN when the weights sum to 0; NaN in a cell where a weighted input is missing or not finite.
-function scoreCells({ sun = null, earth = null, slope = null, shadowKm = null, weights = DEFAULT_WEIGHTS, count }) {
-  const w = weightsOf(weights);
-  const n = count ?? sun?.length ?? earth?.length ?? slope?.length ?? shadowKm?.length ?? 0;
-  const out = new Float32Array(n);
-  const total = w.sun + w.earth + w.slope + w.shadow;
-  if (!(total > 0)) return out.fill(NaN);
-  for (let k = 0; k < n; k++) {
-    let acc = 0;
-    if (w.sun) acc += w.sun * clamp01(sun ? sun[k] : NaN);
-    if (w.earth) acc += w.earth * clamp01(earth ? earth[k] : NaN);
-    if (w.slope) acc += w.slope * clamp01(1 - (slope ? slope[k] : NaN) / SLOPE_SCALE_DEG);
-    if (w.shadow) {
-      const d = shadowKm ? shadowKm[k] : NaN;
-      acc += w.shadow * (d === 0 ? 0 : clamp01(1 - d / SHADOW_SCALE_KM));
-    }
-    out[k] = acc / total;
-  }
-  return out;
-}
-
-return { DEFAULT_WEIGHTS, SLOPE_SCALE_DEG, SHADOW_SCALE_KM, staticGrid, passes, filterMask, scoreCells };
-})();
-__m['siteplan.js'] = (() => {
-// Choosing where to land (pure computation, no DOM): the landing ellipse around a point, the terrain inside it,
-// Sun and Earth above the real skyline over the stay, the longest dark spell against the battery, permanent
-// shadow, and a grid search around a pick ranked with the navigator's suitability score (score.js).
-// Map coordinates are the polar-stereographic km of terrain.js; heights in metres.
-const { azEl } = __m['../geometry.js'];
-const { toXY, fromXY } = __m['../terrain.js'];
-const { scoreCells, passes, DEFAULT_WEIGHTS } = __m['../score.js'];
-const { slopeDeg, mapScale } = __m['landing.js'];
-
-// Assumed 3σ landing dispersion with terrain-relative navigation: 150 m down-range × 100 m cross-range.
-// A polar orbit passes over the pole, so near it the descent runs along the meridian: down-range is radial on
-// the polar map.
-const ELLIPSE = Object.freeze({ downrangeM: 150, crossrangeM: 100 });
-
-// Map points (km) inside the ellipse centred on (x, y), on a grid of stepM.
-function ellipsePoints(xKm, yKm, { downrangeM = ELLIPSE.downrangeM, crossrangeM = ELLIPSE.crossrangeM, stepM = 20, k = null } = {}) {
-  const r = Math.hypot(xKm, yKm);
-  const u = r > 1e-9 ? [xKm / r, yKm / r] : [0, 1];   // down-range (radial = along the meridian)
-  const v = [-u[1], u[0]];                              // cross-range
-  // ground metres → map km with the map scale at the point (1.008 at 80°S, 2 at the equator)
-  const kk = k ?? mapScale(2 * Math.atan(r / (2 * 1737.4)) * 180 / Math.PI - 90);
-  const a = (downrangeM / 1000) * kk, b = (crossrangeM / 1000) * kk, s = (stepM / 1000) * kk;
-  const out = [];
-  for (let i = -Math.floor(a / s); i <= Math.floor(a / s); i++) {
-    for (let j = -Math.floor(b / s); j <= Math.floor(b / s); j++) {
-      const p = i * s, q = j * s;
-      if ((p * p) / (a * a) + (q * q) / (b * b) > 1) continue;
-      out.push([xKm + p * u[0] + q * v[0], yKm + p * u[1] + q * v[1]]);
-    }
-  }
-  return out;
-}
-
-// Terrain inside the ellipse: slopes over baselineKm (share over the lander's limit, mean, 95th percentile) and
-// roughness (RMS of heights about the best-fit plane, m) at the DEM's scale. Rocks are below every DEM here.
-function terrainStats(sample, pts, { baselineKm = 0.04, limitDeg = 10, k = 1 } = {}) {
-  const sl = [], hs = [];
-  for (const [x, y] of pts) {
-    const s = slopeDeg(sample, x, y, baselineKm, k);
-    if (Number.isFinite(s)) sl.push(s);
-    const h = sample(x, y);
-    if (Number.isFinite(h)) hs.push([(x * 1000) / k, (y * 1000) / k, h]);   // ground metres
-  }
-  if (!sl.length) return { n: 0, overLimit: NaN, meanDeg: NaN, p95Deg: NaN, roughM: NaN };
-  sl.sort((p, q) => p - q);
-  const over = sl.filter((s) => s > limitDeg).length / sl.length;
-  return { n: sl.length, overLimit: over, meanDeg: sl.reduce((p, q) => p + q, 0) / sl.length, p95Deg: sl[Math.min(sl.length - 1, Math.floor(0.95 * sl.length))], roughM: planeRms(hs) };
-}
-
-// RMS distance of points (x, y, h) from their least-squares plane h = a + b x + c y.
-function planeRms(pts) {
-  const n = pts.length;
-  if (n < 4) return NaN;
-  let mx = 0, my = 0, mh = 0;
-  for (const [x, y, h] of pts) { mx += x; my += y; mh += h; }
-  mx /= n; my /= n; mh /= n;
-  let sxx = 0, syy = 0, sxy = 0, sxh = 0, syh = 0;
-  for (const [x0, y0, h0] of pts) {
-    const x = x0 - mx, y = y0 - my, h = h0 - mh;
-    sxx += x * x; syy += y * y; sxy += x * y; sxh += x * h; syh += y * h;
-  }
-  const det = sxx * syy - sxy * sxy;
-  const b = det ? (sxh * syy - syh * sxy) / det : 0, c = det ? (syh * sxx - sxh * sxy) / det : 0;
-  let ss = 0;
-  for (const [x0, y0, h0] of pts) { const r = h0 - mh - b * (x0 - mx) - c * (y0 - my); ss += r * r; }
-  return Math.sqrt(ss / n);
-}
-
-// Sun and Earth directions over the stay, once for all points: [{ tMs, sun, earth, earthRangeKm }].
-function skyDirections(eph, startMs, days, stepH = 1) {
-  const out = [];
-  const n = Math.max(1, Math.round((days * 24) / stepH));
-  for (let i = 0; i < n; i++) {
-    const t = startMs + (i + 0.5) * stepH * 3600e3;
-    const d = eph.at(t);
-    if (d) out.push({ tMs: t, ...d });
-  }
-  return out;
-}
-
-// Over those directions at one place with its skyline mask (az → deg): shares of time with the Sun / the Earth
-// above the skyline, and the longest spells without each (hours).
-function skyStats(dirs, site, mask, stepH = 1) {
-  const m = typeof mask === 'function' ? mask : () => mask ?? 0;
-  let s = 0, e = 0, b = 0, run = 0, longest = 0, runE = 0, longestE = 0;
-  for (const d of dirs) {
-    const su = azEl(d.sun, Infinity, site.lonDeg, site.latDeg), ea = azEl(d.earth, d.earthRangeKm, site.lonDeg, site.latDeg);
-    const sun = su.elDeg > m(su.azDeg), earth = ea.elDeg > m(ea.azDeg);
-    if (sun) { s++; run = 0; } else if (++run > longest) longest = run;
-    if (earth) { e++; runE = 0; } else if (++runE > longestE) longestE = runE;
-    if (sun && earth) b++;
-  }
-  const n = dirs.length || 1;
-  return { sun: s / n, earth: e / n, both: b / n, longestDarkH: longest * stepH, longestNoEarthH: longestE * stepH, hours: dirs.length * stepH };
-}
-
-// Hours the battery carries the surface load through darkness (usable share above the minimum state of charge).
-const batteryHours = (vehicle) => (vehicle.batteryWh * (1 - vehicle.batteryMinSoc)) / Math.max(1, vehicle.loadsW.surface);
-
-// One figure graded against its limits: 'pass' | 'near' | 'fail'. higher: true when more is better.
-function grade(value, { pass, near, higher = false }) {
-  if (!Number.isFinite(value)) return 'fail';
-  if (higher) return value >= pass ? 'pass' : value >= near ? 'near' : 'fail';
-  return value <= pass ? 'pass' : value <= near ? 'near' : 'fail';
-}
-
-// The figures for one place, each { id, label, value, text, limit, grade, note }.
-// t: terrainStats; sky: skyStats; psrShare: share of the ellipse in permanent shadow; budget: plan budget or null;
-// earthAtLanding: boolean; battH: batteryHours; res: DEM km per pixel used for the slopes.
-function figures({ t, sky, psrShare, psrNote = null, budget = null, earthAtLanding = null, earthWindow = true, battH, limitDeg, resKm, stayDays }) {
-  const pct = (x) => `${Math.round(x * 100)} %`;
-  const out = [];
-  const add = (id, label, value, text, limit, g, note) => out.push({ id, label, value, text, limit, grade: g, note });
-  add('slope', 'Ellipse steeper than the lander limit', t.overLimit, Number.isFinite(t.overLimit) ? pct(t.overLimit) : 'no data', `≤ 5 % (limit ${limitDeg}°)`, grade(t.overLimit, { pass: 0.05, near: 0.15 }),
-    `slope over ${Math.round(resKm * 2000)} m on the ${Math.round(resKm * 1000)} m DEM; mean ${Number.isFinite(t.meanDeg) ? t.meanDeg.toFixed(1) : '—'}°, 95 % below ${Number.isFinite(t.p95Deg) ? t.p95Deg.toFixed(1) : '—'}°`);
-  // roughness needs several DEM pixels across the ellipse: at 120 m and coarser it is not resolved (graded near)
-  const roughOk = resKm <= 0.04 && Number.isFinite(t.roughM);
-  add('rough', 'Roughness in the ellipse', roughOk ? t.roughM : NaN, roughOk ? `${t.roughM.toFixed(1)} m RMS` : `not resolved at ${Math.round(resKm * 1000)} m`, '≤ 1 m RMS (assumed)', roughOk ? grade(t.roughM, { pass: 1, near: 2.5 }) : 'near',
-    roughOk ? `height scatter about the best-fit plane on the ${Math.round(resKm * 1000)} m DEM; rocks are smaller than the DEM and not modelled` : 'needs 40 m or finer elevation data across the ellipse; rocks are not modelled either way');
-  if (Number.isFinite(psrShare)) add('psr', 'Ellipse in permanent shadow', psrShare, pct(psrShare), '0 %', grade(psrShare, { pass: 0, near: 0.05 }), psrNote ?? 'LOLA PSR map, 120 m (Mazarico et al. 2011)');
-  else add('psr', 'Ellipse in permanent shadow', NaN, 'unknown', '0 %', 'near', psrNote ?? 'no permanent-shadow map here');
-  add('sun', `Sun above the skyline over ${stayDays} days`, sky.sun, `${pct(sky.sun)} (${Math.round(sky.sun * sky.hours)} h)`, '≥ 70 %', grade(sky.sun, { pass: 0.7, near: 0.4, higher: true }), 'ephemeris + LOLA skyline, hourly');
-  add('dark', 'Longest dark spell vs battery', sky.longestDarkH, `${Math.round(sky.longestDarkH)} h of ${battH.toFixed(1)} h`, `≤ ${battH.toFixed(1)} h on battery`, grade(sky.longestDarkH / Math.max(0.1, battH), { pass: 1, near: 1.5 }),
-    'battery and surface load assumed (Vehicle tab)');
-  add('earth', `Earth above the skyline over ${stayDays} days`, sky.earth, `${pct(sky.earth)} (${Math.round(sky.earth * sky.hours)} h)`, '≥ 50 %', grade(sky.earth, { pass: 0.5, near: 0.25, higher: true }), 'direct-to-Earth line of sight; no relay modelled here');
-  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', earthWindow ? 'needed for a live landing link' : 'the Earth never clears the skyline in the window (far side): a relay is needed');
-  if (budget) add('dv', 'Lander Δv margin after the reserve', budget.marginMs, `${Math.round(budget.marginMs)} m/s · ${Math.round(budget.propellantLeftKg)} kg left`, '≥ 50 m/s', grade(budget.marginMs, { pass: 50, near: 0, higher: true }), 'from the planned orbit, rocket equation; vehicle assumed');
-  return out;
-}
-
-// One sentence for the figures; resKm adds what the terrain resolution cannot show.
-function verdict(figs, { resKm = null } = {}) {
-  const fails = figs.filter((f) => f.grade === 'fail'), nears = figs.filter((f) => f.grade === 'near');
-  const names = (l) => l.map((f) => f.label.toLowerCase()).join(', ');
-  const res = resKm > 0.1 ? ` Terrain ${Math.round(resKm * 1000)} m: lander-scale hazards (rocks, small craters, slopes under about 1 km) are not resolved.` : '';
-  if (fails.length) return { grade: 'fail', text: `Not recommended: ${names(fails)}${nears.length ? `; also close on ${names(nears)}` : ''}.${res}` };
-  if (nears.length) return { grade: 'near', text: `Possible with care: ${names(nears)} near the limit; everything else passes.${res}` };
-  return { grade: 'pass', text: `Good landing site: every figure passes its limit.${res}` };
-}
-
-// Where a landing is possible, cell by cell (for the shading): 2 = landable (every check passes), 1 = possible
-// (passes with something near its limit), 0 = not. The same limits as the figures: slope over the DEM baseline
-// within the lander limit, no permanent shadow in the cell or nearer than 1 km, Sun ≥ 70 % (≥ 40 %), Earth ≥ 50 %
-// (≥ 25 %) over the stay, longest dark spell ≤ battery (≤ 1.5 ×), and reachable (Δv margin ≥ 0) where given.
-const LANDABLE = Object.freeze({ sun: [0.7, 0.4], earth: [0.5, 0.25], dark: [1, 1.5] });
-function landableClass({ sun, earth, darkH, slopeDeg, shadowKm, marginMs = 0 }, { limitDeg, battH }) {
-  if (!(slopeDeg <= limitDeg) || !(shadowKm >= 1) || !(marginMs >= 0)) return 0;
-  if (!(Number.isFinite(sun) && Number.isFinite(earth) && Number.isFinite(darkH))) return 0;
-  if (sun >= LANDABLE.sun[0] && earth >= LANDABLE.earth[0] && darkH <= LANDABLE.dark[0] * battH) return 2;
-  if (sun >= LANDABLE.sun[1] && earth >= LANDABLE.earth[1] && darkH <= LANDABLE.dark[1] * battH) return 1;
-  return 0;
-}
-
-// Search grid around a map point: centres every stepKm within radiusKm (a square), with lat/lon.
-function searchGrid(xKm, yKm, { radiusKm = 15, stepKm = 1 } = {}) {
-  const out = [];
-  const n = Math.round(radiusKm / stepKm);
-  for (let j = -n; j <= n; j++) for (let i = -n; i <= n; i++) {
-    const x = xKm + i * stepKm, y = yKm + j * stepKm;
-    const { latDeg, lonDeg } = fromXY(x, y);
-    out.push({ i, j, xKm: x, yKm: y, latDeg, lonDeg });
-  }
-  return out;
-}
-
-// Suitability of grid points (navigator score: Sun 40, Earth 30, slope 20, nearness to shadow 10) and whether
-// each passes the hard limits (slope ≤ limit, longest dark ≤ battery, not in permanent shadow).
-// pts: [{ sun, earth, slopeDeg, shadowKm, darkH }] → [{ score (0–1), ok }]
-function suitability(pts, { limitDeg, battH, weights = DEFAULT_WEIGHTS }) {
-  const arr = (k) => Float32Array.from(pts, (p) => p[k]);
-  const s = scoreCells({ sun: arr('sun'), earth: arr('earth'), slope: arr('slopeDeg'), shadowKm: arr('shadowKm'), weights, count: pts.length });
-  return pts.map((p, k) => ({ score: s[k], ok: passes(p.slopeDeg, p.darkH, { maxSlope: limitDeg, maxDark: battH }) && p.shadowKm !== 0 }));
-}
-
-// The best `count` points that pass, highest score first, each at least minKm from those taken (and from `avoid`).
-function bestPoints(pts, { count = 5, minKm = 2, avoid = [] } = {}) {
-  const order = pts.filter((p) => p.ok && Number.isFinite(p.score)).sort((a, b) => b.score - a.score);
-  const taken = [];
-  for (const p of order) {
-    if ([...avoid, ...taken].every((q) => Math.hypot(q.xKm - p.xKm, q.yKm - p.yKm) >= minKm)) taken.push(p);
-    if (taken.length === count) break;
-  }
-  return taken;
-}
-
-const mapXY = (latDeg, lonDeg) => toXY(latDeg, lonDeg);
-
-return { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, LANDABLE, landableClass, searchGrid, suitability, bestPoints, mapXY };
-})();
-__m['../heat.js'] = (() => {
-// Heat-map arithmetic over the precomputed terrain-skyline grid (spec phase 2 §2.4, §3.1–§3.2).
-// Cells are indexed j × size + i, i to the right (+x), j downwards (−y).
-const { fromXY } = __m['../terrain.js'];
-
-const R = 1737.4;
-const RAD = Math.PI / 180;
-const DEG = 180 / Math.PI;
-const DAY_MS = 86400e3;
-
-function createHeatGrid({ horizon, size, cellKm, halfKm, azimuths, offsetDeg, stepDeg }) {
-  const count = size * size;
-  const nx = new Float64Array(count), ny = new Float64Array(count), nz = new Float64Array(count);
-  const exs = new Float64Array(count), eys = new Float64Array(count);
-  const nnx = new Float64Array(count), nny = new Float64Array(count), nnz = new Float64Array(count);
-  const xs = new Float32Array(count), ys = new Float32Array(count);
-  const lats = new Float32Array(count), lons = new Float32Array(count);
-  for (let j = 0; j < size; j++) {
-    for (let i = 0; i < size; i++) {
-      const k = j * size + i;
-      const x = -halfKm + (i + 0.5) * cellKm, y = halfKm - (j + 0.5) * cellKm;
-      const { latDeg, lonDeg } = fromXY(x, y);
-      const phi = latDeg * RAD, lam = lonDeg * RAD;
-      const cp = Math.cos(phi), sp = Math.sin(phi), cl = Math.cos(lam), sl = Math.sin(lam);
-      nx[k] = cp * cl; ny[k] = cp * sl; nz[k] = sp;
-      exs[k] = -sl; eys[k] = cl;
-      nnx[k] = -sp * cl; nny[k] = -sp * sl; nnz[k] = cp;
-      xs[k] = x; ys[k] = y; lats[k] = latDeg; lons[k] = lonDeg;
-    }
-  }
-  // Skyline bytes stay as they are (one row of `azimuths` Uint8 values per cell) and are decoded
-  // through a 256-entry table. The table holds the same Float32-rounded degrees the old per-sample
-  // copy held, so clearance() is bit-for-bit unchanged while a 640² × 72 grid needs no 118 MB copy.
-  const lut = new Float32Array(256);
-  for (let v = 0; v < 256; v++) lut[v] = v * stepDeg + offsetDeg;
-  const sky = horizon;
-  const binsPerRad = azimuths / (2 * Math.PI);
-
-  // Elevation (deg) of direction v minus the skyline in its azimuth, at cell k.
-  function clearance(k, vx, vy, vz) {
-    const up = vx * nx[k] + vy * ny[k] + vz * nz[k];
-    const east = vx * exs[k] + vy * eys[k];
-    const north = vx * nnx[k] + vy * nny[k] + vz * nnz[k];
-    let a = Math.atan2(east, north);
-    if (a < 0) a += 2 * Math.PI;
-    const b = a * binsPerRad;
-    const b0 = Math.floor(b) % azimuths;
-    const f = b - Math.floor(b);
-    const base = k * azimuths;
-    const h0 = lut[sky[base + b0]];
-    const h = h0 + (lut[sky[base + ((b0 + 1) % azimuths)]] - h0) * f;
-    return Math.asin(Math.max(-1, Math.min(1, up))) * DEG - h;
-  }
-
-  function visibility(k, dirs) {
-    const s = dirs.sun;
-    let bits = clearance(k, s[0], s[1], s[2]) > 0 ? 1 : 0;
-    const e = dirs.earth, rng = dirs.earthRangeKm;
-    // Earth with parallax: the direction from the site, not from the Moon's centre.
-    const ex = e[0] * rng - R * nx[k], ey = e[1] * rng - R * ny[k], ez = e[2] * rng - R * nz[k];
-    const len = Math.hypot(ex, ey, ez);
-    if (clearance(k, ex / len, ey / len, ez / len) > 0) bits |= 2;
-    return bits;
-  }
-
-  // The same two clearances as visibility (deg above the skyline: out[0] the Sun, out[1] the Earth);
-  // visibility's bits are exactly (out[0] > 0) | (out[1] > 0) << 1.
-  function clearances(k, dirs, out) {
-    const s = dirs.sun;
-    out[0] = clearance(k, s[0], s[1], s[2]);
-    const e = dirs.earth, rng = dirs.earthRangeKm;
-    const ex = e[0] * rng - R * nx[k], ey = e[1] * rng - R * ny[k], ez = e[2] * rng - R * nz[k];
-    const len = Math.hypot(ex, ey, ez);
-    out[1] = clearance(k, ex / len, ey / len, ez / len);
-    return out;
-  }
-
-  return {
-    size, count, cellKm, halfKm,
-    cellCenter: (k) => ({ latDeg: lats[k], lonDeg: lons[k], xKm: xs[k], yKm: ys[k] }),
-    cellAt(xKm, yKm) {
-      const i = Math.floor((xKm + halfKm) / cellKm), j = Math.floor((halfKm - yKm) / cellKm);
-      return i >= 0 && j >= 0 && i < size && j < size ? j * size + i : null;
-    },
-    visibility, clearances,
-  };
-}
-
-// Sun, Earth and both-in-view fractions per cell over [startMs, endMs], sampled at the middle of
-// each step, plus `dark`: the longest run of consecutive samples without the Sun, in hours (capped at
-// the stay length). run(budgetMs) works one grid row at a time until the budget is spent or all rows
-// are done. `opts` is either a number (the old stepMs argument) or { stepMs, rect, mask }:
-// rect = { i0, j0, i1, j1 } (inclusive) limits the cells computed, mask (Uint8, one per cell, 0 = skip)
-// limits them further. Cells not computed keep 0 in every output.
-function fractionJob(grid, eph, startMs, endMs, opts) {
-  const o = typeof opts === 'number' ? { stepMs: opts } : (opts ?? {});
-  const stepMs = o.stepMs ?? 2 * 3600e3;
-  const mask = o.mask ?? null;
-  const last = grid.size - 1;
-  const clampIndex = (v, d) => Math.max(0, Math.min(last, Math.floor(v ?? d)));
-  const r = o.rect ?? {};
-  const rect = { i0: clampIndex(r.i0, 0), j0: clampIndex(r.j0, 0), i1: clampIndex(r.i1, last), j1: clampIndex(r.j1, last) };
-  const total = rect.i1 >= rect.i0 && rect.j1 >= rect.j0 ? rect.j1 - rect.j0 + 1 : 0;
-
-  const n = Math.max(1, Math.ceil((endMs - startMs) / stepMs));
-  const dirs = [];
-  for (let k = 0; k < n; k++) {
-    const d = eph.at(Math.min(endMs, startMs + (k + 0.5) * stepMs));
-    if (d) dirs.push(d);
-  }
-  const stepH = stepMs / 3600e3, stayH = Math.max(0, (endMs - startMs) / 3600e3);
-  const sun = new Float32Array(grid.count), earth = new Float32Array(grid.count), both = new Float32Array(grid.count);
-  const dark = new Float32Array(grid.count);
-  const job = { sun, earth, both, dark, rect, mask, total, stepMs, done: total === 0, progress: total === 0 ? 1 : 0, rows: 0 };
-  job.run = (budgetMs) => {
-    const until = performance.now() + budgetMs;
-    do {
-      if (job.rows >= total) break;
-      const j = rect.j0 + job.rows;
-      for (let k = j * grid.size + rect.i0; k <= j * grid.size + rect.i1; k++) {
-        if (mask && !mask[k]) continue;
-        let s = 0, e = 0, b = 0, run = 0, longest = 0;
-        for (const d of dirs) {
-          const v = grid.visibility(k, d);
-          if (v & 1) { s++; run = 0; } else if (++run > longest) longest = run;
-          if (v & 2) e++;
-          if (v === 3) b++;
-        }
-        const m = dirs.length || 1;
-        sun[k] = s / m; earth[k] = e / m; both[k] = b / m;
-        dark[k] = Math.min(stayH, longest * stepH);
-      }
-      job.rows++;
-    } while (performance.now() < until);
-    job.progress = total ? job.rows / total : 1;
-    job.done = job.rows >= total;
-    return job.done;
-  };
-  return job;
-}
-
-// Visibility bits per cell at tMs (1 Sun, 2 Earth). Fix H: the array also carries sunDeg and earthDeg
-// (Float32Array, deg above the skyline) for the smoothed display, and { rect, mask } (as fractionJob)
-// limits the cells computed; others stay 0 with margins NaN.
-function nowStates(grid, eph, tMs, { rect = null, mask = null } = {}) {
-  const out = new Uint8Array(grid.count);
-  const d = eph.at(tMs);
-  const keep = !!grid.clearances;
-  if (keep) { out.sunDeg = new Float32Array(grid.count).fill(NaN); out.earthDeg = new Float32Array(grid.count).fill(NaN); }
-  if (!d) return out;
-  const last = grid.size - 1, cl = (v, def) => Math.max(0, Math.min(last, v ?? def));
-  const i0 = cl(rect?.i0, 0), i1 = cl(rect?.i1, last), j0 = cl(rect?.j0, 0), j1 = cl(rect?.j1, last);
-  const c = [0, 0];
-  for (let j = j0; j <= j1; j++) {
-    for (let k = j * grid.size + i0; k <= j * grid.size + i1; k++) {
-      if (mask && !mask[k]) continue;
-      if (!keep) { out[k] = grid.visibility(k, d); continue; }
-      grid.clearances(k, d, c);
-      out[k] = (c[0] > 0 ? 1 : 0) | (c[1] > 0 ? 2 : 0);
-      out.sunDeg[k] = c[0]; out.earthDeg[k] = c[1];
-    }
-  }
-  return out;
-}
-
-// Greedy best cells: highest value first (ties by `tiebreak`), each at least minKm from those already taken.
-function topCells(values, tiebreak, grid, { count = 5, minKm = 20 } = {}) {
-  const order = [];
-  for (let k = 0; k < values.length; k++) if (values[k] > 0) order.push(k);
-  order.sort((a, b) => values[b] - values[a] || tiebreak[b] - tiebreak[a] || a - b);
-  const picked = [];
-  for (const k of order) {
-    const c = grid.cellCenter(k);
-    if (picked.every((p) => Math.hypot(p.xKm - c.xKm, p.yKm - c.yKm) >= minKm)) picked.push({ k, xKm: c.xKm, yKm: c.yKm });
-    if (picked.length === count) break;
-  }
-  return picked.map((p) => p.k);
-}
-
-function shareAtLeast(values, threshold) {
-  let n = 0;
-  for (let k = 0; k < values.length; k++) if (values[k] >= threshold) n++;
-  return n / values.length;
-}
-
-// Cells whose both-in-view time changes by more than a day between the two landing dates.
-function changeShares(planned, alt, stayMs) {
-  let loses = 0, gains = 0;
-  for (let k = 0; k < planned.length; k++) {
-    const d = (alt[k] - planned[k]) * stayMs;
-    if (d < -DAY_MS) loses++;
-    else if (d > DAY_MS) gains++;
-  }
-  return { loses: loses / planned.length, gains: gains / planned.length };
-}
-
-return { createHeatGrid, fractionJob, nowStates, topCells, shareAtLeast, changeShares };
-})();
-__m['planner.js'] = (() => {
-// "Choose where to land" (step 1 of the mission): a full-screen map of the south polar region (relief from the
-// finest LOLA level in view, permanent shadow, the listed sites, the 80°S edge of the data) and a whole-Moon view;
-// a click or a typed latitude/longitude proposes a landing point. The point and its landing ellipse are scored
-// (siteplan.js), a grid around it is searched for better spots (navigator suitability, score.js), the top five
-// are ranked on the map and in a table, and "Land here" hands the chosen point to the page (onLand).
-const { loadData } = __m['../data-loader.js'];
-const { createDem, toXY, fromXY, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
-const { createPsr, paintPsr, PSR_PACK } = __m['../psr.js'];
-const { decodePack, G0, G2, sampleG0 } = __m['../globe-terrain.js'];
-const { loadSiteTerrain } = __m['terrain-local.js'];
-const { pickLandingWindow, skyAt, mapScale, slopeDeg } = __m['landing.js'];
-const { distanceBearing, subPoint } = __m['skyline.js'];
-const { GAZETTEER, GAZETTEER_SOURCE } = __m['gazetteer.js'];
-const { planMission } = __m['mission.js'];
-const { ELLIPSE, ellipsePoints, terrainStats, skyDirections, skyStats, batteryHours, figures, verdict, searchGrid, suitability, bestPoints, landableClass, LANDABLE } = __m['siteplan.js'];
-const { createHeatGrid, fractionJob } = __m['../heat.js'];
-
-const RAD = Math.PI / 180;
-const EDGE_KM = Math.hypot(...toXY(TERRAIN_MAX_LAT, 0));   // 80°S on the polar map
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
-const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
-const tick = () => new Promise((r) => setTimeout(r, 0));
-
-// "−85.4, 35.3", "85.4S 35.3E", "85.4 S, 324.7 E" → { latDeg, lonDeg } | null
-function parseLatLon(text) {
-  const m = String(text).trim().match(/^(-?\d+(?:\.\d+)?)\s*°?\s*([NS])?[\s,;]+(-?\d+(?:\.\d+)?)\s*°?\s*([EW])?$/i);
-  if (!m) return null;
-  let lat = Number(m[1]), lon = Number(m[3]);
-  if (m[2] && m[2].toUpperCase() === 'S') lat = -Math.abs(lat);
-  if (m[4] && m[4].toUpperCase() === 'W') lon = -Math.abs(lon);
-  if (!(lat >= -90 && lat <= 90)) return null;
-  let L = lon % 360;
-  if (L < 0) L += 360;   // (no + 360 on positive longitudes: keeps 35.3 exactly 35.3)
-  return { latDeg: lat, lonDeg: L };
-}
-
-function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getStayStartMs, getCurrent, onLand }) {
-  root.innerHTML = `
-    <div class="pl-map">
-      <canvas aria-label="Map of the lunar south pole: click to propose a landing point"></canvas>
-      <div class="pl-top glass">
-        <div class="seg" role="group" aria-label="Map"><button data-view="polar" class="on" title="Map around the point (south polar stereographic; polar data south of 80°S, global LOLA elsewhere)">Map</button><button data-view="moon">Whole Moon</button></div>
-        <label class="pl-names" title="Major named features from the IAU/USGS Gazetteer" hidden><input type="checkbox" checked> Names</label>
-        <form class="pl-go"><input type="text" placeholder="lat, lon  e.g. 85.4S 35.3E" aria-label="Latitude and longitude"><button class="btn" type="submit">Go</button></form>
-        <span class="pl-hint">Click the map to propose a landing point · drag to pan · wheel or pinch to zoom</span>
-      </div>
-      <div class="pl-act ab" role="toolbar" aria-label="Planner actions"></div>
-      <div class="pl-zoom"><button class="cam" data-z="1.6" aria-label="Zoom in" title="Zoom in">+</button><button class="cam" data-z="0.625" aria-label="Zoom out" title="Zoom out">−</button></div>
-      <div class="pl-key glass"></div>
-      <div class="pl-read glass" hidden></div>
-      <div class="pl-toast" hidden></div>
-    </div>
-    <aside class="pl-side glass">
-      <header><h2>Choose where to land</h2></header>
-      <p class="pl-assume"></p>
-      <div class="pl-body"><p class="note">Click anywhere on the south polar map (80°S to the pole, where this page has terrain, skyline and descent data), or type a latitude and longitude.</p></div>
-    </aside>`;
-  const canvas = root.querySelector('canvas'), ctx = canvas.getContext('2d');
-  const body = root.querySelector('.pl-body'), keyBox = root.querySelector('.pl-key'), toast = root.querySelector('.pl-toast');
-  const S = { view: 'polar', cx: 0, cy: 0, kmPerPx: 0.8, w: 0, h: 0, pick: null, sel: 0, grid: null, results: null, token: 0, base: null, baseKey: '', g0: null, moonImg: null, mz: 0, mlon0: 0, mlat0: 0, names: true, lib: null };
-  const readBox = root.querySelector('.pl-read');
-  root.querySelector('.pl-names input').addEventListener('change', (e) => { S.names = e.target.checked; draw(); });
-  const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null, slope2: null, shadow2: null };
-  // where landing is possible over the whole region (2 km cells): navigator sky grid + its slope and shadow grids
-  const R = { grid: null, job: null, cls: null, img: null, startMs: 0, endMs: 0, progress: 0, token: 0 };
-  // the listed sites scored like a pick: id → { verdict, figs, landingMs, pending }
-  const siteRes = new Map();
-  let opened = false;
-
-  // ---------- data ----------
-  async function loadLayers() {
-    const get = (n) => loadData(n, { timeoutMs: 90000 }).catch(() => null);
-    const [sl, sh, psr, sl2, sh2] = await Promise.all([get('slope_1km'), get('shadow_1km'), get(PSR_PACK), get('slope_2km'), get('shadow_2km')]);
-    if (sl) L.slope = { bytes: sl, ...meta.slope?.find((x) => x.name === 'slope_1km') };
-    if (sh) L.shadow = { bytes: sh, ...meta.shadow?.find((x) => x.name === 'shadow_1km') };
-    if (sl2) L.slope2 = { bytes: sl2, ...meta.slope?.find((x) => x.name === 'slope_2km') };
-    if (sh2) L.shadow2 = { bytes: sh2, ...meta.shadow?.find((x) => x.name === 'shadow_2km') };
-    startRegion();
-    scoreSites();
-    try { if (psr) L.psr = createPsr(psr, meta.psr); } catch { L.psr = null; }
-    const lv = meta.levels?.find((l) => l.name === 'dem_120m');
-    if (lv) {
-      const b = await get('dem_120m');
-      if (b) L.dem120 = createDem({ data: new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1), size: lv.size, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, halfKm: lv.halfKm });
-    }
-    S.baseKey = ''; draw();
-  }
-  // navigator 1 km grids (±320 km): slope bytes × 0.25 = deg (240 m baseline), shadow bytes = km to the nearest PSR (0 inside)
-  const cellOf = (g, x, y) => {
-    const size = g.size ?? 640, ck = g.cellKm ?? 1, half = (size * ck) / 2;
-    const i = Math.floor((x + half) / ck), j = Math.floor((half - y) / ck);
-    return i >= 0 && j >= 0 && i < size && j < size ? j * size + i : -1;
-  };
-  const slopeAt = (x, y) => { if (!L.slope) return NaN; const k = cellOf(L.slope, x, y); return k < 0 ? NaN : L.slope.bytes[k] * (L.slope.scale ?? 0.25); };
-  const shadowAt = (x, y) => { if (!L.shadow) return NaN; const k = cellOf(L.shadow, x, y); return k < 0 ? NaN : L.shadow.bytes[k]; };
-
-  async function startRegion() {
-    const hb = await loadData('horizon_grid', { timeoutMs: 120000 }).catch(() => null);
-    if (!hb || !meta.horizon) return;
-    const grid = createHeatGrid({ horizon: hb, ...meta.horizon });
-    const n = grid.size, mask = new Uint8Array(grid.count);
-    for (let k = 0; k < grid.count; k++) { const c = grid.cellCenter(k); mask[k] = Math.hypot(c.xKm, c.yKm) <= EDGE_KM ? 1 : 0; }
-    R.grid = grid; R.cls = new Uint8Array(grid.count); R.img = new ImageData(n, n);
-    R.startMs = getStayStartMs(); R.endMs = R.startMs + getStayDays() * 86400e3;
-    R.job = fractionJob(grid, eph, R.startMs, R.endMs, { stepMs: 2 * 3600e3, mask });
-    const token = ++R.token;
-    let row = 0;
-    while (!R.job.done) {
-      R.job.run(14);
-      if (token !== R.token) return;
-      classifyRows(row, R.job.rows, mask); row = R.job.rows;
-      R.progress = R.job.progress;
-      draw();
-      await tick();
-    }
-  }
-  // landable class per region cell, and its pixel in the overlay image (one pixel per 2 km cell)
-  function classifyRows(j0, j1, mask) {
-    const g = R.grid, n = g.size, v = getVehicle(), battH = batteryHours(v), limit = v.touchdown.maxSlopeDeg;
-    const margin = siteMargins().min;
-    const d = R.img.data;
-    for (let j = j0; j < j1; j++) for (let i = 0; i < n; i++) {
-      const k = j * n + i;
-      if (!mask[k]) continue;
-      const c = landableClass({ sun: R.job.sun[k], earth: R.job.earth[k], darkH: R.job.dark[k], slopeDeg: L.slope2 ? L.slope2.bytes[k] * (L.slope2.scale ?? 0.25) : NaN, shadowKm: L.shadow2 ? L.shadow2.bytes[k] : NaN, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH });
-      R.cls[k] = c;
-      const o = k * 4;
-      if (c === 2) { d[o] = 127; d[o + 1] = 209; d[o + 2] = 139; d[o + 3] = 120; } else if (c === 1) { d[o] = 229; d[o + 1] = 179; d[o + 2] = 77; d[o + 3] = 105; } else d[o + 3] = 0;
-    }
-    R.canvas = null;
-  }
-  async function scoreSites() {
-    const v = getVehicle(), opts = { vehicle: v, limit: v.touchdown.maxSlopeDeg, battH: batteryHours(v), stayDays: getStayDays(), fromMs: getFromMs() };
-    for (const s of sites) siteRes.set(s.id, { pending: true });
-    if (!S.pick) renderSites();
-    for (const s of sites) {
-      const [x, y] = toXY(s.latDeg, s.lonDeg);
-      try { siteRes.set(s.id, await detail({ latDeg: s.latDeg, lonDeg: s.lonDeg, xKm: x, yKm: y, name: s.name }, opts)); } catch { siteRes.set(s.id, { failed: true }); }
-      if (!S.pick) renderSites();
-      draw();
-      await tick();
-    }
-    // the reachability used by the shading: the Δv margins at the listed sites
-    if (R.job) { classifyRows(0, R.job.rows, R.job.mask ?? new Uint8Array(R.grid.count).fill(1)); draw(); }
-  }
-  function siteMargins() {
-    const m = [...siteRes.values()].map((r) => r.figs?.find((f) => f.id === 'dv')?.value).filter(Number.isFinite);
-    return m.length ? { min: Math.min(...m), max: Math.max(...m), n: m.length } : { min: NaN, max: NaN, n: 0 };
-  }
-
-  // ---------- map ----------
-  const toScreen = (x, y) => [S.w / 2 + (x - S.cx) / S.kmPerPx, S.h / 2 - (y - S.cy) / S.kmPerPx];
-  const toMap = (px, py) => [S.cx + (px - S.w / 2) * S.kmPerPx, S.cy - (py - S.h / 2) * S.kmPerPx];
-  function resize() {
-    // the action bar, read-out and zoom sit under the map's top bar, whatever its height
-    const tb = root.querySelector('.pl-top').getBoundingClientRect(), mb = root.querySelector('.pl-map').getBoundingClientRect();
-    root.style.setProperty('--pl-top', `${Math.round(tb.bottom - mb.top + 8)}px`);
-    const r = canvas.getBoundingClientRect();
-    S.w = Math.max(1, Math.round(r.width)); S.h = Math.max(1, Math.round(r.height));
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(S.w * dpr); canvas.height = Math.round(S.h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    S.baseKey = ''; draw();
-  }
-  // relief shading of the visible window from the finest level loaded at this scale (light from the upper left)
-  function sampler() {
-    const dem = getDem();
-    const chain = [];
-    if (S.kmPerPx < 0.06 && L.fine) chain.push(L.fine);
-    if (S.kmPerPx < 0.4 && L.dem120) chain.push(L.dem120.sample);
-    if (dem) chain.push(dem.sample);
-    if (siteCtx?.globe.ready) chain.push((x, y) => { const p = fromXY(x, y); return siteCtx.sampleLL(p.latDeg, p.lonDeg); });
-    return (x, y) => { for (const f of chain) { const v = f(x, y); if (v === v) return v; } return NaN; };
-  }
-  function renderBase() {
-    const key = `${S.view}|${S.cx.toFixed(3)}|${S.cy.toFixed(3)}|${S.kmPerPx.toFixed(5)}|${S.w}x${S.h}|${!!L.dem120}|${!!L.fine}|${S.mz.toFixed(3)}|${S.mlon0.toFixed(2)}|${S.mlat0.toFixed(2)}|${siteCtx?.globe.version ?? 0}`;
-    if (key === S.baseKey && S.base) return S.base;
-    const w = S.w, h = S.h, img = new ImageData(w, h);
-    if (S.view === 'polar') {
-      const f = sampler(), k = S.kmPerPx;
-      const H = new Float32Array((w + 1) * (h + 1));
-      for (let j = 0; j <= h; j++) for (let i = 0; i <= w; i++) { const [x, y] = toMap(i, j); H[j * (w + 1) + i] = f(x, y); }
-      // exaggerate gentle relief at small scales; kc: map scale at the centre (map km per ground km, 2 at the equator)
-      const kc = mapScale(fromXY(S.cx, S.cy).latDeg);
-      const lx = -0.6, ly = 0.6, lz = 0.53, ex = Math.max(1, 6 * Math.sqrt(k / kc)) * kc;
-      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-        const a = H[j * (w + 1) + i], b = H[j * (w + 1) + i + 1], c = H[(j + 1) * (w + 1) + i];
-        const o = (j * w + i) * 4;
-        if (!(a === a && b === b && c === c)) { img.data[o] = 12; img.data[o + 1] = 13; img.data[o + 2] = 15; img.data[o + 3] = 255; continue; }
-        const gx = ((b - a) / (k * 1000)) * ex, gy = ((a - c) / (k * 1000)) * ex;   // +x right, +y up
-        const nz = 1 / Math.sqrt(gx * gx + gy * gy + 1);
-        const sh = Math.max(0, (-gx * lx - gy * ly + lz) * nz);
-        const v = 28 + sh * 190;
-        img.data[o] = v; img.data[o + 1] = v * 0.99; img.data[o + 2] = v * 0.96; img.data[o + 3] = 255;
-      }
-    } else if (S.g0) {
-      // whole Moon, equirectangular: LOLA 7.6 km zoomed out, the finest global tiles loaded when zoomed in;
-      // the night side at the start of the planned stay is darkened (terminator)
-      const fine = S.mz > 6 && siteCtx?.globe.ready;
-      const hAt = fine ? (la, lo) => siteCtx.sampleLL(la, lo) : (la, lo) => sampleG0(S.g0, la, lo) * 0.5;
-      const sun = eph.at(getStayStartMs())?.sun;
-      const dd = Math.max(0.02, 1 / S.mz);   // one pixel in degrees
-      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-        const { lat, lon } = moonLL(i, j);
-        const o = (j * w + i) * 4;
-        if (lat === null) { img.data[o + 3] = 255; continue; }
-        const a = hAt(lat, lon), b = hAt(lat, lon + dd), c = hAt(lat - dd, lon);
-        const kmE = Math.max(0.05, dd * 30.32 * Math.cos(lat * RAD)), kmN = dd * 30.32;
-        const gx = (b - a) / (kmE * 1000), gy = (a - c) / (kmN * 1000), ex = 4 + 2 * Math.sqrt(30.32 / S.mz);
-        const nz = 1 / Math.sqrt((gx * ex) ** 2 + (gy * ex) ** 2 + 1);
-        let v = 30 + Math.max(0, (-gx * ex * -0.6 - gy * ex * 0.6 + 0.53) * nz) * 190;
-        if (sun) { const cp = Math.cos(lat * RAD); if (cp * Math.cos(lon * RAD) * sun[0] + cp * Math.sin(lon * RAD) * sun[1] + Math.sin(lat * RAD) * sun[2] < 0) v *= 0.42; }
-        img.data[o] = v; img.data[o + 1] = v * 0.99; img.data[o + 2] = v * 0.96; img.data[o + 3] = 255;
-      }
-    }
-    const c = new OffscreenCanvas(w, h);
-    c.getContext('2d').putImageData(img, 0, 0);
-    S.base = c; S.baseKey = key;
-    return c;
-  }
-  // whole-Moon view: equirectangular, mz pixels per degree, centred on (mlat0, mlon0); longitudes east 0–360
-  const fitMz = () => Math.max(S.w / 360, 1e-3);
-  const moonLL = (i, j) => {
-    const mz = S.mz || fitMz();
-    const lat = S.mlat0 - (j - S.h / 2) / mz, lon = S.mlon0 + (i - S.w / 2) / mz;
-    return lat < -90 || lat > 90 ? { lat: null, lon: null } : { lat, lon: ((lon % 360) + 360) % 360 };
-  };
-  const moonXY = (lat, lon) => { const mz = S.mz || fitMz(); let d = (((lon - S.mlon0) % 360) + 540) % 360 - 180; return [S.w / 2 + d * mz, S.h / 2 - (lat - S.mlat0) * mz]; };
-  let drawQueued = false;
-  function draw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(() => { drawQueued = false; paint(); }); setTimeout(() => { if (drawQueued) { drawQueued = false; paint(); } }, 60); } }
-  function paint() {
-    if (!opened || !S.w) return;
-    ctx.clearRect(0, 0, S.w, S.h);
-    ctx.drawImage(renderBase(), 0, 0, S.w, S.h);
-    if (S.view === 'moon') return paintMoon();
-    // permanent shadow (LOLA PSR) over the relief
-    if (L.psr && S.kmPerPx < 1.2) { try { paintPsr(ctx, L.psr, { width: S.w, height: S.h, kmPerPx: S.kmPerPx, cx: S.cx, cy: S.cy }, { colour: [120, 160, 255], hatchAlpha: 0.18, outlineAlpha: 0.55 }); } catch { /* no OffscreenCanvas */ } }
-    // where a landing is possible: 2 km cells over the region (green landable, amber possible)
-    if (R.img) {
-      if (!R.canvas) { R.canvas = new OffscreenCanvas(R.grid.size, R.grid.size); R.canvas.getContext('2d').putImageData(R.img, 0, 0); }
-      const half = R.grid.halfKm, [x0, y0] = toScreen(-half, half), [x1, y1] = toScreen(half, -half);
-      ctx.imageSmoothingEnabled = false;
-      // inside the search square the 1 km cells replace the 2 km ones
-      if (S.grid) { ctx.save(); const b = S.grid.box; ctx.beginPath(); ctx.rect(0, 0, S.w, S.h); const [a0, b0] = toScreen(b.x0, b.y1), [a1, b1] = toScreen(b.x1, b.y0); ctx.rect(a1, b0, a0 - a1, b1 - b0); ctx.clip('evenodd'); }
-      ctx.drawImage(R.canvas, x0, y0, x1 - x0, y1 - y0);
-      if (S.grid) ctx.restore();
-      ctx.imageSmoothingEnabled = true;
-    }
-    // around the pick: the same classes on the 1 km search grid, with its edge
-    if (S.grid) {
-      const half = 0.5 / S.kmPerPx;
-      for (const p of S.grid) {
-        if (!p.done || !p.cls) continue;
-        const [sx, sy] = toScreen(p.xKm, p.yKm);
-        if (sx < -half || sy < -half || sx > S.w + half || sy > S.h + half) continue;
-        ctx.fillStyle = p.cls === 2 ? 'rgba(127,209,139,0.5)' : 'rgba(229,179,77,0.45)';
-        ctx.fillRect(sx - half, sy - half, half * 2 + 0.5, half * 2 + 0.5);
-      }
-      const b = S.grid.box, [a0, b0] = toScreen(b.x0, b.y1), [a1, b1] = toScreen(b.x1, b.y0);
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.setLineDash([4, 4]); ctx.strokeRect(a0, b0, a1 - a0, b1 - b0); ctx.setLineDash([]);
-    }
-    // 80°S: the edge of the page's terrain, skyline and descent data
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 1;
-    const [ox, oy] = toScreen(0, 0);
-    ctx.beginPath(); ctx.arc(ox, oy, EDGE_KM / S.kmPerPx, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    if (EDGE_KM / S.kmPerPx < Math.max(S.w, S.h) * 1.5) label(ox, oy - EDGE_KM / S.kmPerPx - 6, '80°S · edge of the terrain data', 'rgba(255,255,255,0.6)', 'center');
-    // listed sites
-    for (const s of sites) {
-      const [sx, sy] = toScreen(...toXY(s.latDeg, s.lonDeg)), r = siteRes.get(s.id), g = r?.verdict?.grade;
-      dot(sx, sy, 5.5, g === 'pass' ? '#7fd18b' : g === 'near' ? '#e5b34d' : g === 'fail' ? '#ff7b7f' : '#8a8a8a');
-      ring(sx, sy, 5.5, 'rgba(0,0,0,0.8)');
-      if (S.kmPerPx < 1.2) label(sx + 8, sy + 4, `${s.name}${s.verified === false ? ' (approx.)' : ''}`, 'rgba(255,236,200,0.95)');
-    }
-    // the current mission's site
-    const cur = getCurrent?.();
-    if (cur) { const [sx, sy] = toScreen(...toXY(cur.latDeg, cur.lonDeg)); ring(sx, sy, 7, '#fff'); label(sx + 9, sy - 8, 'current plan', 'rgba(255,255,255,0.8)'); }
-    // candidates and the pick with their ellipses
-    const cand = S.results?.list ?? [];
-    cand.forEach((c, n) => { if (n === 0) return; const [sx, sy] = toScreen(c.xKm, c.yKm); ellipse(c, n === S.sel ? '#7fd18b' : 'rgba(127,209,139,0.8)'); badge(sx, sy, String(n), n === S.sel); });
-    if (S.pick) { const [sx, sy] = toScreen(S.pick.xKm, S.pick.yKm); ellipse(S.pick, S.sel === 0 ? '#fff' : 'rgba(255,255,255,0.75)'); cross(sx, sy); }
-    scaleBar();
-    renderKey();
-  }
-  const rampCss = (t, a) => { const v = Math.max(0, Math.min(1, t)); const r = v < 0.5 ? 229 : Math.round(229 - (v - 0.5) * 2 * 102), g = v < 0.5 ? Math.round(72 + v * 2 * 107) : Math.round(179 + (v - 0.5) * 2 * 30); return `rgba(${r},${g},${v < 0.5 ? 77 : 107},${a})`; };
-  function dot(x, y, r, c) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
-  function ring(x, y, r, c) { ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); }
-  function label(x, y, t, c, align = 'left') { ctx.font = '12px Inter, system-ui, sans-serif'; ctx.textAlign = align; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(t, x, y); ctx.fillStyle = c; ctx.fillText(t, x, y); ctx.textAlign = 'left'; }
-  function cross(x, y) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 9, y); ctx.lineTo(x - 3, y); ctx.moveTo(x + 3, y); ctx.lineTo(x + 9, y); ctx.moveTo(x, y - 9); ctx.lineTo(x, y - 3); ctx.moveTo(x, y + 3); ctx.lineTo(x, y + 9); ctx.stroke(); }
-  function badge(x, y, t, on) { dot(x, y, 9, on ? '#7fd18b' : 'rgba(20,22,26,0.85)'); ring(x, y, 9, '#7fd18b'); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = on ? '#000' : '#7fd18b'; ctx.textAlign = 'center'; ctx.fillText(t, x, y + 4); ctx.textAlign = 'left'; }
-  // the 3σ ellipse at true scale (down-range radial), with at least a few pixels so it is seen when zoomed out
-  function ellipse(p, colour) {
-    const [sx, sy] = toScreen(p.xKm, p.yKm);
-    const a = Math.max(4, ELLIPSE.downrangeM / 1000 / S.kmPerPx), b = Math.max(3, ELLIPSE.crossrangeM / 1000 / S.kmPerPx);
-    const ang = Math.atan2(-p.yKm, p.xKm);   // radial direction on screen (y down)
-    ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy, a, b, ang, 0, Math.PI * 2); ctx.stroke();
-  }
-  function scaleBar() {
-    const want = S.kmPerPx * 120, p = Math.pow(10, Math.floor(Math.log10(want)));
-    const km = [5, 2, 1].map((m) => m * p).find((v) => v <= want) ?? p;
-    const px = km / S.kmPerPx, x = S.w - px - 64, y = S.h - 18;   // bottom right, clear of the key
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
-    label(x + px + 6, y + 1, km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`, '#fff');
-  }
-  // great circle 90° from a point (limb or terminator) as screen segments (split at the map edge)
-  function circle90(c, colour, dash = []) {
-    const n = [Math.cos(c.latDeg * RAD) * Math.cos(c.lonDeg * RAD), Math.cos(c.latDeg * RAD) * Math.sin(c.lonDeg * RAD), Math.sin(c.latDeg * RAD)];
-    const u = Math.abs(n[2]) < 0.9 ? [-n[1], n[0], 0] : [0, -n[2], n[1]], ul = Math.hypot(...u); u.forEach((v, i) => { u[i] = v / ul; });
-    const w = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
-    ctx.strokeStyle = colour; ctx.setLineDash(dash); ctx.lineWidth = 1.5; ctx.beginPath();
-    let prev = null;
-    for (let a = 0; a <= 360; a += 2) {
-      const t = a * RAD, v = [0, 1, 2].map((i) => Math.cos(t) * u[i] + Math.sin(t) * w[i]);
-      const [x, y] = moonXY(Math.asin(v[2]) / RAD, Math.atan2(v[1], v[0]) / RAD);
-      if (prev && Math.abs(x - prev[0]) < S.w / 2) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-      prev = [x, y];
-    }
-    ctx.stroke(); ctx.setLineDash([]);
-  }
-  // the sub-Earth point's range over the ephemeris (libration), once
-  function libration() {
-    if (S.lib) return S.lib;
-    let la0 = 90, la1 = -90, lo0 = 180, lo1 = -180;
-    for (let t = eph.startMs; t <= eph.endMs; t += 86400e3) {
-      const d = eph.at(t); if (!d) continue;
-      const p = subPoint(d.earth), lo = p.lonDeg > 180 ? p.lonDeg - 360 : p.lonDeg;
-      la0 = Math.min(la0, p.latDeg); la1 = Math.max(la1, p.latDeg); lo0 = Math.min(lo0, lo); lo1 = Math.max(lo1, lo);
-    }
-    return (S.lib = { la0, la1, lo0, lo1 });
-  }
-  function paintMoon() {
-    const mz = S.mz || fitMz(), tMs = getStayStartMs(), d = eph.at(tMs);
-    // graticule: every 30° zoomed out, finer zoomed in; 0° and 180° stronger
-    const step = [30, 15, 10, 5, 2, 1, 0.5, 0.25].find((v) => v * mz < 140 && v * mz >= 60) ?? (mz * 30 < 60 ? 30 : 0.25);
-    ctx.lineWidth = 1; ctx.font = '11px Inter, system-ui, sans-serif';
-    const [, yTop] = moonXY(90, 0), [, yBot] = moonXY(-90, 0);
-    for (let lon = 0; lon < 360; lon += step) {
-      const [x] = moonXY(0, lon); if (x < -2 || x > S.w + 2) continue;
-      const main = lon === 0 || lon === 180;
-      ctx.strokeStyle = main ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.16)'; ctx.beginPath(); ctx.moveTo(x, Math.max(0, yTop)); ctx.lineTo(x, Math.min(S.h, yBot)); ctx.stroke();
-      label(x + 3, Math.max(14, yTop + 14), lon === 0 ? '0° prime' : lon === 180 ? '180°' : `${+lon.toFixed(2)}°E`, main ? '#fff' : 'rgba(255,255,255,0.65)');
-    }
-    for (let lat = -90 + step; lat < 90; lat += step) {
-      const [, y] = moonXY(lat, 0); if (y < 0 || y > S.h) continue;
-      ctx.strokeStyle = lat === 0 ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.16)'; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S.w, y); ctx.stroke();
-      label(4, y - 3, lat === 0 ? '0° equator' : `${Math.abs(+lat.toFixed(2))}°${lat < 0 ? 'S' : 'N'}`, 'rgba(255,255,255,0.65)');
-    }
-    // near side / far side at the stay start (limb seen from Earth), the libration zone, the terminator
-    if (d) {
-      const se = subPoint(d.earth), ss = subPoint(d.sun), lib = libration();
-      circle90(se, 'rgba(76,179,240,0.9)');
-      circle90({ latDeg: 0, lonDeg: lib.lo0 }, 'rgba(76,179,240,0.45)', [5, 5]);
-      circle90({ latDeg: 0, lonDeg: lib.lo1 }, 'rgba(76,179,240,0.45)', [5, 5]);
-      circle90(ss, 'rgba(242,179,61,0.85)', [8, 4]);
-      const [ex, ey] = moonXY(se.latDeg, se.lonDeg), [sx, sy] = moonXY(ss.latDeg, ss.lonDeg);
-      const [b0x, b0y] = moonXY(lib.la1, lib.lo0), [b1x, b1y] = moonXY(lib.la0, lib.lo1);
-      ctx.strokeStyle = 'rgba(76,179,240,0.8)'; ctx.strokeRect(Math.min(b0x, b1x), Math.min(b0y, b1y), Math.abs(b1x - b0x), Math.abs(b1y - b0y));
-      dot(ex, ey, 4, '#4cb3f0'); label(ex + 7, ey - 6, 'sub-Earth point', '#9fd6f7');
-      dot(sx, sy, 5, '#f2b33d'); label(sx + 7, sy - 6, 'subsolar point', '#ffd98a');
-    }
-    // named features (IAU) and the listed landing sites
-    if (S.names) {
-      for (const f of GAZETTEER) {
-        const [x, y] = moonXY(f.latDeg, f.lonDeg); if (x < -40 || y < -10 || x > S.w + 40 || y > S.h + 10) continue;
-        const big = f.type === 'mare' || f.type === 'oceanus' || f.type === 'basin';
-        if (!big && mz < 2.5) continue;
-        if (!big) dot(x, y, 2, 'rgba(255,255,255,0.8)');
-        label(x + (big ? 0 : 4), y + 4, f.name, big ? 'rgba(210,225,255,0.9)' : 'rgba(255,255,255,0.85)', big ? 'center' : 'left');
-      }
-    }
-    for (const s of sites) {
-      const [x, y] = moonXY(s.latDeg, s.lonDeg), g = siteRes.get(s.id)?.verdict?.grade;
-      dot(x, y, 4.5, g === 'pass' ? '#7fd18b' : g === 'near' ? '#e5b34d' : g === 'fail' ? '#ff7b7f' : '#f2b33d'); ring(x, y, 4.5, 'rgba(0,0,0,0.8)');
-      if (S.names && mz > 1.2) label(x + 7, y + 4, s.name, 'rgba(255,236,200,0.95)');
-    }
-    if (S.pick) { const [x, y] = moonXY(S.pick.latDeg, S.pick.lonDeg); cross(x, y); }
-    // scale at the centre latitude
-    const kmPx = (30.32 * Math.cos(S.mlat0 * RAD)) / mz, want = kmPx * 120, p = Math.pow(10, Math.floor(Math.log10(want)));
-    const km = [5, 2, 1].map((m) => m * p).find((v) => v <= want) ?? p, px = km / kmPx, bx = S.w - px - 110, by = S.h - 18;
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by - 5); ctx.lineTo(bx, by); ctx.lineTo(bx + px, by); ctx.lineTo(bx + px, by - 5); ctx.stroke();
-    label(bx + px + 6, by + 1, `${km >= 1 ? km : km * 1000} ${km >= 1 ? 'km' : 'm'} at ${Math.abs(S.mlat0).toFixed(0)}°${S.mlat0 < 0 ? 'S' : 'N'}`, '#fff');
-    const when = new Date(tMs).toISOString().slice(0, 16).replace('T', ' ');
-    keyBox.innerHTML = `<div class="pl-k-row"><b>Whole Moon</b><span>equirectangular, east longitude 0–360°; relief LOLA ${S.mz > 6 && siteCtx?.globe.ready ? '1.9 km / 474 m where loaded' : '7.6 km (LDEM_4)'}; graticule every ${step}°</span></div>
-      <div class="pl-k-row"><span class="pl-k-ln earth"></span><span>limb seen from Earth at ${when} UTC: near side inside, far side outside</span><span class="pl-k-ln earth dash"></span><span>libration zone limits (sub-Earth point range 2026–2028, blue box)</span></div>
-      <div class="pl-k-row"><span class="pl-k-ln sun"></span><span>terminator and subsolar point at the same time; the dark half is night</span></div>
-      <div class="pl-k-row"><span>Click anywhere to score a landing there: south of 80°S on the polar data, elsewhere on the global LOLA terrain with the skyline computed (lander-scale hazards not resolved at 474 m).</span></div>
-      <div class="pl-k-src">Names: ${esc(GAZETTEER_SOURCE)}.</div>
-      <div class="pl-k-short">limb (blue) · terminator (amber) · ${step}° grid · click to score anywhere</div>`;
-  }
-  function renderKey() {
-    const centreLat = fromXY(S.cx, S.cy).latDeg;
-    const res = centreLat > TERRAIN_MAX_LAT ? 'global LOLA (474 m tiles where loaded, else 1.9 / 7.6 km); the landable shading covers the south polar data only' : S.kmPerPx < 0.06 && L.fine ? 'fine DEM near the pick' : S.kmPerPx < 0.4 && L.dem120 ? 'LOLA 120 m' : 'LOLA 480 m';
-    const v = getVehicle(), battH = batteryHours(v), m = siteMargins(), pct = (x) => `${Math.round(x * 100)} %`;
-    const when = R.startMs ? `${getStayDays()} days from ${new Date(R.startMs).toISOString().slice(0, 10)}` : `${getStayDays()} days`;
-    const prog = R.job && !R.job.done ? ` · computing ${Math.round(R.progress * 100)} %` : !R.job ? ' · loading the sky grid…' : '';
-    keyBox.innerHTML = `<div class="pl-k-row"><span class="pl-k-sw land"></span><b>Landable</b><span>every check passes</span><span class="pl-k-sw poss"></span><b>Possible</b><span>near a limit</span><span class="muted">${prog}</span></div>
-      <div class="pl-k-row"><span>Checks: slope ≤ ${v.touchdown.maxSlopeDeg}° (240 m baseline) · no permanent shadow within 1 km · Sun ≥ ${pct(LANDABLE.sun[0])} (≥ ${pct(LANDABLE.sun[1])}) and Earth ≥ ${pct(LANDABLE.earth[0])} (≥ ${pct(LANDABLE.earth[1])}) over ${when} · longest dark ≤ ${battH.toFixed(1)} h battery (≤ ${(battH * LANDABLE.dark[1]).toFixed(0)} h) · Δv margin ${m.n ? `${Math.round(m.min)}–${Math.round(m.max)} m/s at the listed sites` : 'being checked'}.</span></div>
-      <div class="pl-k-row"><span>2 km cells (navigator sky grid) over the region for the current plan's stay, 1 km inside the dashed square around your point. A point you pick is scored at its exact skyline over its own first lit landing window, with ellipse-scale slope and roughness, so it can differ: a narrow ridge (Shackleton's) is smaller than a 2 km cell. Assumed: 3σ ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m, battery and loads.</span></div>
-      <div class="pl-k-row"><span class="pl-k-dot pass"></span><span class="pl-k-dot near"></span><span class="pl-k-dot fail"></span><span>listed sites, graded like a pick (click one)</span><span class="pl-k-sw psr"></span><span>permanent shadow (LOLA PSR)</span></div>
-      <div class="pl-k-src">Relief: ${res}, light from the upper left.</div>
-      <div class="pl-k-short"><span class="pl-k-sw land"></span> landable · <span class="pl-k-sw poss"></span> possible · dots: listed sites graded · ${v.touchdown.maxSlopeDeg}°, ${getStayDays()} d stay, ${battH.toFixed(0)} h battery, ellipse ${ELLIPSE.downrangeM} × ${ELLIPSE.crossrangeM} m (assumed)${prog}</div>`;
-  }
-  // the side panel before a pick: the listed sites with their grades (click to propose)
-  function renderSites() {
-    const rows = sites.map((s) => {
-      const r = siteRes.get(s.id), g = r?.verdict?.grade;
-      const f = (id) => r?.figs?.find((x) => x.id === id);
-      const when = r?.landingMs ? ` · stay from ${new Date(r.landingMs).toISOString().slice(5, 10)}` : '';
-      return `<tr data-site="${esc(s.id)}"><td>${esc(s.name)}${s.verified === false ? ' <small class="muted">approx.</small>' : ''}<small>${esc(s.subtitle ?? '')}${when}</small></td>
-        <td class="r">${f('slope') ? `<span class="g-${f('slope').grade}">${esc(f('slope').text)}</span>` : '…'}</td>
-        <td class="r">${f('sun') ? `<span class="g-${f('sun').grade}">${Math.round(f('sun').value * 100)} %</span>` : '…'}</td>
-        <td class="r">${g ? `<span class="pl-g g-${g}">${g}</span>` : r?.failed ? '—' : '<span class="muted">scoring</span>'}</td></tr>`;
-    }).join('');
-    body.innerHTML = `<p class="note">Green ground on the map is where a landing ellipse would pass every check, amber where it would pass near a limit. Click it, a listed site, or type a latitude and longitude to score a point in detail.</p>
-      <h3>Known landing sites <small>flown missions and Artemis III candidate regions, scored like a pick: ellipse slope, Sun over a ${getStayDays()}-day stay from each site's first lit window, overall</small></h3>
-      <table class="tbl pl-cmp"><thead><tr><th>Site</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Grade</th></tr></thead><tbody>${rows}</tbody></table>`;
-    renderActions();
-    body.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => { const s = sites.find((q) => q.id === tr.dataset.site); S.cx = toXY(s.latDeg, s.lonDeg)[0]; S.cy = toXY(s.latDeg, s.lonDeg)[1]; S.kmPerPx = Math.min(S.kmPerPx, 0.08); setPick(s.latDeg, s.lonDeg); }));
-  }
-
-  // ---------- interaction ----------
-  let drag = null; const pts = new Map(); let pinch = null;
-  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); drag = { x: e.clientX, y: e.clientY, cx: S.cx, cy: S.cy, mlon0: S.mlon0, mlat0: S.mlat0, moved: false }; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
-  canvas.addEventListener('pointermove', (e) => {
-    if (!pts.has(e.pointerId)) return;
-    pts.set(e.pointerId, [e.clientX, e.clientY]);
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) zoomBy(d / pinch); pinch = d; drag.moved = true; return; }
-    if (!drag) return;
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (Math.hypot(dx, dy) > 4) drag.moved = true;
-    if (!drag.moved) return;
-    if (S.view === 'polar') { S.cx = drag.cx - dx * S.kmPerPx; S.cy = drag.cy + dy * S.kmPerPx; }
-    else { const mz = S.mz || fitMz(); S.mlon0 = drag.mlon0 - dx / mz; S.mlat0 = Math.max(-90, Math.min(90, drag.mlat0 + dy / mz)); }
-    draw();
-  });
-  // cursor read-out: position, height and the terrain level under it, distance and bearing from the current site
-  canvas.addEventListener('pointermove', (e) => {
-    if (pts.size) return;
-    const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-    let ll = null;
-    if (S.view === 'moon') { const m = moonLL(px, py); if (m.lat !== null) ll = { latDeg: m.lat, lonDeg: m.lon }; } else ll = fromXY(...toMap(px, py));
-    if (!ll) { readBox.hidden = true; return; }
-    const [x, y] = toXY(ll.latDeg, ll.lonDeg);
-    let h = NaN, lvl = '';
-    const polar = ll.latDeg <= TERRAIN_MAX_LAT;
-    if (polar && L.fine && S.view === 'polar' && S.kmPerPx < 0.06) { h = L.fine(x, y); lvl = 'fine DEM near the pick'; }
-    if (!(h === h) && polar && L.dem120) { h = L.dem120.sample(x, y); lvl = 'LOLA 120 m (polar)'; }
-    if (!(h === h) && polar && getDem()) { h = getDem().sample(x, y); lvl = 'LOLA 480 m (polar)'; }
-    if (!(h === h) && siteCtx?.globe.ready) { const q = siteCtx.sampleInfo(ll.latDeg, ll.lonDeg); h = q[0]; lvl = `LOLA ${q[1]} (global)`; }
-    const cur = getCurrent?.(), db = cur ? distanceBearing(cur, ll) : null;
-    const lon = ll.lonDeg, lonW = lon > 180 ? ` (${(360 - lon).toFixed(3)}°W)` : '';
-    readBox.innerHTML = `<b>${ll.latDeg.toFixed(3)}°, ${lon.toFixed(3)}°E</b> · ${fmtLat(ll.latDeg)} ${fmtLon(lon)}${lonW}<br>${h === h ? `height ${Math.round(h).toLocaleString('en-GB')} m (relative to the 1737.4 km sphere)` : 'height —'} · ${esc(lvl || 'loading terrain')}${db ? `<br>${Math.round(db.km).toLocaleString('en-GB')} km from ${esc(cur.name)}, bearing ${Math.round(db.bearingDeg)}°` : ''}`;
-    readBox.hidden = false;
-  });
-  canvas.addEventListener('pointerleave', () => { readBox.hidden = true; });
-  const end = (e) => {
-    const wasDrag = drag?.moved;
-    pts.delete(e.pointerId); if (pts.size < 2) pinch = null;
-    if (e.type === 'pointerup' && !wasDrag && pts.size === 0) {
-      const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-      if (S.view === 'moon') {
-        const { lat, lon } = moonLL(px, py);
-        if (lat === null) return;
-        const site = sites.find((q) => Math.hypot(...moonXY(q.latDeg, q.lonDeg).map((v, i) => v - [px, py][i])) < 8);
-        setView('polar');
-        setPick(site?.latDeg ?? lat, site?.lonDeg ?? lon, { center: true });
-      } else {
-        // a numbered spot selects it; anywhere else proposes a new point
-        const hit = S.results ? S.results.list.findIndex((c, n) => n > 0 && Math.hypot(...toScreen(c.xKm, c.yKm).map((v, i) => v - [px, py][i])) < 11) : -1;
-        if (hit > 0) return select(hit);
-        const site = sites.find((q) => Math.hypot(...toScreen(...toXY(q.latDeg, q.lonDeg)).map((v, i) => v - [px, py][i])) < 9);
-        if (site) return setPick(site.latDeg, site.lonDeg);
-        const [x, y] = toMap(px, py);
-        const { latDeg, lonDeg } = fromXY(x, y);
-        setPick(latDeg, lonDeg);
-      }
-    }
-    if (pts.size === 0) drag = null;
-  };
-  canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
-  canvas.addEventListener('wheel', (e) => { e.preventDefault(); const r = canvas.getBoundingClientRect(); zoomBy(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
-  function zoomBy(f, px = S.w / 2, py = S.h / 2) {
-    if (S.view === 'moon') {
-      const m = moonLL(px, py); if (m.lat === null) return;
-      const mz = S.mz || fitMz();
-      S.mz = Math.min(400, Math.max(fitMz(), mz * f));
-      let lon = m.lon; const d = (((lon - S.mlon0) % 360) + 540) % 360 - 180; lon = S.mlon0 + d;
-      S.mlon0 = lon - (px - S.w / 2) / S.mz; S.mlat0 = Math.max(-90, Math.min(90, m.lat + (py - S.h / 2) / S.mz));
-      if (S.mz > 6 && siteCtx?.globe.ready) { const a = moonLL(0, 0), b = moonLL(S.w, S.h); if (a.lat !== null || b.lat !== null) siteCtx.globe.need(G2, Math.max(-90, S.mlat0 - S.h / 2 / S.mz), Math.min(90, S.mlat0 + S.h / 2 / S.mz), S.mlon0 - S.w / 2 / S.mz, S.mlon0 + S.w / 2 / S.mz, { max: 40 }).then((n) => { if (n) { S.baseKey = ''; draw(); } }); }
-      draw();
-      return;
-    }
-    const [x, y] = toMap(px, py);
-    S.kmPerPx = Math.min(30, Math.max(0.004, S.kmPerPx / f));
-    S.cx = x - (px - S.w / 2) * S.kmPerPx; S.cy = y + (py - S.h / 2) * S.kmPerPx;
-    draw();
-  }
-  root.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => zoomBy(Number(b.dataset.z))));
-  root.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
-  root.querySelector('.pl-go').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const ll = parseLatLon(root.querySelector('.pl-go input').value);
-    if (!ll) return say('Type a latitude and longitude, e.g. 85.4S 35.3E or −85.4, 35.3 or 0.67N 23.47E');
-    setView('polar'); setPick(ll.latDeg, ll.lonDeg, { center: true });
-  });
-  // the planner's actions, one row over the map (the side panel keeps the figures and tables)
-  const actBox = root.querySelector('.pl-act');
-  function renderActions() {
-    const R0 = S.results, c = R0?.list[S.sel];
-    const target = c ? (c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name) : null;
-    const busy = S.pick && !R0;
-    actBox.innerHTML = `
-      <button class="ab-btn ab-primary" data-a="land" ${c ? '' : 'disabled'} title="${c ? `Plan the whole mission to ${esc(target)} and its first lit landing window` : 'Pick a point first'}">Land here${c ? `<span class="ab-l">: ${esc(target)}</span>` : ''}</button>
-      <button class="ab-btn" data-a="search" ${S.pick && !busy ? '' : 'disabled'} title="Search 15 km around your point again">${busy ? 'Searching…' : 'Find better spots'}</button>
-      ${R0 ? `<div class="ab-seg" role="group" aria-label="Candidate">${R0.list.map((x, n) => `<button class="ab-opt" data-n="${n}" aria-pressed="${n === S.sel}" title="${esc(x.name)}: ${esc(x.verdict.text)}">${n === 0 ? 'Yours' : n}<span class="pl-dot g-${x.verdict.grade}"></span></button>`).join('')}</div>` : ''}
-      <span class="ab-div" aria-hidden="true"></span>
-      <button class="ab-btn" data-a="sites" title="The listed landing sites with their grades">Known sites</button>
-      <button class="ab-btn" data-a="close" title="Back to the 3D view (Esc)">Back to 3D</button>`;
-    actBox.querySelector('[data-a="land"]').addEventListener('click', () => { if (c) { onLand({ site: c.site, landingMs: c.landingMs }); close(); } });
-    actBox.querySelector('[data-a="search"]').addEventListener('click', () => { if (S.pick) setPick(S.pick.latDeg, S.pick.lonDeg); });
-    actBox.querySelector('[data-a="sites"]').addEventListener('click', () => renderSites());
-    actBox.querySelector('[data-a="close"]').addEventListener('click', () => close());
-    actBox.querySelectorAll('[data-n]').forEach((b) => b.addEventListener('click', () => select(Number(b.dataset.n))));
-  }
-  function say(t) { toast.textContent = t; toast.hidden = false; clearTimeout(say.t); say.t = setTimeout(() => { toast.hidden = true; }, 4200); }
-  async function setView(v) {
-    S.view = v;
-    root.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
-    if (v === 'moon' && !S.g0) { try { S.g0 = await decodePack(await loadData(G0.name, { timeoutMs: 60000 }), G0.width); } catch { say('The whole-Moon terrain (globe_g0) did not load.'); } }
-    if (v === 'moon') { siteCtx?.ready().then(() => { S.baseKey = ''; draw(); }); if (!S.mz) { S.mz = fitMz(); const c = getCurrent?.(); S.mlon0 = 0; S.mlat0 = 0; if (c && c.latDeg > -60) { S.mlon0 = c.lonDeg; } } }
-    root.querySelector('.pl-names').hidden = v !== 'moon';
-    S.baseKey = ''; draw();
-  }
-
-  // ---------- evaluation ----------
-  async function setPick(latDeg, lonDeg, { center = false } = {}) {
-    const [x, y] = toXY(latDeg, lonDeg);
-    S.pick = { latDeg, lonDeg, xKm: x, yKm: y };
-    S.sel = 0; S.results = null; S.grid = null;
-    if (center) { S.cx = x; S.cy = y; S.kmPerPx = Math.min(S.kmPerPx, 0.08); }
-    root.querySelector('.pl-go input').value = `${fmtLat(latDeg)} ${fmtLon(lonDeg)}`;
-    draw();
-    const token = ++S.token;
-    renderActions();
-    const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
-    const fromMs = getFromMs();
-    const dem = getDem();
-    const polar = latDeg <= TERRAIN_MAX_LAT;
-    setBody(`<p class="note">${polar ? '' : 'Loading the global LOLA terrain around the point and computing its skyline… '}Searching 15 km around the point for the best landing spots…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
-    // stage 1: suitability on a grid around the pick (1 km on the polar data, 2 km on the global terrain), Sun/Earth
-    // every 4 h over the stay above the skyline (480 m polar DEM, or computed from the global terrain)
-    const ctx0 = polar ? null : await siteCtx.context(S.pick);
-    if (token !== S.token) return;
-    const mask0 = polar ? skylineFor(dem, S.pick) : ctx0.mask;
-    const land0 = pickLandingWindow(eph, S.pick, mask0, fromMs)?.tMs ?? fromMs;
-    const dirs4 = skyDirections(eph, land0, stayDays, 4);
-    const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
-    const grid = searchGrid(x, y, { radiusKm: 15 * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
-    const hb = (15 + stepKm / 2) * k;
-    grid.box = { x0: x - hb, x1: x + hb, y0: y - hb, y1: y + hb };
-    grid.cellKm = stepKm * k;
-    S.grid = grid;
-    const margin = siteMargins().min;
-    for (let n = 0; n < grid.length; n++) {
-      const p = grid[n];
-      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
-      // off the poles: slope over 1 km on the global terrain; no permanent shadow there
-      const slope = polar ? slopeAt(p.xKm, p.yKm) : slopeDeg(ctx0.sampleXY, p.xKm, p.yKm, 1, k);
-      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
-      const k2 = n;
-      if (k2 % 24 === 23 || k2 === grid.length - 1) {
-        const done = grid.slice(0, k2 + 1), s = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, n) => { q.score = s[n].score; q.ok = s[n].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
-        const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((k2 + 1) / grid.length) * 100)}%`;
-        draw();
-        await tick();
-        if (token !== S.token) return;
-      }
-    }
-    // stage 2: the pick and the eight best points that pass, in detail; the 1 km screen uses a 240 m slope, so the
-    // fine ellipse figures re-rank them (fewest fails, then fewest near limits, then suitability) and five are kept
-    const best = bestPoints(grid, { count: 8, minKm: 2 * k * (polar ? 1 : 1.5), avoid: [{ xKm: x, yKm: y }] });
-    setBody(`<p class="note">Scoring the point and the ${best.length} best spots in detail (terrain in the ellipse, sky over the stay, Δv)…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
-    const pick = { ...S.pick, name: 'Your point' };
-    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score }));
-    const all = [pick, ...cands];
-    for (let n = 0; n < all.length; n++) {
-      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs }));
-      if (token !== S.token) return;
-      const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((n + 1) / all.length) * 100)}%`;
-      await tick();
-    }
-    const count = (c, g) => c.figs.filter((f) => f.grade === g).length;
-    cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
-    const list = [pick, ...cands.slice(0, 5)];
-    list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
-    S.results = { list, limit, battH, stayDays };
-    renderResults();
-    draw();
-  }
-
-  async function detail(c, { vehicle, limit, battH, stayDays, fromMs }) {
-    const dem = getDem();
-    const polar = c.latDeg <= TERRAIN_MAX_LAT;
-    const listed = sites.find((s) => distanceBearing(s, c).km < 0.2);
-    const site = { id: listed?.id ?? 'custom', name: listed?.name ?? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}`, latDeg: c.latDeg, lonDeg: c.lonDeg };
-    let sample, resKm, mask, heightM, psrShare, psrNote, skyline;
-    const k = mapScale(c.latDeg);
-    if (polar) {
-      let terr = null;
-      try { terr = await loadSiteTerrain(meta, site, { halfKm: 0.6, hires }); } catch { terr = null; }
-      resKm = terr?.finestKm ?? 0.12;
-      if (c === S.results?.list?.[0] || c.name === 'Your point') L.fine = terr?.sample ?? null;
-      sample = terr?.sample ?? ((x, y) => (L.dem120 ?? dem).sample(x, y));
-      mask = skylineFor(dem, site); heightM = dem.heightAt(site.latDeg, site.lonDeg) ?? 0; skyline = 'LOLA 480 m polar DEM';
-    } else {
-      // north of 80°S: the global LOLA terrain around the point, its skyline computed out to 180 km
-      const ctx = await siteCtx.context(site);
-      sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; c.patch = ctx.patch;
-    }
-    // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
-    const pts = ellipsePoints(c.xKm, c.yKm, { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
-    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
-    if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(c.xKm, c.yKm) === 0 ? 1 : 0);
-    else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
-    else { psrShare = NaN; psrNote = 'unknown: no permanent-shadow map here (the page has the south polar one)'; }
-    const win = pickLandingWindow(eph, site, mask, fromMs);
-    const landingMs = win?.tMs ?? fromMs;
-    const sky = skyStats(skyDirections(eph, landingMs, stayDays, 1), site, mask, 1);
-    const at = skyAt(eph, site, landingMs, mask);
-    let budget = null;
-    try {
-      const plan = planMission({ eph, site, landingMs, vehicle, siteHeightKm: (heightM ?? 0) / 1000, mask });
-      if (plan.ok) budget = plan.budget;
-    } catch { budget = null; }
-    const figs = figures({ t, sky, psrShare, psrNote, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, earthWindow: win?.earth ?? true, battH, limitDeg: limit, resKm, stayDays });
-    return { site, landingMs, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, patch: c.patch ?? null, distKm: S.pick ? distanceBearing(S.pick, c).km : 0 };
-  }
-
-  function setBody(html) { body.innerHTML = html; }
-  const G = { pass: 'pass', near: 'near', fail: 'fail' };
-  function renderResults() {
-    const R = S.results, c = R.list[S.sel];
-    const fig = (id, x) => x.figs.find((f) => f.id === id);
-    const cell = (f) => (f ? `<td class="r g-${G[f.grade]}">${esc(f.text.split(' (')[0].split(' · ')[0])}</td>` : '<td class="r">—</td>');
-    body.innerHTML = `
-      <div class="pl-point"><b>${esc(c.name)}</b> · ${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}${c.distKm ? ` · ${c.distKm.toFixed(1)} km from your point` : ''}<br><span class="muted">landing ${new Date(c.landingMs).toISOString().slice(0, 16).replace('T', ' ')} UTC (first lit window)</span></div>
-      <p class="pl-badge ${c.resKm > 0.04 ? 'coarse' : ''}">Terrain ${Math.round(c.resKm * 1000)} m${c.patch ? ' (SLDEM2015 patch)' : ''} · skyline ${c.polar ? 'polar 480 m' : 'computed from the global LOLA terrain'} · ${c.resKm > 0.1 ? 'lander-scale hazards not resolved' : c.resKm > 0.04 ? 'slopes at ~100 m scale, rocks not resolved' : 'lander-scale slopes resolved, rocks not'}</p>
-      ${c.polar || c.patch ? '' : `<p class="note pl-fetch">No fine patch here: run <code>node tools/fetch-hires.mjs --at ${c.latDeg.toFixed(3)},${c.lonDeg.toFixed(3)}</code> to fetch one (SLDEM2015 ~59 m between 60°S and 60°N, LOLA polar products near the poles).</p>`}
-      <p class="pl-verdict g-${c.verdict.grade}">${esc(c.verdict.text)}</p>
-      <ul class="pl-figs">${c.figs.map((f) => `<li class="g-${G[f.grade]}"><div class="pl-f-h"><span>${esc(f.label)}</span><span class="pl-g">${f.grade}</span></div><div class="pl-f-v"><b>${esc(f.text)}</b><span class="muted">limit ${esc(f.limit)}</span></div><small>${esc(f.note)}</small></li>`).join('')}</ul>
-      <h3>Better spots nearby <small>the 5 best that pass the hard limits in a 30 × 30 km square around your point, at least 2 km apart, by suitability; same stay and method</small></h3>
-      <table class="tbl pl-cmp"><thead><tr><th>#</th><th class="r">km</th><th class="r">Slope</th><th class="r">Sun</th><th class="r">Earth</th><th class="r">Dark</th><th class="r">Δv</th></tr></thead><tbody>
-      ${R.list.map((x, n) => `<tr data-n="${n}" class="${n === S.sel ? 'on' : ''}"><td>${n === 0 ? 'You' : n}</td><td class="r">${x.distKm.toFixed(1)}</td>${cell(fig('slope', x))}${cell(fig('sun', x))}${cell(fig('earth', x))}${cell(fig('dark', x))}${cell(fig('dv', x))}</tr>`).join('')}
-      </tbody></table>
-      <p class="note">Choose a candidate in the bar over the map, a row here or a numbered spot on the map to see its figures; <b>Land here</b> in the bar plans the mission to it. Rocks smaller than the DEM are not modelled; the Δv is from the planned polar orbit with this vehicle (assumed).</p>`;
-    body.querySelectorAll('.pl-cmp tr[data-n]').forEach((tr) => tr.addEventListener('click', () => select(Number(tr.dataset.n))));
-    renderActions();
-  }
-  function select(n) { S.sel = n; renderResults(); const c = S.results.list[n]; S.cx = c.xKm; S.cy = c.yKm; draw(); }
-
-  // ---------- open / close ----------
-  function open() {
-    root.hidden = false; opened = true;
-    const v = getVehicle();
-    root.querySelector('.pl-assume').textContent = `Assumed: 3σ landing ellipse ${ELLIPSE.downrangeM} m down-range × ${ELLIPSE.crossrangeM} m cross-range (terrain-relative navigation); slope limit ${v.touchdown.maxSlopeDeg}°; stay ${getStayDays()} days from the first lit window; battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on a ${v.loadsW.surface} W surface load = ${batteryHours(v).toFixed(1)} h of darkness.`;
-    const cur = getCurrent?.();
-    if (cur && !S.pick) { const [x, y] = toXY(cur.latDeg, cur.lonDeg); S.cx = x; S.cy = y; S.kmPerPx = 0.25; }
-    requestAnimationFrame(resize);
-    setTimeout(resize, 50);
-    if (!S.pick) renderSites();
-    renderActions();
-    if (!L.slope) loadLayers();
-    else if (S.lastFrom !== getFromMs() || R.startMs !== getStayStartMs()) { siteRes.clear(); scoreSites(); startRegion(); }   // the mission moved: redo both
-    S.lastFrom = getFromMs();
-  }
-  function close() { root.hidden = true; opened = false; S.token++; }
-  window.addEventListener('resize', () => { if (opened) resize(); });
-  return { open, close, get isOpen() { return opened; }, setPick, state: S, region: R, siteRes };
-}
-
-return { parseLatLon, createPlanner };
-})();
 __m['globalsite.js'] = (() => {
 // Terrain, height and skyline for a landing site anywhere on the Moon. South of 80°S the page's polar pyramid
 // (480 m skyline from terrain.js, the fine levels in terrain-local.js); elsewhere the global LOLA terrain
@@ -6941,10 +5843,12 @@ function bootScreen(doc = typeof document !== 'undefined' ? document : null) {
 return { BOOT_ID, BOOT_CSS, bootMarkup, bootScreen };
 })();
 __m['main.js'] = (() => {
-// Entry of demo/lander.html (bundled by tools/build-lander.mjs). Reads the inlined JSON data, plans the mission,
-// builds the three linked scenes and runs the timeline. Deep link: lander.html?site=<id | lat,lon>&t=<ISO time>.
-// Step 1 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
-// stores the site and landing time it plans, and after touchdown it links on to the rover route (step 2).
+// Entry of demo/lander.html (bundled by tools/build-lander.mjs): step 3 of the mission, Execute. Flies the frozen
+// mission configuration (mission-config.js, written by step 2, Finalise) through the six phases of mission-flow.js
+// EXEC_PHASES: launch, spaceflight, orbital manoeuvres, lunar orbit insertion, landing (with the contingency
+// branches), surface operations (the rover route planned on the Map, played on the 3D globe in a frame).
+// Nothing is planned here: the site, time and vehicle come from the configuration. A link with
+// ?site=<id | lat,lon>&t=<ISO time> flies a rehearsal of that site instead (labelled, not a finalised mission).
 const { createEphemeris } = __m['../ephemeris.js'];
 const { createDem, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
 const { hasData, readData, loadData } = __m['../data-loader.js'];
@@ -6959,10 +5863,10 @@ const { buildEarthScene } = __m['view-earth.js'];
 const { buildMoonScene } = __m['view-moon.js'];
 const { buildSurfaceScene } = __m['view-surface.js'];
 const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm } = __m['ui.js'];
-const { readMission, writeMission, stageUrl, stageBar } = __m['../mission-flow.js'];
+const { readMission, stageUrl, stageBar, EXEC_PHASES, execPhaseOf } = __m['../mission-flow.js'];
+const { readConfig, changesSince, writeFlown, routeSummary } = __m['../mission-config.js'];
 const { attitudeState } = __m['model.js'];
 const { createCloseup } = __m['closeup.js'];
-const { createPlanner } = __m['planner.js'];
 const { createSiteContexts, isPolarSite } = __m['globalsite.js'];
 const { createHiresSet } = __m['../hires.js'];
 const { bootScreen } = __m['../boot.js'];
@@ -6973,12 +5877,11 @@ const DEFAULT_SITE = 'shackleton';
 const DEFAULT_FROM = Date.parse('2027-01-01T00:00:00Z');
 const PLAYBACK_S = 150;   // the whole timeline in 150 s at 1×
 
-// Where the page starts: URL parameters first (site id or "lat,lon", t), then the stored mission, then the
-// default site with a lit landing window. A stored point south of 80°S that is not a listed site becomes a
-// custom site. A stored landing time is used only with the stored site and inside the ephemeris.
-function startingPoint(q, mission, sites, eph) {
+// What the page flies: a rehearsal from URL parameters (site id or "lat,lon", t), else the frozen configuration,
+// else nothing (the page asks for a finalised mission). A point that is not a listed site becomes a custom site,
+// anywhere on the Moon. A landing time outside the ephemeris is dropped (a lit window is picked).
+function startingPoint(q, config, sites, eph) {
   const byId = (id) => sites.find((s) => s.id === id);
-  // anywhere on the Moon (south of 80°S the polar data, elsewhere the global LOLA terrain and a computed skyline)
   const custom = (latDeg, lonDeg, name) => (latDeg >= -90 && latDeg <= 90 ? { id: 'custom', name: name ?? `${latDeg.toFixed(2)}°, ${lonDeg.toFixed(2)}°`, latDeg, lonDeg } : null);
   const inEph = (t) => Number.isFinite(t) && t > eph.startMs + 10 * 86400e3 && t < eph.endMs - 86400e3;
   const qs = q.get('site');
@@ -6986,13 +5889,15 @@ function startingPoint(q, mission, sites, eph) {
     const ll = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(qs ?? '');
     const site = byId(qs) ?? (ll ? custom(Number(ll[1]), Number(ll[2])) : null) ?? byId(DEFAULT_SITE) ?? sites[0];
     const t = Date.parse(q.get('t') ?? '');
-    return { site, landingMs: inEph(t) ? t : null, from: 'url' };
+    return { site, landingMs: inEph(t) ? t : null, from: 'url', vehicle: null };
   }
-  if (mission) {
-    const site = byId(mission.siteId) ?? custom(mission.latDeg, mission.lonDeg, mission.siteName);
-    if (site) return { site, landingMs: inEph(mission.landingMs) ? mission.landingMs : null, from: 'mission' };
+  if (config) {
+    const c = config.site;
+    const listed = c.id ? byId(c.id) : null;
+    const site = listed ?? custom(c.latDeg, c.lonDeg, c.name);
+    if (site) return { site, landingMs: inEph(config.landing?.requestedMs) ? config.landing.requestedMs : null, from: 'config', vehicle: config.vehicle ?? null };
   }
-  return { site: byId(DEFAULT_SITE) ?? sites[0], landingMs: null, from: 'default' };
+  return { site: null, landingMs: null, from: 'none', vehicle: null };
 }
 
 function boot() {
@@ -7013,13 +5918,24 @@ function boot() {
   // skyline, height and terrain per site: polar pyramid south of 80°S, global LOLA terrain elsewhere
   const siteCtx = createSiteContexts({ load: (name) => loadData(name, { timeoutMs: 90000 }), getDem: () => S.dem, manifest: json('data-hires') });
   const q = new URLSearchParams(location.search);
-  const start0 = startingPoint(q, readMission(), sites, eph);
-  let choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
+  const config = readConfig();
+  const start0 = startingPoint(q, config, sites, eph);
+  const rehearsal = start0.from === 'url';
+  const cfgId = rehearsal ? `rehearsal:${start0.site.id}` : config?.id ?? null;
+  if (start0.from === 'none') {
+    // nothing finalised: say so, with the way back to planning (and a rehearsal to look at)
+    lift();
+    $('#stages').replaceChildren(stageBar(document, 'execute'));
+    $('#cfg-chip').hidden = true;
+    $('#back-plan').href = $('#nc-map').href = stageUrl('map', readMission());
+    $('#noconfig').hidden = false;
+    return;
+  }
 
   const S = {
     site: start0.site,
     landingMs: start0.landingMs,
-    vehicle: cleanVehicle({ ...VEHICLE_DEFAULTS }),
+    vehicle: cleanVehicle(start0.vehicle ?? { ...VEHICLE_DEFAULTS }),
     dem: null, plan: null, power: null, branches: [], checks: null, active: null,
     f: 0, playing: false, speed: 1, scene: 'earth', auto: true, scenes: null, timeline: null, token: 0, terrainNote: '',
   };
@@ -7044,17 +5960,24 @@ function boot() {
   setTop();
   // narrow screens start with the details panel closed so the 3D view is visible (the handle reopens it)
   if (window.innerWidth < 760) { $('#side').classList.add('closed'); $('#side-toggle').textContent = 'Details ‹'; }
-  // site picker
-  const fillSites = () => { $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join(''); };
-  fillSites();
-  $('#site').value = S.site.id;
-  // the mission's steps across the pages; this page is step 1
-  const stages = stageBar(document, 'landing');
+  // the mission's steps across the pages; this page is step 3. The stage bar names the configuration's site.
+  const cfgMission = () => ({ siteId: S.site.id === 'custom' ? null : S.site.id, siteName: S.site.name, latDeg: S.site.latDeg, lonDeg: S.site.lonDeg, landingMs: S.landingMs });
+  const stages = stageBar(document, 'execute', { getMission: cfgMission });
   $('#stages').replaceChildren(stages);
-  const roverUrl = () => stageUrl('rover', readMission());
-  // the action bar (in the top bar): the page's actions; the side panels keep the inputs and the data
+  $('#back-plan').href = stageUrl('map', readMission());
+  // the frozen configuration this page flies (or the rehearsal), and whether the plan on the Map has moved since
+  function renderChip() {
+    const chip = $('#cfg-chip');
+    const day = Number.isFinite(S.landingMs) ? new Date(S.landingMs).toISOString().slice(0, 16).replace('T', ' ') : '';
+    const changed = config && !rehearsal ? changesSince(config, readMission()) : [];
+    chip.classList.toggle('rehearsal', rehearsal);
+    chip.innerHTML = rehearsal
+      ? `<span class="id">REHEARSAL</span><b>${S.site.name}</b><span>not a finalised mission</span>`
+      : `<span class="id">${config.id}</span><b>${S.site.name}</b><span>${day} UTC</span>${changed.length ? `<span class="stale">· plan changed since</span>` : ''}`;
+    chip.title = rehearsal ? 'A rehearsal from the link: finalise a mission on the Map (step 2) to fly your plan.' : `Frozen configuration ${config.id}, frozen ${new Date(config.frozenMs).toISOString().slice(0, 16).replace('T', ' ')} UTC. ${changed.length ? `The plan on the Map has changed since (${changed.join(', ')}): finalise again to fly the new one.` : 'The plan on the Map is the same.'}`;
+  }
+  // the action bar (in the top bar): the page's actions; the side panels keep the data
   const rover = $('#ab-rover');
-  for (const ev of ['pointerenter', 'focus', 'click']) rover.addEventListener(ev, () => { rover.href = roverUrl(); });
   const pressed = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false');
   // contingency to fly: nominal or one of the branches the page draws (short names; the tab has the full cards)
   const BRANCH_SHORT = { 'engine-abort': 'Abort', 'hazard-divert': 'Divert', 'wave-off': 'Wave-off', 'engine-low': 'Low thrust', retarget: 'Retarget', 'spe-hold': 'Hold' };
@@ -7070,19 +5993,12 @@ function boot() {
     sel.value = S.active ?? '';
   }
   $('#ab-branch-sel').addEventListener('change', (e) => { const id = e.target.value || null; if ((S.active ?? null) !== id) selectBranch(id ?? S.active); });
-  // Replan with the numbers typed in the Vehicle tab (highlighted once they differ from the plan's)
-  let vehicleDirty = false;
-  const setDirty = (on) => { vehicleDirty = on; $('#ab-replan').classList.toggle('ab-dirty', on); $('#ab-replan .ab-l').textContent = on ? 'Replan with the new numbers' : 'Replan'; };
-  $('#ab-replan').addEventListener('click', () => {
-    const v = vehicleFromForm($('#tab-body'), S.plan?.vehicle ?? S.vehicle) ?? S.vehicle;
-    S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true });
-  });
   // Save plan: the mission and the plan's figures as a JSON file
   $('#ab-save').addEventListener('click', () => {
     if (!S.plan) return;
     const p = S.plan, t = p.times, iso = (ms) => new Date(ms).toISOString();
     const out = {
-      savedAt: iso(Date.now()), page: 'lander.html', mission: readMission(),
+      savedAt: iso(Date.now()), page: 'lander.html', configuration: rehearsal ? null : config, rehearsal,
       site: { id: p.site.id, name: p.site.name, latDeg: p.site.latDeg, lonDeg: p.site.lonDeg, heightM: Math.round(p.siteHeightKm * 1000) },
       times: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, k.endsWith('Ms') ? iso(v) : v])),
       vehicle: p.vehicle, deltaV: { phases: p.budget.phases.map((x) => ({ name: x.name, dvMs: Math.round(x.dvMs), propellantKg: Math.round(x.propellantKg), by: x.by })), marginMs: Math.round(p.budget.marginMs), reserveDvMs: p.budget.reserveDvMs },
@@ -7093,7 +6009,7 @@ function boot() {
     };
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
-    a.download = `lander-plan-${(p.site.id === 'custom' ? `${p.site.latDeg.toFixed(2)}_${p.site.lonDeg.toFixed(2)}` : p.site.id)}-${iso(t.landingMs).slice(0, 10)}.json`;
+    a.download = `flight-log-${(p.site.id === 'custom' ? `${p.site.latDeg.toFixed(2)}_${p.site.lonDeg.toFixed(2)}` : p.site.id)}-${iso(t.landingMs).slice(0, 10)}.json`;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   });
 
@@ -7154,13 +6070,9 @@ function boot() {
     S.timeline = createTimeline($('#timeline'), plan, { onSeek: (t) => { S.f = S.timeline.tToF(t); }, onBranch: selectBranch });
     S.timeline.setBranches(S.branches, S.active);
     S.f = tKeep ? S.timeline.tToF(tKeep) : 0;
-    $('#when').value = new Date(plan.times.landingMs).toISOString().slice(0, 16);
-    // the site and the requested landing time become the mission the next steps start from. Not the planned
-    // touchdown: the planner moves it by up to half an orbit to an overhead pass, and storing that would move the
-    // landing again on every visit (a request is a fixed point; a snapped time is not).
-    // and where the craft touched down (the rover is planned from there), even before the user plays to touchdown
-    writeMission({ siteId: site.id === 'custom' ? null : site.id, siteName: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: S.landingMs, landed: flownTouchdown(plan) });
-    showLanded();
+    // where the craft touches down (surface operations start there); the planning mission is not changed
+    showLanded(flownTouchdown(plan));
+    renderChip();
     renderPanels();
     setBranches();
     resize();
@@ -7215,10 +6127,15 @@ function boot() {
     const body = $('#tab-body');
     if (tab === 'plan') renderPlan(body, S.plan, S.power);
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
-    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
+    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, null, S.landed);
     else if (tab === 'vehicle') {
-      // inputs only: typing marks the plan out of date (Replan in the bar); "Default numbers" replans at once
-      renderVehicle(body, S.plan.vehicle, (v) => { if (v === null) setDirty(true); else { S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true }); } });
+      // read-only: the vehicle was frozen with the configuration (Finalise, step 2, is the last place to change it)
+      renderVehicle(body, S.plan.vehicle, () => {});
+      body.querySelectorAll('input, button[data-reset]').forEach((el) => { el.disabled = true; });
+      const fa = body.querySelector('.form-actions');
+      if (fa) fa.innerHTML = `<span class="muted">${rehearsal ? 'Rehearsal with the default vehicle.' : `Frozen in configuration ${config.id}.`} To change these numbers, go back to <a href="${stageUrl('finalise')}">Finalise</a> and freeze again.</span>`;
+      const intro = body.querySelector('.note');
+      if (intro) intro.innerHTML = 'All vehicle numbers are <b>assumed</b> (a generic medium robotic lander, not a real one). They are part of the frozen configuration.';
       body.prepend(closeup.el);
       requestAnimationFrame(() => closeup.resize());
     }
@@ -7231,24 +6148,22 @@ function boot() {
     renderBranchBar();
   }
 
-  // the touchdown point of what is shown as flown, in the mission and on the page
-  function showLanded() {
-    const m = readMission();
-    const p = m?.landed ?? null;
+  // the touchdown point of what is shown as flown: on the page, and for surface operations (mission-config.js)
+  function showLanded(p) {
     const ll = p ? `${Math.abs(p.latDeg).toFixed(4)}°${p.latDeg < 0 ? 'S' : 'N'} ${p.lonDeg.toFixed(4)}°E` : null;
     const via = p && p.source !== 'nominal' ? `, after the ${p.source.replace(/-/g, ' ')}` : '';
     $('#ab-touch').textContent = p ? `Lands at ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}` : 'No touchdown in this contingency';
     $('#ab-touch').title = p ? `${S.site.name} · touchdown ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC` : '';
-    rover.title = `Step 2: plan the rover route from the touchdown point (navigator). ${$('#ab-touch').textContent}`;
+    rover.title = `Surface operations: the rover drive planned on the Map. ${$('#ab-touch').textContent}`;
     S.landed = p;
+    writeFlown(cfgId, p);
     stages.refresh();
-    rover.href = roverUrl();
+    if (S.surface?.frame) S.surface.stale = true;
   }
 
   function selectBranch(id) {
     S.active = S.active === id ? null : id;
-    writeMission({ landed: flownTouchdown(S.plan, S.branches.find((x) => x.id === S.active) ?? null) });
-    showLanded();
+    showLanded(flownTouchdown(S.plan, S.branches.find((x) => x.id === S.active) ?? null));
     setBranches();
     const b = S.branches.find((x) => x.id === S.active);
     if (b) {
@@ -7313,28 +6228,64 @@ function boot() {
   $('#play').addEventListener('click', () => togglePlay());
   // playback: 0.5–4× of the compressed timeline, or real time (one simulated second per second)
   $('#speed').addEventListener('change', (e) => { S.speed = e.target.value === 'real' ? 'real' : Number(e.target.value); });
-  // "Where to land": the landing-site planner (map, scores, better spots); "Land here" replans the mission there
-  const planner = createPlanner({
-    root: $('#planner'), eph, sites, meta, hires, siteCtx,
-    getDem: () => S.dem, getVehicle: () => S.plan?.vehicle ?? S.vehicle,
-    getFromMs: () => (Number.isFinite(S.landingMs) ? S.landingMs - 2 * 86400e3 : DEFAULT_FROM),
-    getStayDays: () => readMission()?.stayDays ?? 7,
-    getStayStartMs: () => S.plan?.times.landingMs ?? S.landingMs ?? DEFAULT_FROM,
-    getCurrent: () => S.site,
-    onLand: ({ site, landingMs }) => {
-      const listed = sites.find((s) => s.id === site.id);
-      const s = listed ?? { id: 'custom', name: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg };
-      if (!listed) { choices = [s, ...sites]; fillSites(); }
-      S.site = s; S.landingMs = landingMs;
-      $('#site').value = s.id;
-      replanAt();
-    },
-  });
-  S.planner = planner;   // inspection from the console, as S itself
-  $('#plan-site').addEventListener('click', () => planner.open());
-  $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replanAt(); });
-  $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replanAt(); } });
-  $('#find').addEventListener('click', () => { S.landingMs = pickLandingWindow(eph, S.site, S.ctx?.mask ?? skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3)?.tMs ?? S.landingMs; replanAt(); });
+  // the six mission phases (mission-flow.js EXEC_PHASES) over the lander's timeline: click to go to one; the one
+  // being flown is marked, the ones before it are done; Surface operations opens the rover drive
+  const phaseNav = $('#phases');
+  phaseNav.innerHTML = EXEC_PHASES.map((p, i) => `<button type="button" data-ph="${p.id}" title="${p.label}"><span class="n">${i + 1}</span><span class="ph-l">${p.label}</span><span class="ph-s">${p.short}</span></button>`).join('');
+  phaseNav.querySelectorAll('[data-ph]').forEach((b) => b.addEventListener('click', () => goPhase(b.dataset.ph)));
+  let shownPhase = null;
+  function markPhase(id) {
+    if (id === shownPhase) return;
+    shownPhase = id;
+    const k = EXEC_PHASES.findIndex((p) => p.id === id);
+    phaseNav.querySelectorAll('[data-ph]').forEach((b, i) => {
+      b.classList.toggle('done', i < k);
+      if (i === k) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    });
+  }
+  function goPhase(id) {
+    if (id === 'surface') { openSurface(); return; }
+    closeSurface();
+    const ph = EXEC_PHASES.find((p) => p.id === id);
+    const first = S.plan?.phases.find((x) => ph.from.includes(x.id));
+    if (!first) return;
+    S.f = S.timeline.tToF(first.startMs + 1);
+    if (!S.auto) $('#auto').click();
+  }
+  // surface operations: the frozen route on the 3D globe (globe.html#cfg=1 in a frame), from the touchdown point
+  S.surface = { frame: null, stale: false };
+  function openSurface() {
+    markPhase('surface');
+    if (S.playing) togglePlay();
+    document.body.classList.add('surface-on');
+    $('#surface').hidden = false;
+    const route = rehearsal ? null : config?.route ?? null;
+    const sum = routeSummary(route, S.site);
+    const t = (ms) => (Number.isFinite(ms) ? `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC` : '—');
+    const dLon = S.landed && sum ? ((((S.landed.lonDeg - route.pts[0][1]) % 360) + 540) % 360) - 180 : 0;
+    const off = S.landed && sum ? Math.round(1000 * 30.32 * Math.hypot(S.landed.latDeg - route.pts[0][0], dLon * Math.cos(S.landed.latDeg * Math.PI / 180))) : null;
+    $('#sf-info').textContent = sum
+      ? `${sum.label} route, ${sum.lengthKm.toFixed(1)} km · departs ${t(sum.departMs)} · ${sum.arriveMs ? `arrives ${t(sum.arriveMs)}` : 'no arrival simulated'}${off !== null ? ` · touchdown ${off} m from the route start` : ''}`
+      : S.landed ? `No rover route in ${rehearsal ? 'a rehearsal' : 'this configuration'}: the lander stays at ${S.site.name}.` : 'No touchdown in the contingency flown: nothing on the surface.';
+    const at = S.landed ?? S.site;
+    const src = `globe.html?v=flow1#lat=${at.latDeg.toFixed(4)}&lon=${at.lonDeg.toFixed(4)}&dist=12&tilt=50&heading=0&cfg=1${rehearsal ? '&rehearsal=1' : ''}`;
+    if (!S.surface.frame) {
+      const f = document.createElement('iframe');
+      f.title = 'Surface operations: the rover drive on the 3D Moon';
+      $('#surface').prepend(f);
+      S.surface.frame = f;
+      f.src = src;
+    } else if (S.surface.stale) { S.surface.frame.src = src; }
+    S.surface.stale = false;
+  }
+  function closeSurface() {
+    if (!document.body.classList.contains('surface-on')) return;
+    document.body.classList.remove('surface-on');
+    $('#surface').hidden = true;
+    shownPhase = null;
+  }
+  rover.addEventListener('click', () => openSurface());
+  $('#sf-close').addEventListener('click', () => { closeSurface(); S.f = 0.999; });
   // terrain key (descent view): colour mode, contours, legend, contour interval and scale bar
   S.terrStyle = { mode: 'plain', contours: true };
   document.querySelectorAll('#terrkey [data-tmode]').forEach((b) => b.addEventListener('click', () => {
@@ -7376,7 +6327,7 @@ function boot() {
     $('#play').textContent = S.playing ? 'Pause' : 'Play';
   }
   window.addEventListener('keydown', (e) => {
-    if (planner.isOpen) { if (e.key === 'Escape') planner.close(); return; }
+    if (document.body.classList.contains('surface-on')) { if (e.key === 'Escape') closeSurface(); return; }
     if (e.target.closest('input, select, textarea')) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if (e.code === 'ArrowRight') S.f = Math.min(1, S.f + 0.005);
@@ -7403,15 +6354,16 @@ function boot() {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!S.plan || planner.isOpen) return;   // the planner covers the view: no 3D frames meanwhile
+    if (!S.plan || document.body.classList.contains('surface-on')) return;   // surface operations cover the view: no 3D frames
     if (S.playing) {
       S.f = playbackStep(S.f, dt, S.speed, S.timeline, PLAYBACK_S);
-      if (S.f >= 1) togglePlay();
+      if (S.f >= 1) { togglePlay(); openSurface(); return; }   // the landing is flown: on to the surface
     }
     const t = S.timeline.fToT(S.f);
     const st = S.plan.stateAt(t);
     if (S.auto && st.scene !== S.scene) setScene(st.scene, false);
     if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; }
+    markPhase(execPhaseOf(st.phase));
     const sc = S.scenes[S.scene];
     if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
     const att = attitudeState(st, S.plan);

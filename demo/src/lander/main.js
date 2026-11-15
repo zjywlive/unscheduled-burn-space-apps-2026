@@ -1,7 +1,9 @@
-// Entry of demo/lander.html (bundled by tools/build-lander.mjs). Reads the inlined JSON data, plans the mission,
-// builds the three linked scenes and runs the timeline. Deep link: lander.html?site=<id | lat,lon>&t=<ISO time>.
-// Step 1 of the mission flow (mission-flow.js): without URL parameters it starts from the stored mission, it
-// stores the site and landing time it plans, and after touchdown it links on to the rover route (step 2).
+// Entry of demo/lander.html (bundled by tools/build-lander.mjs): step 3 of the mission, Execute. Flies the frozen
+// mission configuration (mission-config.js, written by step 2, Finalise) through the six phases of mission-flow.js
+// EXEC_PHASES: launch, spaceflight, orbital manoeuvres, lunar orbit insertion, landing (with the contingency
+// branches), surface operations (the rover route planned on the Map, played on the 3D globe in a frame).
+// Nothing is planned here: the site, time and vehicle come from the configuration. A link with
+// ?site=<id | lat,lon>&t=<ISO time> flies a rehearsal of that site instead (labelled, not a finalised mission).
 import { createEphemeris } from '../ephemeris.js';
 import { createDem, skylineFor, TERRAIN_MAX_LAT } from '../terrain.js';
 import { hasData, readData, loadData } from '../data-loader.js';
@@ -16,10 +18,10 @@ import { buildEarthScene } from './view-earth.js';
 import { buildMoonScene } from './view-moon.js';
 import { buildSurfaceScene } from './view-surface.js';
 import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm } from './ui.js';
-import { readMission, writeMission, stageUrl, stageBar } from '../mission-flow.js';
+import { readMission, stageUrl, stageBar, EXEC_PHASES, execPhaseOf } from '../mission-flow.js';
+import { readConfig, changesSince, writeFlown, routeSummary } from '../mission-config.js';
 import { attitudeState } from './model.js';
 import { createCloseup } from './closeup.js';
-import { createPlanner } from './planner.js';
 import { createSiteContexts, isPolarSite } from './globalsite.js';
 import { createHiresSet } from '../hires.js';
 import { bootScreen } from '../boot.js';
@@ -30,12 +32,11 @@ const DEFAULT_SITE = 'shackleton';
 const DEFAULT_FROM = Date.parse('2027-01-01T00:00:00Z');
 const PLAYBACK_S = 150;   // the whole timeline in 150 s at 1×
 
-// Where the page starts: URL parameters first (site id or "lat,lon", t), then the stored mission, then the
-// default site with a lit landing window. A stored point south of 80°S that is not a listed site becomes a
-// custom site. A stored landing time is used only with the stored site and inside the ephemeris.
-export function startingPoint(q, mission, sites, eph) {
+// What the page flies: a rehearsal from URL parameters (site id or "lat,lon", t), else the frozen configuration,
+// else nothing (the page asks for a finalised mission). A point that is not a listed site becomes a custom site,
+// anywhere on the Moon. A landing time outside the ephemeris is dropped (a lit window is picked).
+export function startingPoint(q, config, sites, eph) {
   const byId = (id) => sites.find((s) => s.id === id);
-  // anywhere on the Moon (south of 80°S the polar data, elsewhere the global LOLA terrain and a computed skyline)
   const custom = (latDeg, lonDeg, name) => (latDeg >= -90 && latDeg <= 90 ? { id: 'custom', name: name ?? `${latDeg.toFixed(2)}°, ${lonDeg.toFixed(2)}°`, latDeg, lonDeg } : null);
   const inEph = (t) => Number.isFinite(t) && t > eph.startMs + 10 * 86400e3 && t < eph.endMs - 86400e3;
   const qs = q.get('site');
@@ -43,13 +44,15 @@ export function startingPoint(q, mission, sites, eph) {
     const ll = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(qs ?? '');
     const site = byId(qs) ?? (ll ? custom(Number(ll[1]), Number(ll[2])) : null) ?? byId(DEFAULT_SITE) ?? sites[0];
     const t = Date.parse(q.get('t') ?? '');
-    return { site, landingMs: inEph(t) ? t : null, from: 'url' };
+    return { site, landingMs: inEph(t) ? t : null, from: 'url', vehicle: null };
   }
-  if (mission) {
-    const site = byId(mission.siteId) ?? custom(mission.latDeg, mission.lonDeg, mission.siteName);
-    if (site) return { site, landingMs: inEph(mission.landingMs) ? mission.landingMs : null, from: 'mission' };
+  if (config) {
+    const c = config.site;
+    const listed = c.id ? byId(c.id) : null;
+    const site = listed ?? custom(c.latDeg, c.lonDeg, c.name);
+    if (site) return { site, landingMs: inEph(config.landing?.requestedMs) ? config.landing.requestedMs : null, from: 'config', vehicle: config.vehicle ?? null };
   }
-  return { site: byId(DEFAULT_SITE) ?? sites[0], landingMs: null, from: 'default' };
+  return { site: null, landingMs: null, from: 'none', vehicle: null };
 }
 
 export function boot() {
@@ -70,13 +73,24 @@ export function boot() {
   // skyline, height and terrain per site: polar pyramid south of 80°S, global LOLA terrain elsewhere
   const siteCtx = createSiteContexts({ load: (name) => loadData(name, { timeoutMs: 90000 }), getDem: () => S.dem, manifest: json('data-hires') });
   const q = new URLSearchParams(location.search);
-  const start0 = startingPoint(q, readMission(), sites, eph);
-  let choices = start0.site.id === 'custom' ? [start0.site, ...sites] : sites;
+  const config = readConfig();
+  const start0 = startingPoint(q, config, sites, eph);
+  const rehearsal = start0.from === 'url';
+  const cfgId = rehearsal ? `rehearsal:${start0.site.id}` : config?.id ?? null;
+  if (start0.from === 'none') {
+    // nothing finalised: say so, with the way back to planning (and a rehearsal to look at)
+    lift();
+    $('#stages').replaceChildren(stageBar(document, 'execute'));
+    $('#cfg-chip').hidden = true;
+    $('#back-plan').href = $('#nc-map').href = stageUrl('map', readMission());
+    $('#noconfig').hidden = false;
+    return;
+  }
 
   const S = {
     site: start0.site,
     landingMs: start0.landingMs,
-    vehicle: cleanVehicle({ ...VEHICLE_DEFAULTS }),
+    vehicle: cleanVehicle(start0.vehicle ?? { ...VEHICLE_DEFAULTS }),
     dem: null, plan: null, power: null, branches: [], checks: null, active: null,
     f: 0, playing: false, speed: 1, scene: 'earth', auto: true, scenes: null, timeline: null, token: 0, terrainNote: '',
   };
@@ -101,17 +115,24 @@ export function boot() {
   setTop();
   // narrow screens start with the details panel closed so the 3D view is visible (the handle reopens it)
   if (window.innerWidth < 760) { $('#side').classList.add('closed'); $('#side-toggle').textContent = 'Details ‹'; }
-  // site picker
-  const fillSites = () => { $('#site').innerHTML = choices.map((s) => `<option value="${s.id}">${s.name}</option>`).join(''); };
-  fillSites();
-  $('#site').value = S.site.id;
-  // the mission's steps across the pages; this page is step 1
-  const stages = stageBar(document, 'landing');
+  // the mission's steps across the pages; this page is step 3. The stage bar names the configuration's site.
+  const cfgMission = () => ({ siteId: S.site.id === 'custom' ? null : S.site.id, siteName: S.site.name, latDeg: S.site.latDeg, lonDeg: S.site.lonDeg, landingMs: S.landingMs });
+  const stages = stageBar(document, 'execute', { getMission: cfgMission });
   $('#stages').replaceChildren(stages);
-  const roverUrl = () => stageUrl('rover', readMission());
-  // the action bar (in the top bar): the page's actions; the side panels keep the inputs and the data
+  $('#back-plan').href = stageUrl('map', readMission());
+  // the frozen configuration this page flies (or the rehearsal), and whether the plan on the Map has moved since
+  function renderChip() {
+    const chip = $('#cfg-chip');
+    const day = Number.isFinite(S.landingMs) ? new Date(S.landingMs).toISOString().slice(0, 16).replace('T', ' ') : '';
+    const changed = config && !rehearsal ? changesSince(config, readMission()) : [];
+    chip.classList.toggle('rehearsal', rehearsal);
+    chip.innerHTML = rehearsal
+      ? `<span class="id">REHEARSAL</span><b>${S.site.name}</b><span>not a finalised mission</span>`
+      : `<span class="id">${config.id}</span><b>${S.site.name}</b><span>${day} UTC</span>${changed.length ? `<span class="stale">· plan changed since</span>` : ''}`;
+    chip.title = rehearsal ? 'A rehearsal from the link: finalise a mission on the Map (step 2) to fly your plan.' : `Frozen configuration ${config.id}, frozen ${new Date(config.frozenMs).toISOString().slice(0, 16).replace('T', ' ')} UTC. ${changed.length ? `The plan on the Map has changed since (${changed.join(', ')}): finalise again to fly the new one.` : 'The plan on the Map is the same.'}`;
+  }
+  // the action bar (in the top bar): the page's actions; the side panels keep the data
   const rover = $('#ab-rover');
-  for (const ev of ['pointerenter', 'focus', 'click']) rover.addEventListener(ev, () => { rover.href = roverUrl(); });
   const pressed = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false');
   // contingency to fly: nominal or one of the branches the page draws (short names; the tab has the full cards)
   const BRANCH_SHORT = { 'engine-abort': 'Abort', 'hazard-divert': 'Divert', 'wave-off': 'Wave-off', 'engine-low': 'Low thrust', retarget: 'Retarget', 'spe-hold': 'Hold' };
@@ -127,19 +148,12 @@ export function boot() {
     sel.value = S.active ?? '';
   }
   $('#ab-branch-sel').addEventListener('change', (e) => { const id = e.target.value || null; if ((S.active ?? null) !== id) selectBranch(id ?? S.active); });
-  // Replan with the numbers typed in the Vehicle tab (highlighted once they differ from the plan's)
-  let vehicleDirty = false;
-  const setDirty = (on) => { vehicleDirty = on; $('#ab-replan').classList.toggle('ab-dirty', on); $('#ab-replan .ab-l').textContent = on ? 'Replan with the new numbers' : 'Replan'; };
-  $('#ab-replan').addEventListener('click', () => {
-    const v = vehicleFromForm($('#tab-body'), S.plan?.vehicle ?? S.vehicle) ?? S.vehicle;
-    S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true });
-  });
   // Save plan: the mission and the plan's figures as a JSON file
   $('#ab-save').addEventListener('click', () => {
     if (!S.plan) return;
     const p = S.plan, t = p.times, iso = (ms) => new Date(ms).toISOString();
     const out = {
-      savedAt: iso(Date.now()), page: 'lander.html', mission: readMission(),
+      savedAt: iso(Date.now()), page: 'lander.html', configuration: rehearsal ? null : config, rehearsal,
       site: { id: p.site.id, name: p.site.name, latDeg: p.site.latDeg, lonDeg: p.site.lonDeg, heightM: Math.round(p.siteHeightKm * 1000) },
       times: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, k.endsWith('Ms') ? iso(v) : v])),
       vehicle: p.vehicle, deltaV: { phases: p.budget.phases.map((x) => ({ name: x.name, dvMs: Math.round(x.dvMs), propellantKg: Math.round(x.propellantKg), by: x.by })), marginMs: Math.round(p.budget.marginMs), reserveDvMs: p.budget.reserveDvMs },
@@ -150,7 +164,7 @@ export function boot() {
     };
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
-    a.download = `lander-plan-${(p.site.id === 'custom' ? `${p.site.latDeg.toFixed(2)}_${p.site.lonDeg.toFixed(2)}` : p.site.id)}-${iso(t.landingMs).slice(0, 10)}.json`;
+    a.download = `flight-log-${(p.site.id === 'custom' ? `${p.site.latDeg.toFixed(2)}_${p.site.lonDeg.toFixed(2)}` : p.site.id)}-${iso(t.landingMs).slice(0, 10)}.json`;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   });
 
@@ -211,13 +225,9 @@ export function boot() {
     S.timeline = createTimeline($('#timeline'), plan, { onSeek: (t) => { S.f = S.timeline.tToF(t); }, onBranch: selectBranch });
     S.timeline.setBranches(S.branches, S.active);
     S.f = tKeep ? S.timeline.tToF(tKeep) : 0;
-    $('#when').value = new Date(plan.times.landingMs).toISOString().slice(0, 16);
-    // the site and the requested landing time become the mission the next steps start from. Not the planned
-    // touchdown: the planner moves it by up to half an orbit to an overhead pass, and storing that would move the
-    // landing again on every visit (a request is a fixed point; a snapped time is not).
-    // and where the craft touched down (the rover is planned from there), even before the user plays to touchdown
-    writeMission({ siteId: site.id === 'custom' ? null : site.id, siteName: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg, landingMs: S.landingMs, landed: flownTouchdown(plan) });
-    showLanded();
+    // where the craft touches down (surface operations start there); the planning mission is not changed
+    showLanded(flownTouchdown(plan));
+    renderChip();
     renderPanels();
     setBranches();
     resize();
@@ -272,10 +282,15 @@ export function boot() {
     const body = $('#tab-body');
     if (tab === 'plan') renderPlan(body, S.plan, S.power);
     else if (tab === 'branches') renderBranches(body, S.branches, S.active, selectBranch);
-    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, roverUrl(), S.landed);
+    else if (tab === 'landing') renderLanding(body, S.checks, S.plan, S.terrainNote, null, S.landed);
     else if (tab === 'vehicle') {
-      // inputs only: typing marks the plan out of date (Replan in the bar); "Default numbers" replans at once
-      renderVehicle(body, S.plan.vehicle, (v) => { if (v === null) setDirty(true); else { S.vehicle = cleanVehicle(v); setDirty(false); replanAt({ keepTime: true }); } });
+      // read-only: the vehicle was frozen with the configuration (Finalise, step 2, is the last place to change it)
+      renderVehicle(body, S.plan.vehicle, () => {});
+      body.querySelectorAll('input, button[data-reset]').forEach((el) => { el.disabled = true; });
+      const fa = body.querySelector('.form-actions');
+      if (fa) fa.innerHTML = `<span class="muted">${rehearsal ? 'Rehearsal with the default vehicle.' : `Frozen in configuration ${config.id}.`} To change these numbers, go back to <a href="${stageUrl('finalise')}">Finalise</a> and freeze again.</span>`;
+      const intro = body.querySelector('.note');
+      if (intro) intro.innerHTML = 'All vehicle numbers are <b>assumed</b> (a generic medium robotic lander, not a real one). They are part of the frozen configuration.';
       body.prepend(closeup.el);
       requestAnimationFrame(() => closeup.resize());
     }
@@ -288,24 +303,22 @@ export function boot() {
     renderBranchBar();
   }
 
-  // the touchdown point of what is shown as flown, in the mission and on the page
-  function showLanded() {
-    const m = readMission();
-    const p = m?.landed ?? null;
+  // the touchdown point of what is shown as flown: on the page, and for surface operations (mission-config.js)
+  function showLanded(p) {
     const ll = p ? `${Math.abs(p.latDeg).toFixed(4)}°${p.latDeg < 0 ? 'S' : 'N'} ${p.lonDeg.toFixed(4)}°E` : null;
     const via = p && p.source !== 'nominal' ? `, after the ${p.source.replace(/-/g, ' ')}` : '';
     $('#ab-touch').textContent = p ? `Lands at ${ll}${p.missM >= 1 ? ` (${Math.round(p.missM)} m from the target${via})` : ''}` : 'No touchdown in this contingency';
     $('#ab-touch').title = p ? `${S.site.name} · touchdown ${new Date(p.tMs).toISOString().slice(0, 16).replace('T', ' ')} UTC` : '';
-    rover.title = `Step 2: plan the rover route from the touchdown point (navigator). ${$('#ab-touch').textContent}`;
+    rover.title = `Surface operations: the rover drive planned on the Map. ${$('#ab-touch').textContent}`;
     S.landed = p;
+    writeFlown(cfgId, p);
     stages.refresh();
-    rover.href = roverUrl();
+    if (S.surface?.frame) S.surface.stale = true;
   }
 
   function selectBranch(id) {
     S.active = S.active === id ? null : id;
-    writeMission({ landed: flownTouchdown(S.plan, S.branches.find((x) => x.id === S.active) ?? null) });
-    showLanded();
+    showLanded(flownTouchdown(S.plan, S.branches.find((x) => x.id === S.active) ?? null));
     setBranches();
     const b = S.branches.find((x) => x.id === S.active);
     if (b) {
@@ -370,28 +383,64 @@ export function boot() {
   $('#play').addEventListener('click', () => togglePlay());
   // playback: 0.5–4× of the compressed timeline, or real time (one simulated second per second)
   $('#speed').addEventListener('change', (e) => { S.speed = e.target.value === 'real' ? 'real' : Number(e.target.value); });
-  // "Where to land": the landing-site planner (map, scores, better spots); "Land here" replans the mission there
-  const planner = createPlanner({
-    root: $('#planner'), eph, sites, meta, hires, siteCtx,
-    getDem: () => S.dem, getVehicle: () => S.plan?.vehicle ?? S.vehicle,
-    getFromMs: () => (Number.isFinite(S.landingMs) ? S.landingMs - 2 * 86400e3 : DEFAULT_FROM),
-    getStayDays: () => readMission()?.stayDays ?? 7,
-    getStayStartMs: () => S.plan?.times.landingMs ?? S.landingMs ?? DEFAULT_FROM,
-    getCurrent: () => S.site,
-    onLand: ({ site, landingMs }) => {
-      const listed = sites.find((s) => s.id === site.id);
-      const s = listed ?? { id: 'custom', name: site.name, latDeg: site.latDeg, lonDeg: site.lonDeg };
-      if (!listed) { choices = [s, ...sites]; fillSites(); }
-      S.site = s; S.landingMs = landingMs;
-      $('#site').value = s.id;
-      replanAt();
-    },
-  });
-  S.planner = planner;   // inspection from the console, as S itself
-  $('#plan-site').addEventListener('click', () => planner.open());
-  $('#site').addEventListener('change', (e) => { S.site = choices.find((s) => s.id === e.target.value); S.landingMs = null; replanAt(); });
-  $('#when').addEventListener('change', (e) => { const t = Date.parse(`${e.target.value}:00Z`); if (Number.isFinite(t)) { S.landingMs = t; replanAt(); } });
-  $('#find').addEventListener('click', () => { S.landingMs = pickLandingWindow(eph, S.site, S.ctx?.mask ?? skylineFor(S.dem, S.site), (S.plan?.times.landingMs ?? DEFAULT_FROM) + 86400e3)?.tMs ?? S.landingMs; replanAt(); });
+  // the six mission phases (mission-flow.js EXEC_PHASES) over the lander's timeline: click to go to one; the one
+  // being flown is marked, the ones before it are done; Surface operations opens the rover drive
+  const phaseNav = $('#phases');
+  phaseNav.innerHTML = EXEC_PHASES.map((p, i) => `<button type="button" data-ph="${p.id}" title="${p.label}"><span class="n">${i + 1}</span><span class="ph-l">${p.label}</span><span class="ph-s">${p.short}</span></button>`).join('');
+  phaseNav.querySelectorAll('[data-ph]').forEach((b) => b.addEventListener('click', () => goPhase(b.dataset.ph)));
+  let shownPhase = null;
+  function markPhase(id) {
+    if (id === shownPhase) return;
+    shownPhase = id;
+    const k = EXEC_PHASES.findIndex((p) => p.id === id);
+    phaseNav.querySelectorAll('[data-ph]').forEach((b, i) => {
+      b.classList.toggle('done', i < k);
+      if (i === k) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    });
+  }
+  function goPhase(id) {
+    if (id === 'surface') { openSurface(); return; }
+    closeSurface();
+    const ph = EXEC_PHASES.find((p) => p.id === id);
+    const first = S.plan?.phases.find((x) => ph.from.includes(x.id));
+    if (!first) return;
+    S.f = S.timeline.tToF(first.startMs + 1);
+    if (!S.auto) $('#auto').click();
+  }
+  // surface operations: the frozen route on the 3D globe (globe.html#cfg=1 in a frame), from the touchdown point
+  S.surface = { frame: null, stale: false };
+  function openSurface() {
+    markPhase('surface');
+    if (S.playing) togglePlay();
+    document.body.classList.add('surface-on');
+    $('#surface').hidden = false;
+    const route = rehearsal ? null : config?.route ?? null;
+    const sum = routeSummary(route, S.site);
+    const t = (ms) => (Number.isFinite(ms) ? `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC` : '—');
+    const dLon = S.landed && sum ? ((((S.landed.lonDeg - route.pts[0][1]) % 360) + 540) % 360) - 180 : 0;
+    const off = S.landed && sum ? Math.round(1000 * 30.32 * Math.hypot(S.landed.latDeg - route.pts[0][0], dLon * Math.cos(S.landed.latDeg * Math.PI / 180))) : null;
+    $('#sf-info').textContent = sum
+      ? `${sum.label} route, ${sum.lengthKm.toFixed(1)} km · departs ${t(sum.departMs)} · ${sum.arriveMs ? `arrives ${t(sum.arriveMs)}` : 'no arrival simulated'}${off !== null ? ` · touchdown ${off} m from the route start` : ''}`
+      : S.landed ? `No rover route in ${rehearsal ? 'a rehearsal' : 'this configuration'}: the lander stays at ${S.site.name}.` : 'No touchdown in the contingency flown: nothing on the surface.';
+    const at = S.landed ?? S.site;
+    const src = `globe.html?v=flow1#lat=${at.latDeg.toFixed(4)}&lon=${at.lonDeg.toFixed(4)}&dist=12&tilt=50&heading=0&cfg=1${rehearsal ? '&rehearsal=1' : ''}`;
+    if (!S.surface.frame) {
+      const f = document.createElement('iframe');
+      f.title = 'Surface operations: the rover drive on the 3D Moon';
+      $('#surface').prepend(f);
+      S.surface.frame = f;
+      f.src = src;
+    } else if (S.surface.stale) { S.surface.frame.src = src; }
+    S.surface.stale = false;
+  }
+  function closeSurface() {
+    if (!document.body.classList.contains('surface-on')) return;
+    document.body.classList.remove('surface-on');
+    $('#surface').hidden = true;
+    shownPhase = null;
+  }
+  rover.addEventListener('click', () => openSurface());
+  $('#sf-close').addEventListener('click', () => { closeSurface(); S.f = 0.999; });
   // terrain key (descent view): colour mode, contours, legend, contour interval and scale bar
   S.terrStyle = { mode: 'plain', contours: true };
   document.querySelectorAll('#terrkey [data-tmode]').forEach((b) => b.addEventListener('click', () => {
@@ -433,7 +482,7 @@ export function boot() {
     $('#play').textContent = S.playing ? 'Pause' : 'Play';
   }
   window.addEventListener('keydown', (e) => {
-    if (planner.isOpen) { if (e.key === 'Escape') planner.close(); return; }
+    if (document.body.classList.contains('surface-on')) { if (e.key === 'Escape') closeSurface(); return; }
     if (e.target.closest('input, select, textarea')) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if (e.code === 'ArrowRight') S.f = Math.min(1, S.f + 0.005);
@@ -460,15 +509,16 @@ export function boot() {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!S.plan || planner.isOpen) return;   // the planner covers the view: no 3D frames meanwhile
+    if (!S.plan || document.body.classList.contains('surface-on')) return;   // surface operations cover the view: no 3D frames
     if (S.playing) {
       S.f = playbackStep(S.f, dt, S.speed, S.timeline, PLAYBACK_S);
-      if (S.f >= 1) togglePlay();
+      if (S.f >= 1) { togglePlay(); openSurface(); return; }   // the landing is flown: on to the surface
     }
     const t = S.timeline.fToT(S.f);
     const st = S.plan.stateAt(t);
     if (S.auto && st.scene !== S.scene) setScene(st.scene, false);
     if (st.phase !== lastPhase) { lastPhase = st.phase; document.body.dataset.phase = st.phase; }
+    markPhase(execPhaseOf(st.phase));
     const sc = S.scenes[S.scene];
     if (S.camHold && now > S.camHold.after) camAct(S.camHold.action, dt);
     const att = attitudeState(st, S.plan);

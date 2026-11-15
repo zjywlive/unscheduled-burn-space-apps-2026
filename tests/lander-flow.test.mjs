@@ -27,33 +27,33 @@ const EPH = { startMs: Date.parse('2026-11-01T00:00:00Z'), endMs: Date.parse('20
 const T = Date.parse('2027-03-02T10:00:00Z');
 const q = (s) => new URLSearchParams(s);
 
-test('flow: URL parameters win, then the stored mission, then the default site', () => {
-  const mission = { siteId: 'im2', siteName: 'IM-2 Athena', latDeg: -84.79, lonDeg: 29.2, landingMs: T };
-  let s = startingPoint(q('?site=shackleton&t=2027-02-01T05:30Z'), mission, SITES, EPH);
-  assert.equal(s.site.id, 'shackleton');
-  assert.equal(s.landingMs, Date.parse('2027-02-01T05:30Z'));
-  assert.equal(s.from, 'url');
-  // a URL site without a time picks a lit window (null), and does not borrow the stored mission's time
-  s = startingPoint(q('?site=im2'), mission, SITES, EPH);
-  assert.equal(s.site.id, 'im2');
-  assert.equal(s.landingMs, null);
-  s = startingPoint(q(''), mission, SITES, EPH);
-  assert.deepEqual([s.site.id, s.landingMs, s.from], ['im2', T, 'mission']);
+// the frozen configuration the execution page flies (mission-config.js)
+const cfgOf = (site, landingMs, vehicle = null) => ({ v: 1, id: 'abc123', site, landing: { requestedMs: landingMs }, vehicle });
+
+test('flow: a rehearsal link wins, then the frozen configuration; with neither there is nothing to fly', () => {
+  const config = cfgOf({ id: 'im2', name: 'IM-2 Athena', latDeg: -84.79, lonDeg: 29.2 }, T, { dryMassKg: 900 });
+  let s = startingPoint(q('?site=shackleton&t=2027-02-01T05:30Z'), config, SITES, EPH);
+  assert.deepEqual([s.site.id, s.landingMs, s.from, s.vehicle], ['shackleton', Date.parse('2027-02-01T05:30Z'), 'url', null]);
+  // a link without a time picks a lit window (null), and does not borrow the configuration's time
+  s = startingPoint(q('?site=im2'), config, SITES, EPH);
+  assert.deepEqual([s.site.id, s.landingMs], ['im2', null]);
+  s = startingPoint(q(''), config, SITES, EPH);
+  assert.deepEqual([s.site.id, s.landingMs, s.from, s.vehicle.dryMassKg], ['im2', T, 'config', 900]);
   s = startingPoint(q(''), null, SITES, EPH);
-  assert.deepEqual([s.site.id, s.landingMs, s.from], ['shackleton', null, 'default']);
+  assert.deepEqual([s.site, s.from], [null, 'none']);
 });
 
-test('flow: a stored or linked point that is not a listed site becomes a custom site, anywhere on the Moon', () => {
-  let s = startingPoint(q(''), { siteId: null, siteName: 'Rim point A', latDeg: -89.43, lonDeg: 220.5, landingMs: T }, SITES, EPH);
+test('flow: a configured or linked point that is not a listed site becomes a custom site, anywhere on the Moon', () => {
+  let s = startingPoint(q(''), cfgOf({ id: null, name: 'Rim point A', latDeg: -89.43, lonDeg: 220.5 }, T), SITES, EPH);
   assert.deepEqual(s.site, { id: 'custom', name: 'Rim point A', latDeg: -89.43, lonDeg: 220.5 });
   s = startingPoint(q('?site=-88.5,-66.7'), null, SITES, EPH);
   assert.equal(s.site.id, 'custom');
   assert.equal(s.site.latDeg, -88.5);
   // north of 80°S too (the global terrain and a computed skyline): Apollo 11, not in this list, is a custom site
-  s = startingPoint(q(''), { siteId: 'apollo11', siteName: 'Apollo 11', latDeg: 0.67, lonDeg: 23.47, landingMs: T }, SITES, EPH);
+  s = startingPoint(q(''), cfgOf({ id: 'apollo11', name: 'Apollo 11', latDeg: 0.67, lonDeg: 23.47 }, T), SITES, EPH);
   assert.deepEqual([s.site.id, s.site.latDeg, s.site.name], ['custom', 0.67, 'Apollo 11']);
   // a time outside the ephemeris: a picked time instead
-  s = startingPoint(q(''), { siteId: 'im2', latDeg: -84.79, lonDeg: 29.2, landingMs: Date.parse('2030-01-01T00:00Z') }, SITES, EPH);
+  s = startingPoint(q(''), cfgOf({ id: 'im2', latDeg: -84.79, lonDeg: 29.2 }, Date.parse('2030-01-01T00:00Z')), SITES, EPH);
   assert.deepEqual([s.site.id, s.landingMs], ['im2', null]);
 });
 
@@ -143,18 +143,20 @@ test('hires: the site patch is the finest terrain level, with its resolution and
   assert.equal(await hiresPatchFor(null, site), null);
 });
 
-test('page: the built lander carries the patch manifest, the stage bar slot and the rover link', () => {
+test('page: the built execution page carries the patch manifest, the stage bar, the phases and surface operations', () => {
   const page = readFileSync(join(demo, 'lander.html'), 'utf8');
   const m = /<script type="application\/json" id="data-hires">(.*?)<\/script>/s.exec(page);
   assert.ok(m, 'data-hires inlined');
   const inl = JSON.parse(m[1]);
   assert.ok(inl.sites.shackleton.kmPerPixel === 0.005 && inl.sites['mons-mouton'].kmPerPixel === 0.01);
-  assert.ok(page.includes('id="stages"') && page.includes('id="ab-rover"') && page.includes('Plan the rover route'));
+  assert.ok(page.includes('id="stages"') && page.includes('id="phases"') && page.includes('id="cfg-chip"') && page.includes('id="surface"') && page.includes('Surface operations'));
+  // nothing is planned here: no site, time or planner inputs
+  for (const id of ['site', 'when', 'find', 'plan-site', 'planner', 'ab-replan']) assert.ok(!page.includes(`id="${id}"`), id);
   // the action bar sits in the top bar and carries the page's actions
   const bar = page.split('id="actbar"')[1].split('</header>')[0];
-  for (const id of ['ab-follow', 'ab-look', 'ab-branches', 'ab-replan', 'ab-save', 'ab-rover']) assert.ok(bar.includes(`id="${id}"`), id);
+  for (const id of ['ab-follow', 'ab-look', 'ab-branches', 'ab-save', 'ab-rover']) assert.ok(bar.includes(`id="${id}"`), id);
   const js = page.split('<!--LANDER:JS-->')[1];
-  assert.ok(js.includes("__m['../mission-flow.js']") && js.includes("__m['../hires.js']"));
+  assert.ok(js.includes("__m['../mission-flow.js']") && js.includes("__m['../mission-config.js']") && js.includes("__m['../hires.js']"));
 });
 
 test('page: the shared loading screen is in the built page before any script, and the bundle drives it', () => {
@@ -163,9 +165,21 @@ test('page: the shared loading screen is in the built page before any script, an
   assert.ok(head.includes('#lsn-boot {'), 'BOOT_CSS in <head>');
   assert.ok(/^\s*<!--LANDER:BOOT-->\s*<div id="lsn-boot"/.test(body), 'boot markup right after <body>');
   assert.ok(body.indexOf('id="lsn-boot"') < body.indexOf('<script'), 'before the first script');
-  assert.ok(body.includes('Lunar Lander') && body.includes('Show the map now'));
+  assert.ok(body.includes('Mission execution') && body.includes('Show the map now'));
   assert.equal(page.split('id="lsn-boot"').length, 2, 'exactly one loading screen (the build is idempotent)');
   assert.ok(page.split('<!--LANDER:JS-->')[1].includes("__m['../boot.js']"));
+});
+
+test('pages: the planner and Finalise pages are built with the shared CSS, the data and their own entry', () => {
+  const lander = readFileSync(join(demo, 'lander.html'), 'utf8');
+  for (const [file, entry, title] of [['planner.html', 'planner-main.js', 'Where to land'], ['finalise.html', 'finalise-main.js', 'Finalise the mission']]) {
+    const page = readFileSync(join(demo, file), 'utf8');
+    assert.ok(page.includes(title), file);
+    assert.ok(page.includes('.planner { position: fixed') && lander.includes('.planner { position: fixed'), `${file}: lander.html's CSS copied in`);
+    assert.ok(page.includes('id="data-ephemeris"') && page.includes('id="data-hires"'), `${file}: data`);
+    assert.ok(page.split('<!--LANDER:JS-->')[1].includes(`__m['${entry}']`), `${file}: entry`);
+    assert.equal(page.split('id="lsn-boot"').length, 2, `${file}: one loading screen`);
+  }
 });
 
 // the touchdown point handed to the rover step, checked against the descent's own touchdown
