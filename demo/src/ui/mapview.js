@@ -126,7 +126,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const tools = createMapTools({
     onTool: (tool) => cb.onTool(tool),
     onZoom: (dir) => {
-      if (dir !== 'fullscreen' && cb.onZoomOverride?.(dir === 'reset' ? 'out' : dir)) return;   // the Map is the globe: its camera takes the zoom
+      if (dir !== 'fullscreen' && cb.onZoomOverride?.(dir)) return;   // the Map is the globe: its camera takes the zoom (reset: north up, straight down)
       if (dir === 'fullscreen') setFullScreen(!fullUi);
       else if (dir === 'reset') frame.resetView();
       else frame.zoomBy(dir === 'in' ? 1.5 : 1 / 1.5);

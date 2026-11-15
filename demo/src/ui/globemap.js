@@ -688,7 +688,16 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     // screen position (frame CSS px) of a ground point, for the sky dial; null when out of sight
     toFramePx(latDeg, lonDeg) { const p = view?.project(latDeg, lonDeg); return p ? [p.x, p.y] : null; },
     flyTo(cam) { view?.flyTo({ tilt: 0, heading: northUp(cam.lat, cam.lon), ms: 1400, ...cam }); },
-    zoom(dir) { if (!view) return false; const c = view.camera; view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.05, Math.min(14000, c.dist * (dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 400 }); return true; },
+    // + / −; the zoom readout (reset): the same place turned back to the map's orientation (north up, 0°E up near
+    // the south pole) and looking straight down, since a drag turns the globe freely about its centre
+    zoom(dir) {
+      if (!view) return false;
+      const c = view.camera;
+      if (dir === 'reset') { view.flyTo({ lat: c.lat, lon: c.lon, dist: c.dist, tilt: 0, heading: northUp(c.lat, c.lon), ms: 600 }); return true; }
+      if (dir !== 'in' && dir !== 'out') return false;
+      view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.05, Math.min(14000, c.dist * (dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 400 });
+      return true;
+    },
     // the page re-rendered (mode, window, terrain style, site, playhead): bring the globe's own layers up to date
     update() { refreshGlobal(); refreshTerrain(); placeLabels(); schedule(150); },
     get camera() { return view?.camera ?? null; },

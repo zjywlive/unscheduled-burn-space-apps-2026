@@ -544,20 +544,46 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     drag = { x: e.clientX, y: e.clientY, rotate: e.button === 2 || e.shiftKey || e.ctrlKey };
     fly = null;
   });
+  // Google Earth style: a left drag grabs the globe and turns it about its centre, so the point under the cursor
+  // stays under the cursor (over the poles too). The camera rig (target and heading direction) turns by the
+  // rotation that takes the point under the new cursor to the point under the old one; the heading follows the
+  // turn (the compass and N reset it). Off the globe the ray's nearest point to the centre stands in.
+  const grabRay = new THREE.Raycaster(), grabNdc = new THREE.Vector2();
+  function grabPoint(clientX, clientY, R) {
+    const r = canvas.getBoundingClientRect();
+    grabNdc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    grabRay.setFromCamera(grabNdc, camera);
+    const o = grabRay.ray.origin, d = grabRay.ray.direction;
+    const b = o.dot(d), c = o.lengthSq() - R * R, disc = b * b - c;
+    const t = disc >= 0 ? -b - Math.sqrt(disc) : -b;   // first hit, else the closest approach to the centre
+    return o.clone().addScaledVector(d, Math.max(0, t)).normalize();
+  }
+  function turnGlobe(x0, y0, x1, y1) {
+    const R = ease.r ?? surfaceR(cam.lat, cam.lon);
+    const a = grabPoint(x0, y0, R), b = grabPoint(x1, y1, R);
+    if (a.angleTo(b) < 1e-12) return;
+    const q = new THREE.Quaternion().setFromUnitVectors(b, a);
+    const U = new THREE.Vector3(...unit(cam.lat, cam.lon));
+    const N = new THREE.Vector3(-Math.sin(cam.lat * RAD) * Math.cos(cam.lon * RAD), Math.cos(cam.lat * RAD), Math.sin(cam.lat * RAD) * Math.sin(cam.lon * RAD));
+    const Ea = new THREE.Vector3(-Math.sin(cam.lon * RAD), 0, -Math.cos(cam.lon * RAD));
+    const f = N.multiplyScalar(Math.cos(cam.heading * RAD)).add(Ea.multiplyScalar(Math.sin(cam.heading * RAD))).applyQuaternion(q);
+    U.applyQuaternion(q);
+    const ll = toLatLon(U.x, U.y, U.z);
+    const lat = Math.max(-89.9999, Math.min(89.9999, ll.latDeg)), lon = ll.lonDeg;
+    const N2 = new THREE.Vector3(-Math.sin(lat * RAD) * Math.cos(lon * RAD), Math.cos(lat * RAD), Math.sin(lat * RAD) * Math.sin(lon * RAD));
+    const E2 = new THREE.Vector3(-Math.sin(lon * RAD), 0, -Math.cos(lon * RAD));
+    cam.lat = lat; cam.lon = lon;
+    cam.heading = (Math.atan2(f.dot(E2), f.dot(N2)) * DEG + 360) % 360;
+    placeCamera();   // the next move's rays start from this camera
+  }
   canvas.addEventListener('pointermove', (e) => {
     if (!drag) return;
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y, x0 = drag.x, y0 = drag.y;
     drag.x = e.clientX; drag.y = e.clientY;
     if (drag.rotate) {
       cam.heading = (cam.heading - dx * 0.3 + 360) % 360;
       cam.tilt = Math.max(0, Math.min(maxTilt(), cam.tilt + dy * 0.25));
-    } else {
-      const s = kmPerPx() / MOON_R_KM * DEG;   // degrees of arc per pixel at the target
-      const h = cam.heading * RAD;
-      const north = (dy * Math.cos(h) + dx * Math.sin(h)) * s, east = (-dx * Math.cos(h) + dy * Math.sin(h)) * s;
-      cam.lat = Math.max(-89.999, Math.min(89.999, cam.lat + north));
-      cam.lon = (cam.lon + east / Math.max(0.02, Math.cos(cam.lat * RAD)) + 360) % 360;
-    }
+    } else turnGlobe(x0, y0, e.clientX, e.clientY);
     dirty = true;
   });
   canvas.addEventListener('pointerup', (e) => { if (!drag) return; drag = null; try { canvas.releasePointerCapture(e.pointerId); } catch { /* not captured */ } });
