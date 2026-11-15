@@ -246,6 +246,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (draft && getState().tool !== 'route') { draft = null; drawDraft(); }
     if (rdraft && getState().tool !== rdraft.tool) { rdraft = null; drawRegionDraft(); }
     if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); placeLabels(); }
+    followSun();
     // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
     const st = getState();
     const k = `${host.dataset.sharp ?? ''}|${host.dataset.redrawMs ?? ''}|${host.dataset.moveMs ?? ''}|${host.dataset.paintMs ?? ''}|${host.dataset.live ?? ''}|${pyramid.version ?? ''}|${Math.floor((st.cursorMs ?? 0) / 1800e3)}`;
@@ -273,7 +274,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const tenMin = Math.floor((st.cursorMs ?? st.landingMs ?? 0) / 600e3);
     const live = mode === 'now' || !st.windowOn || !Number.isFinite(st.landingMs);
     const night = host.dataset.live === 'on';   // the polar map's "Light at the playhead" veil is showing
-    const key = `${mode}|${st.landingMs}|${st.stayDays}|${st.slipDays}|${live || night ? tenMin : ''}|${st.windowOn}|${style}|${night}`;
+    // (the picture changes with the playhead only in Live; under the veil it is the window's, so it is not redone
+    // every ten minutes of a playing clock)
+    const key = `${mode}|${st.landingMs}|${st.stayDays}|${st.slipDays}|${live ? tenMin : ''}|${st.windowOn}|${style}|${night}`;
     if (!force && key === gKey) return;
     gKey = key;
     const colours = readColours();
@@ -314,22 +317,33 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   }
 
   // ---- terrain style and contours of the globe (the polar picture carries its own) ----
-  let tsKey = '';
+  let tsKey = '', sunAt;
   function refreshTerrain() {
     if (!view) return;
+    const ts = frame.terrain ?? {};
+    const key = `${ts.style}|${ts.contours}`;
+    if (key !== tsKey) {
+      tsKey = key;
+      view.setColour(ts.style === 'topo' ? 'tint' : 'shade');   // (rebuilds every mesh: only when the style changes)
+      view.setContours(!!ts.contours);
+      // contour ink as on the polar map for each style (mapframe.js CONTOUR_INK, the index lines)
+      view.setContourInk(ts.style === 'topo' ? [58, 32, 14] : ts.style === 'real' ? [255, 206, 150] : [235, 235, 235]);
+    }
+    followSun();
+  }
+  // the real Sun at the playhead lights the globe (with cast shadows) in Real light, and whenever the polar map
+  // would show "Light at the playhead" (its veil): one light across 80°S that moves with the time. It follows the
+  // playhead every frame (a light that jumps twice a second reads as stutter); a new light only re-renders, the
+  // terrain meshes stay as they are
+  function followSun() {
+    if (!view) return;
     const ts = frame.terrain ?? {}, st = getState();
-    // the real Sun at the playhead lights the globe (with cast shadows) in Real light, and whenever the polar map
-    // would show "Light at the playhead" (its veil): one light across 80°S that moves with the time
     const liveMode = st.mapMode === 'now' || !st.windowOn || !Number.isFinite(st.landingMs);
     const realSun = ts.style === 'real' || host.dataset.live === 'on' || liveMode;
-    const key = `${ts.style}|${ts.contours}|${realSun ? Math.floor((st.cursorMs ?? 0) / 300e3) : ''}`;
-    if (key === tsKey) return;
-    tsKey = key;
-    view.setColour(ts.style === 'topo' ? 'tint' : 'shade');
-    view.setContours(!!ts.contours);
-    // contour ink as on the polar map for each style (mapframe.js CONTOUR_INK, the index lines)
-    view.setContourInk(ts.style === 'topo' ? [58, 32, 14] : ts.style === 'real' ? [255, 206, 150] : [235, 235, 235]);
-    const d = realSun ? eph.at(st.cursorMs ?? st.landingMs) : null;
+    const t = realSun ? (st.cursorMs ?? st.landingMs ?? null) : null;
+    if (t === sunAt) return;
+    sunAt = t;
+    const d = t !== null ? eph.at(t) : null;
     view.setSun(d ? d.sun : null);
   }
 

@@ -728,7 +728,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     get perf() { return { ...perf, msPerBuild: +(perf.buildMs / Math.max(1, perf.builds)).toFixed(2), msPerRender: +(perf.renderMs / Math.max(1, perf.frames)).toFixed(2) }; },
     kmPerPx,
     setExaggeration(v) { state.exaggeration = v; rebuildAll(); },
-    setColour(mode) { state.colour = mode; for (const [, e] of cache) e.stale = true; dirty = true; },
+    setColour(mode) { if (mode === state.colour) return; state.colour = mode; for (const [, e] of cache) e.stale = true; dirty = true; },   // (every mesh is rebuilt: only on a change)
     setContours(on) { state.contours = !!on; dirty = true; },
     // the draped pictures (overlays: true): { polar: { canvas, box, mix } | null, global: { canvas, alpha } | null };
     // a canvas already set is uploaded again (its pixels changed)

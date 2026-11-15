@@ -364,3 +364,29 @@ variant B: the challenge's loop as five tabs on top of the right panel, the top 
 - Checked in the browser at 1440 × 900: each tab, `step=` written and read on load, a calendar day and Make plan
   change the plan and the time bar, a new site keeps Verdict open, the Rectangle tool returns to Site; no console
   errors.
+
+## Smooth light on the globe while the clock plays (15 Nov, evening)
+
+The user reported that light changes on the Map's whole-Moon view stuttered. Cause, measured: every 500 ms
+`ui/globemap.js` `refreshTerrain()` saw a new five-minute step of the playhead and called `view.setColour()` again
+with the same value, and `globe-view.js` marked every terrain mesh stale on any `setColour`, so the globe rebuilt
+its ~530 visible meshes (14 ms of building per frame) over and over while the clock ran; the Sun itself moved only
+in those half-second jumps.
+
+- `globe-view.js`: `setColour` does nothing when the colour is unchanged (a change still rebuilds every mesh).
+- `ui/globemap.js`: the terrain style, contours and contour ink are set only when the style or contours change;
+  `followSun()` sets the real Sun from the playhead every frame (a new light only re-renders; no mesh is rebuilt).
+- `ui/globemap.js` `refreshGlobal()`: under the polar map's veil the window's heat picture is no longer redone every
+  ten minutes of playhead (it does not depend on the playhead; only Live does).
+- Measured in headless Chrome on the real GPU (ANGLE Metal, 1440 × 900 at 2×), whole Moon, 6 s of playback at
+  6 h/s, map shown:
+
+  | Mode | | fps | slowest frame | meshes rebuilt | Sun updates |
+  |---|---|---|---|---|---|
+  | Live | before | 56.5 | 43 ms | 8171 | 22 |
+  | Live | after | 60.2 | 26 ms | 0 | 359 |
+  | Both in view | before | 52.0 | 68 ms | 5830 | 13 |
+  | Both in view | after | 60.2 | 34 ms | 0 | 359 |
+
+  Full suite 853: 837 pass, 16 skipped, 0 fail. Left: in Both in view about 5 % of frames still take two vsyncs
+  (the polar map's hourly veil recompute while playing).
