@@ -113,8 +113,9 @@ touchdown point, so the rover step has no start until you fly a branch that land
   shadow within 1 km, Sun ≥ 70 % and Earth ≥ 50 % of the stay, longest dark spell ≤ the battery's hours, Δv margin ≥ 0.
   The **listed sites** are graded the same way (pass / near / fail dots and a table).
 * **Pick a point** by clicking the map, clicking a site, or typing a latitude and longitude (*Go*). The point is scored
-  with an **assumed 3σ landing ellipse of 150 m down-range × 100 m cross-range**: share of the ellipse steeper than the
-  limit, roughness (where the DEM is 40 m or finer), share in permanent shadow, hours of Sun and of Earth over the stay
+  with an **assumed 3σ landing ellipse of 150 m down-range × 100 m cross-range**: the chance of a safe touchdown (2000
+  landings scattered as a Gaussian whose 3σ is the ellipse, each safe on ground within the slope limit and outside
+  permanent shadow), roughness (where the DEM is 40 m or finer), share in permanent shadow, hours of Sun and of Earth over the stay
   from the point's first lit window, the longest dark spell against the battery (3000 Wh, 20 % reserve, 220 W = 10.9 h,
   assumed), Earth in view at touchdown, and the lander's Δv margin. Each gets *pass*, *near* or *fail* and one verdict
   sentence sums them up.
@@ -124,7 +125,10 @@ touchdown point, so the rover step has no start until you fly a branch that land
   than eight pass, the nearest misses on usable ground (slope and permanent shadow pass, shortest dark spell first) fill
   the list, marked ≈, and the card says how many points failed each limit and what battery the shortest night needs.
   In the Map's Where to land, with a mission window set, every place is scored for the planned landing (its first lit
-  window within two days of it), and a region also screens the listed sites inside it.
+  window within two days of it), and a region also screens the listed sites inside it. **Slip robustness** (default 3
+  days) checks the stay from each landing day up to that many days late: the screen picks the places that still pass
+  on the most of those days first, and each spot gets a "Landing up to N days late" grade (every day passes, at least
+  half, or fewer).
 * The **action bar** of the planner: **Land here** (plan the whole mission to the chosen point and its first lit
   landing window), **Find better spots**, the candidates (*Yours*, 1–5), **Known sites**, **Back to 3D**.
 * **Whole Moon** switches to a global map (LOLA 7.6 km, finer where loaded) with the near-side limb and the

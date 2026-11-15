@@ -600,7 +600,7 @@ function start() {
   let landParams = {
     slopeDeg: v0.touchdown.maxSlopeDeg, downrangeM: ELLIPSE.downrangeM, crossrangeM: ELLIPSE.crossrangeM,
     batteryWh: v0.batteryWh, loadW: v0.loadsW.surface, reservePct: Math.round(v0.batteryMinSoc * 100),
-    minSunPct: 0, minEarthPct: 0, radiusKm: 15, cells: 500,
+    minSunPct: 0, minEarthPct: 0, radiusKm: 15, cells: 500, slipDays: 3,
     ...(() => { try { return JSON.parse(localStorage.getItem(LAND_KEY) ?? 'null') ?? {}; } catch { return {}; } })(),
   };
   // the mission's vehicle with the screening settings over it (the settings stay the screen's own: Finalise keeps its vehicle)
@@ -608,7 +608,7 @@ function start() {
     const v = baseVehicle(), p = landParams;
     return { ...v, batteryWh: p.batteryWh, batteryMinSoc: p.reservePct / 100, loadsW: { ...v.loadsW, surface: p.loadW }, touchdown: { ...v.touchdown, maxSlopeDeg: p.slopeDeg } };
   };
-  const landOpts = () => ({ minSun: landParams.minSunPct / 100, minEarth: landParams.minEarthPct / 100, radiusKm: landParams.radiusKm, cells: landParams.cells, ellipse: { downrangeM: landParams.downrangeM, crossrangeM: landParams.crossrangeM } });
+  const landOpts = () => ({ minSun: landParams.minSunPct / 100, minEarth: landParams.minEarthPct / 100, radiusKm: landParams.radiusKm, cells: landParams.cells, slipDays: landParams.slipDays ?? 3, ellipse: { downrangeM: landParams.downrangeM, crossrangeM: landParams.crossrangeM } });
   const landEval = createLandingEvaluator({
     eph, sites, meta, getDem: () => dem, siteCtx: globalSites,
     hires: (() => { const m = readJson('data-hires'); return m ? createHiresSet(m, (name) => loadData(name, { timeoutMs: 60000 })) : null; })(),
@@ -632,7 +632,7 @@ function start() {
   if (landCard) mapView.mountFold('land', landCard.el);
   function landAssume() {
     const v = landVehicle();
-    return `With these settings: ${landParams.downrangeM} × ${landParams.crossrangeM} m landing ellipse, slope limit ${v.touchdown.maxSlopeDeg}°, battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on ${v.loadsW.surface} W = ${batteryHours(v).toFixed(1)} h of darkness${landParams.minSunPct ? `, Sun ≥ ${landParams.minSunPct} %` : ''}${landParams.minEarthPct ? `, Earth ≥ ${landParams.minEarthPct} %` : ''}.`;
+    return `With these settings: ${landParams.downrangeM} × ${landParams.crossrangeM} m landing ellipse, slope limit ${v.touchdown.maxSlopeDeg}°, battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on ${v.loadsW.surface} W = ${batteryHours(v).toFixed(1)} h of darkness${landParams.minSunPct ? `, Sun ≥ ${landParams.minSunPct} %` : ''}${landParams.minEarthPct ? `, Earth ≥ ${landParams.minEarthPct} %` : ''}${landParams.slipDays ? `; landings up to ${landParams.slipDays} days late checked too` : ''}; touchdowns simulated 2000 times in the ellipse.`;
   }
   function showLanding() {
     landCard?.update({ ...land, assume: landAssume(), params: landParams, stayDays: state.stayDays, planned: state.windowOn && Number.isFinite(state.landingMs) ? state.landingMs : null });

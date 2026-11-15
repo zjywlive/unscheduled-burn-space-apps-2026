@@ -23,8 +23,8 @@
 .ld-h3 { margin: 14px 0 6px; font-size: var(--fs-label, 13px); }
 .ld-h3 small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; font-size: 11px; line-height: 1.4; }
 .ld-tbl { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-.ld-tbl th { color: var(--muted); font-weight: 400; text-align: left; padding: 4px 4px; }
-.ld-tbl td { padding: 5px 4px; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.12)); cursor: pointer; white-space: nowrap; }
+.ld-tbl th { color: var(--muted); font-weight: 400; text-align: left; padding: 4px 3px; }
+.ld-tbl td { padding: 5px 3px; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.12)); cursor: pointer; white-space: nowrap; }
 .ld-tbl .r { text-align: right; }
 .ld-tbl tr.on td { background: rgba(255, 255, 255, 0.08); }
 .ld-tbl tr:hover td { background: rgba(255, 255, 255, 0.05); }

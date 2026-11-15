@@ -426,3 +426,34 @@ Changed (`lander/landeval.js`, `lander/siteplan.js`, `ui/landcard.js`, `main.js`
 - Checked: full suite 861 tests, 845 pass, 16 skipped, 0 fail; the Map in headless Chrome (Metal) with Region A and
   the user's settings: the funnel text, five numbered spots on the Moon, the stay note naming the planned landing, no
   console errors. `planner.html` rebuilt (it shares landeval.js; it has no planned landing, so it behaves as before).
+
+## Where to land: slip robustness and Monte Carlo touchdowns (15 Nov, evening)
+
+The two pieces of the mature practice the screen lacked (NASA weighs low sensitivity to slips; landing-site safety is
+judged on simulated touchdowns in the dispersion ellipse, as on the Mars landers):
+
+- **Slip robustness** (setting *Slip robustness*, default 3 days, 0 = off). `siteplan.js` now builds the sky as a
+  visibility series (`skySeries`) and reads any stay out of it (`windowStats`, `slipStats`), so the screen computes
+  one series per grid point over the stay plus the slip window and checks the stay from each landing day 0…N: `robust`
+  is the share of days on which the point still passes the dark limit and the minimum shares. The detail picks the
+  most robust first, then suitability (the hard limits are unchanged). Each spot gets the figure "Landing up to N days
+  late": the stay from each day, hourly, against the battery; pass on every day, near on at least half, else fail.
+  The card counts the points passing on every day; the table has a Slip column (k/n days).
+- **Monte Carlo touchdowns** (`siteplan.js` `touchdownMC`): 2000 landings scattered as a 2-D Gaussian whose 3σ is the
+  ellipse (down-range radial, as before), each safe when the slope there (two DEM pixels, the same baseline as before)
+  is within the limit and it is outside permanent shadow; a slope that cannot be computed counts as unsafe. Seeded by
+  the place, so the same place gives the same answer. It replaces the ellipse's area share of steep ground as the
+  "Safe touchdown (Monte Carlo)" figure, with the same marks (≥ 95 % pass, ≥ 85 % near); its note gives the steep and
+  shadow shares, the share landing outside the 3σ ellipse (about 1.1 %), mean and 95th-percentile slope. Rocks are
+  still not modelled.
+- The table: # · Safe · Sun · Earth · Dark · Slip · Δv (the dark spell as hours, the battery in the cell's tooltip; the
+  distance from your point is in the row's tooltip), cell padding 3 px so seven columns fit the 400 px panel.
+- Example (Shackleton ±40 km region, landing 10 Jan 2027, 7 days, default vehicle, 3-day slip window): 10 of 485 grid
+  points pass, 5 on every day to 3 days late; the five spots: Safe 73–100 %, Slip 2/4–4/4.
+- Your earlier case (31 Mar 2027, 14 days, 4.2 h battery): the one passing point passes only 1 of 4 landing days (a
+  slip of a day brings a 74 h night).
+- Tests: siteplan (series and windows equal skyStats; slip windows on a synthetic pattern; Monte Carlo on planes and
+  a half-steep plane: ½ at the edge, > 99.5 % at 3σ, ~1.1 % outside the ellipse, deterministic, shadow unsafe; the
+  figures' grades) and landeval (robust on every grid point, the slip and safe figures on every spot, none with the
+  window off). Full suite 865: 849 pass, 16 skipped, 0 fail. Checked in headless Chrome at 1440 × 900: both cases,
+  table width 284 px in a 284 px column, no console errors.

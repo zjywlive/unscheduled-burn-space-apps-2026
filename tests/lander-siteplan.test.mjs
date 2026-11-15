@@ -158,3 +158,56 @@ test('siteplan: best spots by another distance, and the nearest misses by anothe
   assert.deepEqual(bestPoints(pts, { minKm: 2, pass: (p) => !p.ok, by: (p, q) => p.darkH - q.darkH }).map((p) => p.name), ['d', 'c']);
   assert.deepEqual(bestPoints(pts, { count: 0 }), []);
 });
+
+test('siteplan: sky as a visibility series, and the stay from each later landing day (slip robustness)', async () => {
+  const { skySeries, windowStats, slipStats } = await import('../demo/src/lander/siteplan.js');
+  // real sky at the Shackleton ridge: the series windows give exactly what skyStats gives
+  const eph = createEphemeris(JSON.parse(readFileSync(`${demo}data/ephemeris.json`, 'utf8')));
+  const site = { latDeg: -89.45, lonDeg: 222.69 };
+  const dirs = skyDirections(eph, Date.parse('2027-01-10T00:00Z'), 9, 1);
+  const ser = skySeries(dirs, site, 0);
+  assert.equal(ser.sun.length, dirs.length);
+  const a = skyStats(dirs.slice(48, 48 + 168), site, 0, 1), b = windowStats(ser, 48, 168, 1);
+  for (const k of ['sun', 'earth', 'both', 'longestDarkH', 'longestNoEarthH', 'hours']) close(b[k], a[k], 1e-12, k);
+  // a synthetic day/night pattern, 1 h steps: dark hours 5–14 (10 h) and 30–35 (6 h), 48 h in all
+  const sun = new Uint8Array(48).fill(1); for (let i = 5; i < 15; i++) sun[i] = 0; for (let i = 30; i < 36; i++) sun[i] = 0;
+  const s = slipStats({ sun, earth: new Uint8Array(48).fill(1) }, { stepH: 1, stayH: 24, slipDays: 1 });
+  assert.equal(s.length, 2);
+  assert.deepEqual(s.map((x) => x.longestDarkH), [10, 6], 'day 0 holds the 10 h night, day 1 only the 6 h one');
+  assert.deepEqual(slipStats({ sun, earth: sun }, { stepH: 1, stayH: 24, slipDays: 5 }).length, 2, 'only whole stays inside the series');
+});
+
+test('siteplan: Monte Carlo touchdowns — the chance of landing on safe ground', async () => {
+  const { touchdownMC } = await import('../demo/src/lander/siteplan.js');
+  const tilt = (deg) => (x, y) => Math.tan((deg * Math.PI) / 180) * x * 1000;   // a plane tilted along x, heights m
+  const base = { k: 1, downrangeM: 150, crossrangeM: 100, baselineKm: 0.02, limitDeg: 10, n: 2000 };
+  assert.equal(touchdownMC(0, -100, { ...base, sample: tilt(5) }).pSafe, 1);
+  assert.equal(touchdownMC(0, -100, { ...base, sample: tilt(15) }).pSafe, 0);
+  // steep for x > 0 (down-range is radial: along y at (0, −100), so x is cross-range, σ = 100 / 3 m)
+  const half = (x, y) => (x > 0 ? Math.tan((20 * Math.PI) / 180) * x * 1000 : 0);
+  const mid = touchdownMC(0, -100, { ...base, sample: half });
+  assert.ok(Math.abs(mid.pSafe - 0.5) < 0.05, `aim on the edge: ${mid.pSafe}`);
+  const away = touchdownMC(-0.1, -100, { ...base, n: 20000, sample: half });   // 100 m = 3σ cross-range from the edge
+  assert.ok(away.pSafe > 0.995 && away.pSafe < 1, `3σ from the edge (one-sided tail 0.13 %): ${away.pSafe}`);
+  // the scatter: about 1.1 % of landings fall outside the 3σ ellipse (exp(−9/2)); the same place gives the same answer
+  assert.ok(away.outside > 0.008 && away.outside < 0.015, `outside ${away.outside}`);
+  assert.equal(touchdownMC(-0.1, -100, { ...base, n: 20000, sample: half }).pSafe, away.pSafe);
+  // permanent shadow is unsafe too
+  const dark = touchdownMC(0, -100, { ...base, sample: tilt(1), isPsr: () => true });
+  assert.equal(dark.pSafe, 0); assert.equal(dark.psr, 1);
+});
+
+test('siteplan: the figures with the Monte Carlo and the slip check', () => {
+  const base = { t: { overLimit: 0.02, meanDeg: 4, p95Deg: 8, roughM: 0.6 }, sky: { sun: 0.9, earth: 0.8, longestDarkH: 3, hours: 168 }, psrShare: 0, budget: { marginMs: 240, propellantLeftKg: 80 }, earthAtLanding: true, battH: 10.9, limitDeg: 10, resKm: 0.005, stayDays: 7 };
+  const mc = { n: 2000, pSafe: 0.97, steep: 0.03, psr: 0, outside: 0.011 };
+  let f = figures({ ...base, mc, slip: { days: 3, passed: 4, worstDarkH: 6 } });
+  assert.deepEqual(f.map((x) => x.id), ['safe', 'rough', 'psr', 'sun', 'dark', 'earth', 'slip', 'comms', 'dv']);
+  assert.equal(f[0].grade, 'pass'); assert.match(f[0].text, /^97 %/);
+  assert.equal(f.find((x) => x.id === 'slip').grade, 'pass');
+  f = figures({ ...base, mc: { ...mc, pSafe: 0.9 }, slip: { days: 3, passed: 2, worstDarkH: 30 } });
+  assert.equal(f[0].grade, 'near');
+  assert.equal(f.find((x) => x.id === 'slip').grade, 'near');
+  f = figures({ ...base, mc: { ...mc, pSafe: 0.5 }, slip: { days: 3, passed: 1, worstDarkH: 30 } });
+  assert.equal(f[0].grade, 'fail');
+  assert.equal(f.find((x) => x.id === 'slip').grade, 'fail');
+});

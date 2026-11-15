@@ -81,18 +81,86 @@ export function skyDirections(eph, startMs, days, stepH = 1) {
 // Over those directions at one place with its skyline mask (az → deg): shares of time with the Sun / the Earth
 // above the skyline, and the longest spells without each (hours).
 export function skyStats(dirs, site, mask, stepH = 1) {
-  const m = typeof mask === 'function' ? mask : () => mask ?? 0;
-  let s = 0, e = 0, b = 0, run = 0, longest = 0, runE = 0, longestE = 0;
-  for (const d of dirs) {
-    const su = azEl(d.sun, Infinity, site.lonDeg, site.latDeg), ea = azEl(d.earth, d.earthRangeKm, site.lonDeg, site.latDeg);
-    const sun = su.elDeg > m(su.azDeg), earth = ea.elDeg > m(ea.azDeg);
-    if (sun) { s++; run = 0; } else if (++run > longest) longest = run;
-    if (earth) { e++; runE = 0; } else if (++runE > longestE) longestE = runE;
-    if (sun && earth) b++;
-  }
-  const n = dirs.length || 1;
-  return { sun: s / n, earth: e / n, both: b / n, longestDarkH: longest * stepH, longestNoEarthH: longestE * stepH, hours: dirs.length * stepH };
+  return windowStats(skySeries(dirs, site, mask), 0, dirs.length, stepH);
 }
+
+// The Sun and the Earth above the skyline at each of those directions: { sun, earth } Uint8Arrays (1 = above).
+export function skySeries(dirs, site, mask) {
+  const m = typeof mask === 'function' ? mask : () => mask ?? 0;
+  const sun = new Uint8Array(dirs.length), earth = new Uint8Array(dirs.length);
+  for (let i = 0; i < dirs.length; i++) {
+    const d = dirs[i];
+    const su = azEl(d.sun, Infinity, site.lonDeg, site.latDeg), ea = azEl(d.earth, d.earthRangeKm, site.lonDeg, site.latDeg);
+    sun[i] = su.elDeg > m(su.azDeg) ? 1 : 0; earth[i] = ea.elDeg > m(ea.azDeg) ? 1 : 0;
+  }
+  return { sun, earth };
+}
+
+// skyStats over steps [start, start + len) of a series (clipped to it).
+export function windowStats({ sun, earth }, start, len, stepH = 1) {
+  const end = Math.min(sun.length, start + len);
+  let s = 0, e = 0, b = 0, run = 0, longest = 0, runE = 0, longestE = 0;
+  for (let i = Math.max(0, start); i < end; i++) {
+    if (sun[i]) { s++; run = 0; } else if (++run > longest) longest = run;
+    if (earth[i]) { e++; runE = 0; } else if (++runE > longestE) longestE = runE;
+    if (sun[i] && earth[i]) b++;
+  }
+  const count = Math.max(0, end - Math.max(0, start)), n = count || 1;
+  return { sun: s / n, earth: e / n, both: b / n, longestDarkH: longest * stepH, longestNoEarthH: longestE * stepH, hours: count * stepH };
+}
+
+// Slip robustness: the stay (stayH hours) from the planned landing and from each day up to slipDays later, over one
+// series that starts at the planned landing and runs slipDays past the stay. Only stays that fit wholly in the series
+// count (the ephemeris may end first). → [windowStats for day 0, 1, …]
+export function slipStats(series, { stepH = 1, stayH, slipDays = 0 }) {
+  const stayN = Math.round(stayH / stepH), dayN = Math.round(24 / stepH), out = [];
+  for (let d = 0; d <= slipDays; d++) {
+    if (d * dayN + stayN > series.sun.length) break;
+    out.push(windowStats(series, d * dayN, stayN, stepH));
+  }
+  return out;
+}
+
+// Monte Carlo touchdowns: n landings scattered about the aim point (map km) as a 2-D Gaussian whose 3σ is the landing
+// ellipse (down-range radial on the polar map, as ellipsePoints), each safe when the ground there is within the slope
+// limit (slopeDeg over baselineKm on the sampler) and not in permanent shadow (isPsr, when given). A slope that cannot
+// be computed counts as unsafe. Seeded by the aim point, so a place always gets the same answer.
+// → { n, pSafe, steep, psr, unknown, outside (share beyond the 3σ ellipse), meanDeg, p95Deg }
+export function touchdownMC(xKm, yKm, { sample, k = 1, downrangeM = ELLIPSE.downrangeM, crossrangeM = ELLIPSE.crossrangeM, n = 2000, baselineKm = 0.04, limitDeg = 10, isPsr = null } = {}) {
+  const r = Math.hypot(xKm, yKm);
+  const u = r > 1e-9 ? [xKm / r, yKm / r] : [0, 1], v = [-u[1], u[0]];
+  const sd = (downrangeM / 3000) * k, sc = (crossrangeM / 3000) * k;   // σ in map km
+  const rand = mulberry32(hashXY(xKm, yKm));
+  let safe = 0, steep = 0, psr = 0, unknown = 0, outside = 0;
+  const slopes = [];
+  for (let i = 0; i < n; i += 2) {
+    // Box–Muller: two independent standard normals per draw
+    const u1 = Math.max(1e-12, rand()), u2 = rand(), rr = Math.sqrt(-2 * Math.log(u1));
+    for (const [g1, g2] of [[rr * Math.cos(2 * Math.PI * u2), rr * Math.sin(2 * Math.PI * u2)], [rr * Math.sin(2 * Math.PI * u2), -rr * Math.cos(2 * Math.PI * u2)]]) {
+      if (slopes.length + unknown >= n) break;
+      if (g1 * g1 + g2 * g2 > 9) outside++;
+      const x = xKm + g1 * sd * u[0] + g2 * sc * v[0], y = yKm + g1 * sd * u[1] + g2 * sc * v[1];
+      const sl = slopeDeg(sample, x, y, baselineKm, k), dark = isPsr ? isPsr(x, y) : false;
+      if (!Number.isFinite(sl)) { unknown++; if (dark) psr++; continue; }
+      slopes.push(sl);
+      const tooSteep = sl > limitDeg;
+      if (tooSteep) steep++;
+      if (dark) psr++;
+      if (!tooSteep && !dark) safe++;
+    }
+  }
+  slopes.sort((a, b) => a - b);
+  return {
+    n, pSafe: safe / n, steep: steep / n, psr: psr / n, unknown: unknown / n, outside: outside / n,
+    meanDeg: slopes.length ? slopes.reduce((a, b) => a + b, 0) / slopes.length : NaN,
+    p95Deg: slopes.length ? slopes[Math.min(slopes.length - 1, Math.floor(0.95 * slopes.length))] : NaN,
+  };
+}
+// a small seeded generator (mulberry32) and a seed from a map point
+function mulberry32(a) {
+  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const hashXY = (x, y) => (Math.imul(Math.round(x * 1e4) | 0, 73856093) ^ Math.imul(Math.round(y * 1e4) | 0, 19349663)) >>> 0;
 
 // Hours the battery carries the surface load through darkness (usable share above the minimum state of charge).
 export const batteryHours = (vehicle) => (vehicle.batteryWh * (1 - vehicle.batteryMinSoc)) / Math.max(1, vehicle.loadsW.surface);
@@ -107,12 +175,22 @@ export function grade(value, { pass, near, higher = false }) {
 // The figures for one place, each { id, label, value, text, limit, grade, note }.
 // t: terrainStats; sky: skyStats; psrShare: share of the ellipse in permanent shadow; budget: plan budget or null;
 // earthAtLanding: boolean; battH: batteryHours; res: DEM km per pixel used for the slopes.
-export function figures({ t, sky, psrShare, psrNote = null, budget = null, earthAtLanding = null, earthWindow = true, battH, limitDeg, resKm, stayDays }) {
+// mc: touchdownMC (the safe-touchdown chance replaces the ellipse's steep share); slip: { days, passed, total,
+// worstDarkH } from slipStats (the stay from each day up to `days` late, against the battery)
+export function figures({ t, sky, psrShare, psrNote = null, budget = null, earthAtLanding = null, earthWindow = true, battH, limitDeg, resKm, stayDays, mc = null, slip = null }) {
   const pct = (x) => `${Math.round(x * 100)} %`;
   const out = [];
   const add = (id, label, value, text, limit, g, note) => out.push({ id, label, value, text, limit, grade: g, note });
-  add('slope', 'Ellipse steeper than the lander limit', t.overLimit, Number.isFinite(t.overLimit) ? pct(t.overLimit) : 'no data', `≤ 5 % (limit ${limitDeg}°)`, grade(t.overLimit, { pass: 0.05, near: 0.15 }),
-    `slope over ${Math.round(resKm * 2000)} m on the ${Math.round(resKm * 1000)} m DEM; mean ${Number.isFinite(t.meanDeg) ? t.meanDeg.toFixed(1) : '—'}°, 95 % below ${Number.isFinite(t.p95Deg) ? t.p95Deg.toFixed(1) : '—'}°`);
+  const deg1 = (v) => (Number.isFinite(v) ? v.toFixed(1) : '—');
+  if (mc) {
+    // the same marks as the steep share had (≤ 5 % pass, ≤ 15 % near), as a chance of landing safely
+    const p = mc.pSafe, txt = p >= 0.995 && p < 1 ? `${(p * 100).toFixed(1)} %` : pct(p);
+    add('safe', 'Safe touchdown (Monte Carlo)', p, `${txt} · ${mc.n} simulated landings`, '≥ 95 %', grade(p, { pass: 0.95, near: 0.85, higher: true }),
+      `landings scattered as a Gaussian whose 3σ is the ellipse (${(mc.outside * 100).toFixed(1)} % land outside it); unsafe = steeper than ${limitDeg}° over ${Math.round(resKm * 2000)} m on the ${Math.round(resKm * 1000)} m DEM (${pct(mc.steep)})${mc.psr ? ` or in permanent shadow (${pct(mc.psr)})` : ''}${mc.unknown ? ` or no slope data (${pct(mc.unknown)})` : ''}; mean slope ${deg1(mc.meanDeg)}°, 95 % below ${deg1(mc.p95Deg)}°; rocks not modelled`);
+  } else {
+    add('slope', 'Ellipse steeper than the lander limit', t.overLimit, Number.isFinite(t.overLimit) ? pct(t.overLimit) : 'no data', `≤ 5 % (limit ${limitDeg}°)`, grade(t.overLimit, { pass: 0.05, near: 0.15 }),
+      `slope over ${Math.round(resKm * 2000)} m on the ${Math.round(resKm * 1000)} m DEM; mean ${deg1(t.meanDeg)}°, 95 % below ${deg1(t.p95Deg)}°`);
+  }
   // roughness needs several DEM pixels across the ellipse: at 120 m and coarser it is not resolved (graded near)
   const roughOk = resKm <= 0.04 && Number.isFinite(t.roughM);
   add('rough', 'Roughness in the ellipse', roughOk ? t.roughM : NaN, roughOk ? `${t.roughM.toFixed(1)} m RMS` : `not resolved at ${Math.round(resKm * 1000)} m`, '≤ 1 m RMS (assumed)', roughOk ? grade(t.roughM, { pass: 1, near: 2.5 }) : 'near',
@@ -123,6 +201,12 @@ export function figures({ t, sky, psrShare, psrNote = null, budget = null, earth
   add('dark', 'Longest dark spell vs battery', sky.longestDarkH, `${Math.round(sky.longestDarkH)} h of ${battH.toFixed(1)} h`, `≤ ${battH.toFixed(1)} h on battery`, grade(sky.longestDarkH / Math.max(0.1, battH), { pass: 1, near: 1.5 }),
     'battery and surface load assumed (Vehicle tab)');
   add('earth', `Earth above the skyline over ${stayDays} days`, sky.earth, `${pct(sky.earth)} (${Math.round(sky.earth * sky.hours)} h)`, '≥ 50 %', grade(sky.earth, { pass: 0.5, near: 0.25, higher: true }), 'direct-to-Earth line of sight; no relay modelled here');
+  const slipTotal = slip ? slip.total ?? slip.days + 1 : 0;   // days checked: fewer than days + 1 where the ephemeris ends
+  if (slipTotal > 1) {
+    const share = slip.passed / slipTotal;
+    add('slip', `Landing up to ${slipTotal - 1} days late`, share, `${slip.passed}/${slipTotal} days · worst night ${Math.round(slip.worstDarkH)} h`, 'every day', grade(share, { pass: 1, near: 0.5, higher: true }),
+      `the stay from this landing and from each day after it: the battery (${battH.toFixed(1)} h) must carry its longest dark spell (hourly). A slip robustness check, as NASA weighs sensitivity to slips`);
+  }
   // a figure that could not be computed is shown and graded near, not left out (left out, the place would have one
   // check fewer to fail and rank higher, and the verdict would say every figure passes: audit L7)
   if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', earthWindow ? 'needed for a live landing link' : 'the Earth does not stay above the skyline here around this landing (the far side, or a time when it is below the skyline): a relay or another landing time is needed');

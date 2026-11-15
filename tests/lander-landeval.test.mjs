@@ -104,3 +104,22 @@ test('landcard: the card explains a thin screen and what the shortest night woul
   assert.match(t, /marked ≈ are the nearest misses/);
   assert.equal(funnelText({ ...result, relaxed: 0, funnel: { ...result.funnel, passed: 40 } }, {}), null, 'nothing to explain when enough pass');
 });
+
+test('landeval: slip robustness on the screen and in the detail; Monte Carlo touchdowns for every spot', async () => {
+  const plan = Date.parse('2027-01-10T02:00Z');
+  const res = await evaluator({ landingMs: plan }).evaluateRegion(region(10), {}, { cells: 100, slipDays: 3 });
+  assert.ok(res.grid.every((p) => p.robust >= 0 && p.robust <= 1), 'each grid point has its share of slip days');
+  assert.ok(Number.isInteger(res.funnel.robustAll) && res.funnel.robustAll <= res.funnel.passed);
+  assert.equal(res.slipDays, 3);
+  for (const c of res.list) {
+    const slip = c.figs.find((f) => f.id === 'slip');
+    assert.ok(slip, `${c.name} has the slip check`);
+    assert.ok([0, 0.25, 0.5, 0.75, 1].includes(slip.value), `share of 4 days: ${slip.value}`);
+    const safe = c.figs.find((f) => f.id === 'safe');
+    assert.ok(safe && safe.value >= 0 && safe.value <= 1, `${c.name} has the Monte Carlo figure`);
+    assert.match(safe.text, /2000 simulated landings/);
+  }
+  // without a slip window there is no slip check
+  const off = await evaluator({ landingMs: plan }).evaluateRegion(region(4), {}, { cells: 16, slipDays: 0 });
+  assert.ok(off.list.every((c) => !c.figs.some((f) => f.id === 'slip')));
+});

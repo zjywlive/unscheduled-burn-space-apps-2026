@@ -15,7 +15,7 @@
 //     busy: { stage: 1 | 2, f } | null  the search running (stage 1: the grid, stage 2: the detail)
 //     result: { list: [pick, spot 1…5] } | null, sel: number   landeval.js evaluate() result and the chosen one
 //     error: string | null
-//     params: { slopeDeg, downrangeM, crossrangeM, batteryWh, loadW, reservePct, minSunPct, minEarthPct, radiusKm, cells }
+//     params: { slopeDeg, downrangeM, crossrangeM, batteryWh, loadW, reservePct, minSunPct, minEarthPct, radiusKm, cells, slipDays }
 //     stayDays: number           shown beside the settings (it is the time dock's)
 //     planned: ms | null         the mission's planned landing (the spots are scored for it), or none
 import { h, clear } from './dom.js';
@@ -32,12 +32,15 @@ export const LAND_FIELDS = [
   ['minEarthPct', 'Min. Earth over the stay', '%', 0, 100, 5, 'A grid point passes only with the Earth in view at least this share of the stay (0: no direct link needed)'],
   ['radiusKm', 'Search radius (point)', 'km', 2, 60, 1, 'Around a point: the square searched for better spots'],
   ['cells', 'Grid points (region)', '', 50, 2000, 50, 'Over a region: how many points are screened (more is finer and slower)'],
+  ['slipDays', 'Slip robustness', 'd', 0, 14, 1, 'Also check landings 1 to N days late: the spots that still pass on the most of those days come first, and each spot is graded on it (0: off)'],
 ];
 
 const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
 const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
 const utc = (ms) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 const short = (f) => (f ? f.text.split(' (')[0].split(' · ')[0] : '—');
+// a table cell: the short text, the dark spell without the battery and the slip days as k/n, so seven columns fit
+const cell = (f) => (!f ? '—' : f.id === 'dark' && Number.isFinite(f.value) ? `${Math.round(f.value)} h` : f.id === 'slip' ? f.text.split(' ')[0] : short(f));
 
 // Why a screen found few or no places: how the grid fell through the hard limits, and what the shortest dark spell
 // on usable ground would take (landeval.js funnel). null when enough passed. Pure.
@@ -46,7 +49,8 @@ export function funnelText(result, params = {}) {
   if (!f || (f.passed > 0 && !result.relaxed)) return null;
   const lead = f.passed ? `Only ${f.passed} of ${f.screened} grid points pass every hard limit.` : `No grid point passes every hard limit.`;
   const shares = params.minSunPct || params.minEarthPct ? `, ${f.sharesOk} with the minimum Sun / Earth shares` : '';
-  const counts = `Of ${f.screened}: ${f.slopeOk} with slope ≤ ${result.limit}°, ${f.notPsr} outside permanent shadow, ${f.darkOk} with the longest dark spell ≤ ${result.battH.toFixed(1)} h (+${f.stepH} h for the 4-hourly screen)${shares}.`;
+  const robust = f.slipDays > 0 ? `, ${f.robustAll} of them on every landing day to ${f.slipDays} days late` : '';
+  const counts = `Of ${f.screened}: ${f.slopeOk} with slope ≤ ${result.limit}°, ${f.notPsr} outside permanent shadow, ${f.darkOk} with the longest dark spell ≤ ${result.battH.toFixed(1)} h (+${f.stepH} h for the 4-hourly screen)${shares}; ${f.passed} pass all${robust}.`;
   let need = '';
   if (Number.isFinite(f.minDarkH) && f.minDarkH > result.battH && params.loadW) {
     const wh = Math.ceil((f.minDarkH * params.loadW) / Math.max(0.05, 1 - (params.reservePct ?? 20) / 100) / 100) * 100;
@@ -139,20 +143,19 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
         h('div', { class: 'ld-f-v' }, h('b', null, f.text), h('span', { class: 'muted' }, `limit ${f.limit}`)),
         h('small', null, f.note)))),
       result.region
-        ? h('h3', { class: 'ld-h3' }, `Best spots in region ${region}`, h('small', null, `${result.screened} grid points every ${result.stepKm.toFixed(1)} km screened (with the listed sites inside), ${result.passed} pass the hard limits; 8 scored in detail, at least ${(2 * result.stepKm).toFixed(1)} km apart, 5 kept by fewest failed checks, then fewest near, then suitability; same stay and method`))
-        : h('h3', { class: 'ld-h3' }, 'Better spots nearby', h('small', null, `8 scored in detail from a ${2 * (result.radiusKm ?? 15)} km square around your point, at least 2 km apart; the 5 with the fewest failed checks, then fewest near, then the best suitability; same stay and method`)),
+        ? h('h3', { class: 'ld-h3' }, `Best spots in region ${region}`, h('small', null, `${result.screened} grid points every ${result.stepKm.toFixed(1)} km screened (with the listed sites inside), ${result.passed} pass the hard limits${result.slipDays ? `, ${result.funnel?.robustAll ?? 0} on every day to ${result.slipDays} d late` : ''}; 8 scored in detail${result.slipDays ? ' (the most robust to a slip first)' : ''}, at least ${(2 * result.stepKm).toFixed(1)} km apart, 5 kept by fewest failed checks, then fewest near, then suitability; same stay and method`))
+        : h('h3', { class: 'ld-h3' }, 'Better spots nearby', h('small', null, `8 scored in detail from a ${2 * (result.radiusKm ?? 15)} km square around your point${result.slipDays ? ' (the most robust to a slip first)' : ''}, at least 2 km apart; the 5 with the fewest failed checks, then fewest near, then the best suitability; same stay and method`)),
       h('table', { class: 'ld-tbl' },
-        h('thead', null, h('tr', null, ['#', 'km', 'Slope', 'Sun', 'Earth', 'Dark', 'Δv'].map((t, i) => h('th', { class: i ? 'r' : null }, t)))),
+        h('thead', null, h('tr', null, ['#', 'Safe', 'Sun', 'Earth', 'Dark', ...(result.slipDays ? ['Slip'] : []), 'Δv'].map((t, i) => h('th', { class: i ? 'r' : null, title: { Safe: 'Safe touchdowns in 2000 simulated landings (Monte Carlo)', Slip: `Landing days, to ${result.slipDays} days late, on which the battery still carries every night` }[t] }, t)))),
         h('tbody', null, result.list.map((x, n) => {
-          const tr = h('tr', { class: n === sel ? 'on' : null, tabindex: '0', title: x.verdict.text },
+          const tr = h('tr', { class: n === sel ? 'on' : null, tabindex: '0', title: `${x.distKm ? `${x.distKm.toFixed(1)} km from your point. ` : ''}${x.verdict.text}` },
             h('td', null, h('span', { class: `ld-dot g-${x.verdict.grade}` }), num(n)),
-            h('td', { class: 'r' }, x.distKm.toFixed(1)),
-            ...['slope', 'sun', 'earth', 'dark', 'dv'].map((id) => { const f = fig(id, x); return h('td', { class: `r g-${f?.grade ?? ''}` }, short(f)); }));
+            ...[fig('safe', x) ? 'safe' : 'slope', 'sun', 'earth', 'dark', ...(result.slipDays ? ['slip'] : []), 'dv'].map((id) => { const f = fig(id, x); return h('td', { class: `r g-${f?.grade ?? ''}`, title: f ? `${f.label}: ${f.text}` : null }, cell(f)); }));
           tr.addEventListener('click', () => cb.onSelect?.(n));
           tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') cb.onSelect?.(n); });
           return tr;
         }))),
-      h('p', { class: 'ld-note' }, 'Choose a spot in the bar over the map, a row here or a numbered spot on the Moon; Use this site makes it the mission\'s site with the landing time shown. Rocks smaller than the DEM are not modelled; the Δv is from the planned polar orbit with this vehicle (assumed).'));
+      h('p', { class: 'ld-note' }, 'Choose a spot in the bar over the map, a row here or a numbered spot on the Moon; Use this site makes it the mission\'s site with the landing time shown. Safe touchdown: 2000 landings scattered in the ellipse (3σ), each on ground within the slope limit and outside permanent shadow; rocks smaller than the DEM are not modelled. The Δv is from the planned polar orbit with this vehicle (assumed).'));
   }
 
   function renderBar() {
