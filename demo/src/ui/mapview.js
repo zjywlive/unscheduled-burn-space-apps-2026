@@ -222,8 +222,8 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const flipPref = (key) => (on) => { layerPrefs[key] = on; writeLocal(LAYERS_KEY, { ...layerPrefs }); applyPrefs(); if (key === 'live') cb.onLivePref?.(on); };
   const swLive = switchRow('live', 'Light at the playhead', 'Darkens ground without the Sun, over the window modes', flipPref('live'));
   const swBest = switchRow('best', 'Best cells', null, flipPref('best'));
-  const swLabels = switchRow('labels', 'Site labels', null, flipPref('labels'));
-  const swGrat = switchRow('graticule', 'Graticule', null, flipPref('graticule'));
+  const swLabels = switchRow('labels', 'Site and feature names', null, flipPref('labels'));
+  const swGrat = switchRow('graticule', 'Graticule', 'Latitude and longitude lines; the spacing follows the zoom', flipPref('graticule'));
   // ---------- terrain style, contour lines and the Sun / Earth readout (map/terrain-style.js, mapframe.js) ----------
   // One frosted chip in the map's bottom-left floats row (main.js adds terrainEl to it): the terrain style, a
   // contour switch, and under them the height scale of Topo and the contour interval. The Sun and Earth

@@ -41,8 +41,10 @@ carries each one. Code references are to `demo/src/`.
 | Contour lines with labels | height field | The globe's contour shader everywhere (interval follows the zoom; no height labels) |
 | PSR outline and hatch | LOLA PSR 120 m | Draped |
 | Live veil (no Sun now) | 2 km now-states | Replaced by real lighting: with "Light at the playhead" on, the globe is lit by the real Sun with cast shadows, everywhere |
-| Graticule, 80°S edge, feature names | features list | Draped inside 80°S; gazetteer names outside |
-| Site markers and labels, selected and alternative crosshairs | sites | Draped inside 80°S (click a site to pick it, as before); labels outside (click to pick) |
+| Graticule | — | Drawn by the globe's shader over the whole Moon, the polar cap included; spacing 30° / 10° / 5° / 1° / 0.5° with the zoom; degree labels along the lines through the view centre; Layers → Graticule |
+| Feature names | polar features list, IAU gazetteer | Screen labels over the whole Moon (the polar map's 12 polar craters, 32 major features elsewhere), upright at any tilt, shown while the feature is 30 px to a view across, decluttered by size; Layers → Site and feature names |
+| Site markers and labels | sites | Screen labels for every listed site (click to pick it), decluttered after the selected site; snapping to sites in clicks and drawing is unchanged; Layers → Site and feature names |
+| Selected and alternative crosshairs | state | Draped |
 | Best cells 1–5 | heat ranking | Draped; clickable through the replayed click |
 | Regions A and B (rect, circle, polygon), region best | user shapes | Drawn on the 3D surface with the same tools; draped; region card as before |
 | Hand route, route candidates, slope colours, one-way, labels | route plan | Drawn with the Route tool on the surface; draped |

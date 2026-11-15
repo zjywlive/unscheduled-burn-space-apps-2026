@@ -1173,6 +1173,8 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     uColSun: { value: new THREE.Vector3(1, 0.7, 0.2) }, uColEarth: { value: new THREE.Vector3(0.3, 0.7, 0.95) }, uColBoth: { value: new THREE.Vector3(1, 1, 1) },
   };
   contourU.uContourInk = { value: new THREE.Vector3(1.0, 0.86, 0.45) };
+  // the graticule (setGraticule): meridians and parallels every uGratStep degrees over the whole Moon
+  overlayU.uGratOn = { value: 0 }; overlayU.uGratStep = { value: 30 }; overlayU.uGratInk = { value: new THREE.Vector4(0, 0, 0, 0.5) };
   for (const m of [matCyl, matCap]) {
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, contourU, overlays ? overlayU : {});
@@ -1204,6 +1206,13 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
               gl_FragColor.rgb = mix(gl_FragColor.rgb, g.rgb * (0.55 + 0.45 * lum), g.a * uGlobalAlpha * fadeS);
             }
           }
+          if (uGratOn > 0.5) {   // the whole Moon, the polar cap included
+            float latD = degrees(lat), lonD = degrees(lon);
+            float a = latD / uGratStep, b = lonD / uGratStep;
+            float la = abs(fract(a + 0.5) - 0.5) / max(fwidth(a), 1e-5), lo = abs(fract(b + 0.5) - 0.5) / max(fwidth(b), 1e-5);
+            float g = max(1.0 - smoothstep(0.4, 1.2, la), (1.0 - smoothstep(0.4, 1.2, lo)) * step(fwidth(b), 0.3));
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, uGratInk.rgb, g * uGratInk.a);
+          }
           if (uPolarOn > 0.5 && lat < uGlobalEdge) {   // the polar picture holds data only inside 80°S
             float rS = 2.0 * uMoonR * tan((1.5707963 + lat) * 0.5);
             float X = rS * sin(lon), Y = rS * cos(lon);
@@ -1215,7 +1224,7 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
             }
           }
         }` : '\n        float lsnInPolar = 0.0;';
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;${overlays ? '\nuniform sampler2D uPolarTex, uGlobalTex;\nuniform vec4 uPolarBox;\nuniform float uPolarOn, uPolarMix, uGlobalOn, uGlobalAlpha, uGlobalEdge, uLiveOn, uNightOn;\nuniform vec3 uLiveSun, uLiveEarth, uColSun, uColEarth, uColBoth;' : ''}\nuniform vec3 uContourInk;`)
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;${overlays ? '\nuniform sampler2D uPolarTex, uGlobalTex;\nuniform vec4 uPolarBox;\nuniform float uPolarOn, uPolarMix, uGlobalOn, uGlobalAlpha, uGlobalEdge, uLiveOn, uNightOn;\nuniform vec3 uLiveSun, uLiveEarth, uColSun, uColEarth, uColBoth;\nuniform float uGratOn, uGratStep;\nuniform vec4 uGratInk;' : ''}\nuniform vec3 uContourInk;`)
         .replace('#include <dithering_fragment>', `#include <dithering_fragment>${drape}
         if (uContours > 0.5) {
           float hm = (length(vLsnWorld) - uMoonR) * 1000.0 / uExag;
@@ -1747,6 +1756,12 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
     },
     // the night veil outside the polar map: the Sun's direction (Moon-fixed unit vector), or null for none
     setNight(sun) { overlayU.uNightOn.value = sun ? 1 : 0; if (sun && !overlayU.uLiveOn.value) overlayU.uLiveSun.value.set(...sun); dirty = true; },
+    // graticule: { stepDeg, ink: [r, g, b, a] (0–255, a 0–1) } or null
+    setGraticule(g) {
+      overlayU.uGratOn.value = g ? 1 : 0;
+      if (g) { overlayU.uGratStep.value = g.stepDeg; if (g.ink) overlayU.uGratInk.value.set(lin(g.ink[0]), lin(g.ink[1]), lin(g.ink[2]), g.ink[3]); }
+      dirty = true;
+    },
     setContourInk(rgb) { contourU.uContourInk.value.set(...rgb.map(lin)); dirty = true; },
     get contourInterval() { return state.contours ? contourU.uInterval.value : null; },
     maxTilt,

@@ -348,7 +348,7 @@ function start() {
   if (mapView) {
     // the Map is the 3D Moon (ui/globemap.js): the polar map runs underneath and is draped on it inside 80°S
     globeMap = createGlobeMap(document, {
-      frame: mapView.frame, pyramid, eph, sites, getState: () => state,
+      frame: mapView.frame, pyramid, eph, sites, features, getState: () => state,
       // a click north of 80°S (or on a listed site's label there): that point or site becomes the site
       onPickOutside: (picked) => { pickedOnMap = true; pickOnMap(picked); pickedOnMap = false; },
       onCamera: () => placeDial(),

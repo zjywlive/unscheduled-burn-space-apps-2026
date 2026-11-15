@@ -44,7 +44,7 @@ export const northUp = (latDeg, lonDeg) => (latDeg <= -60 ? (360 - (((lonDeg % 3
 // The camera distance (km) whose view shows about the polar map's view: the inverse of the frame's scale.
 export const distForZoom = (zoom, geo) => ((2 * MAX_HALF) / (zoom * geo.Sref)) * geo.H / (2 * Math.tan(20 * RAD));
 
-export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onCamera = () => {}, sites = [] }) {
+export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onCamera = () => {}, sites = [], features = [] }) {
   const host = frame.el;
   const layer = doc.createElement('div');
   layer.className = 'globe-map';
@@ -182,6 +182,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const copy = svg.cloneNode(true);
     const src = [svg, ...svg.querySelectorAll('*')], dst = [copy, ...copy.querySelectorAll('*')];
     for (let i = 0; i < src.length; i++) {
+      // the graticule, site marks and feature names are drawn by the globe itself, over the whole Moon, upright
+      if (src[i].matches?.('.graticule, .site-marks, .feature-names')) { dst[i].setAttribute('style', 'display:none'); continue; }
       const cs = getComputedStyle(src[i]);
       let style = '';
       for (const k of STYLE_PROPS) { const v = cs.getPropertyValue(k); if (v) style += `${k}:${v};`; }
@@ -231,7 +233,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   let lastUpd = 0;
   function frameTick() {
     const now = performance.now();
-    if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); }
+    if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); placeLabels(); }
     // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
     const st = getState();
     const k = `${host.dataset.sharp ?? ''}|${host.dataset.redrawMs ?? ''}|${host.dataset.moveMs ?? ''}|${host.dataset.paintMs ?? ''}|${host.dataset.live ?? ''}|${pyramid.version ?? ''}|${Math.floor((st.cursorMs ?? 0) / 1800e3)}`;
@@ -314,27 +316,77 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   }
 
   // ---- labels outside the polar picture: listed sites and the major named features ----
+  // ---- labels over the whole Moon: the listed sites, the named features (the polar map's list near the pole, the
+  // IAU gazetteer's major features elsewhere), the selected site; upright on screen, decluttered by priority ----
   const labelEls = [];
-  const addLabel = (latDeg, lonDeg, text, cls, onClick) => {
+  const addLabel = (latDeg, lonDeg, text, cls, onClick, extra = {}) => {
     const el = doc.createElement(onClick ? 'button' : 'span');
     el.className = `globe-label ${cls}`; el.textContent = text;
     if (onClick) { el.type = 'button'; el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); }); }
     labels.appendChild(el);
-    labelEls.push({ latDeg, lonDeg, el, cls });
+    labelEls.push({ latDeg, lonDeg, el, cls, ...extra });
     return el;
   };
-  for (const s of sites) if (s.latDeg > POLAR_LAT) addLabel(s.latDeg, s.lonDeg, s.name, 'is-site', () => onPickOutside?.({ site: s }));
-  for (const g of GAZETTEER) if (g.latDeg > POLAR_LAT) addLabel(g.latDeg, g.lonDeg, g.name, `is-feature is-${g.type}`, null);
-  const selEl = addLabel(0, 0, '', 'is-selected', null);
+  for (const s0 of sites) if (Number.isFinite(s0.latDeg)) addLabel(s0.latDeg, s0.lonDeg, s0.name, 'is-site', () => onPickOutside?.({ site: s0 }), { rank: 1 });
+  for (const f of features) if (Number.isFinite(f.latDeg)) addLabel(f.latDeg, f.lonDeg, f.name, 'is-feature is-crater', null, { rank: 3, diameterKm: f.diameterKm ?? 20 });
+  for (const g of GAZETTEER) if (!features.some((f) => f.name === g.name)) addLabel(g.latDeg, g.lonDeg, g.name, `is-feature is-${g.type}`, null, { rank: 2, diameterKm: g.diameterKm ?? 100 });
+  const selEl = addLabel(0, 0, '', 'is-selected', null, { rank: 0 });
+  // the graticule's degree labels, placed along the lines that cross the view centre (made as needed)
+  const gratEls = [];
+  const gratEl = (i) => { while (gratEls.length <= i) { const el = doc.createElement('span'); el.className = 'globe-grat'; labels.appendChild(el); gratEls.push(el); } return gratEls[i]; };
+  // the polar map's Layers switches (Graticule, Site labels) apply to the globe's own lines and labels too
+  const layerOn = (k) => host.dataset[k] !== 'off';
+  const gratStep = (dist) => (dist > 2500 ? 30 : dist > 700 ? 10 : dist > 180 ? 5 : dist > 40 ? 1 : 0.5);
+  let gratKey = '';
+  function placeGraticule() {
+    const on = layerOn('graticule'), c = view.camera, step = gratStep(c.dist);
+    const key = `${on}|${step}`;
+    if (key !== gratKey) {
+      gratKey = key;
+      // the polar map's graticule ink (styles.css --rule-on-surface)
+      const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(getComputedStyle(host).getPropertyValue('--rule-on-surface') || '');
+      const ink = m ? [Number(m[1]), Number(m[2]), Number(m[3]), Math.min(0.85, Math.max(0.35, Number(m[4] ?? 1)))] : [0, 0, 0, 0.5];
+      view.setGraticule(on ? { stepDeg: step, ink } : null);
+    }
+    let n = 0;
+    if (on && c.dist < 9000) {
+      const fmtLat = (v) => (Math.abs(v) < 1e-6 ? '0°' : `${+Math.abs(v).toFixed(1)}°${v < 0 ? 'S' : 'N'}`);
+      const fmtLon = (v) => { const L = ((v % 360) + 360) % 360; return L === 0 || L === 180 ? `${L}°` : L < 180 ? `${+L.toFixed(1)}°E` : `${+(360 - L).toFixed(1)}°W`; };
+      const put = (lat, lon, text) => {
+        const p = view.project(lat, lon);
+        if (!p) return;
+        const el = gratEl(n++);
+        el.hidden = false; el.textContent = text;
+        el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+      };
+      const lat0 = Math.round(c.lat / step) * step, lon0 = Math.round(c.lon / step) * step;
+      for (let k = -6; k <= 6; k++) {
+        const la = lat0 + k * step; if (la > -90 && la < 90) put(la, c.lon, fmtLat(la));
+        put(Math.max(-89, Math.min(89, c.lat)), lon0 + k * step, fmtLon(lon0 + k * step));
+      }
+    }
+    for (let i = n; i < gratEls.length; i++) gratEls[i].hidden = true;
+  }
   function placeLabels() {
     if (!view) return;
+    placeGraticule();
+    labels.classList.toggle('labels-off', !layerOn('labels'));
     const dist = view.camera.dist, st = getState(), s0 = st.site;
     if (s0) { selEl.textContent = s0.name ?? 'Site'; const it = labelEls.find((x) => x.el === selEl); it.latDeg = s0.latDeg; it.lonDeg = s0.lonDeg; }
-    for (const L of labelEls) {
-      const show = L.el === selEl ? s0 && s0.latDeg > POLAR_LAT : L.cls.startsWith('is-feature') ? dist > 300 && dist < 9000 : dist < 9000;
+    const kpp = view.kmPerPx(), placed = [];
+    const clash = (x, y, w) => placed.some((r) => x < r.x + r.w && x + w > r.x && Math.abs(y - r.y) < 16);
+    // the selected site first, then the sites, then features by size; a feature shows while it is between about
+    // 30 px and the whole view across; a listed site matching the selected one is not repeated
+    const order = [...labelEls].sort((a, b) => a.rank - b.rank || (b.diameterKm ?? 0) - (a.diameterKm ?? 0));
+    for (const L of order) {
+      let show = dist < 9000;
+      if (L.el === selEl) show = !!s0 && !sites.some((x) => x.latDeg === s0.latDeg && x.lonDeg === s0.lonDeg);
+      else if (L.diameterKm) { const px = L.diameterKm / kpp; show = show && px > 30 && px < 2500; }
       const p = show ? view.project(L.latDeg, L.lonDeg) : null;
+      const w = p ? L.el.textContent.length * 6.4 + 18 : 0;
+      if (p && L.el !== selEl && clash(p.x, p.y, w)) { L.el.hidden = true; continue; }
       L.el.hidden = !p;
-      if (p) L.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+      if (p) { L.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`; placed.push({ x: p.x, y: p.y, w }); }
     }
   }
 
