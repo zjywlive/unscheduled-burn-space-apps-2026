@@ -67,6 +67,17 @@ export function hasRoute(storage) {
 export function hasConfig(storage) {
   try { return !!store(storage)?.getItem(CONFIG_KEY); } catch { return false; }
 }
+// The planning mission's site, landing time or stay differs from the frozen configuration (the same test as
+// mission-config.js changesSince, repeated so this module has no imports). False when either is missing.
+export function planChanged(storage) {
+  try {
+    const c = JSON.parse(store(storage)?.getItem(CONFIG_KEY) ?? 'null'), m = readMission(storage);
+    if (!c?.site || !m) return false;
+    const near = (a, b, eps) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= eps;
+    return (c.site.id ?? null) !== (m.siteId ?? null) || !near(c.site.latDeg, m.latDeg, 1e-6) || !near(c.site.lonDeg, m.lonDeg, 1e-6)
+      || !near(c.landing?.requestedMs, m.landingMs, 30e3) || (Number.isFinite(m.stayDays) && m.stayDays !== c.stayDays);
+  } catch { return false; }
+}
 
 // Great-circle distance between two lat/lon points on the Moon, km.
 export function moonKm(aLat, aLon, bLat, bLon) {
@@ -157,10 +168,12 @@ export function stageBar(doc, current, { getMission = () => readMission(), compa
     if (!showLabel) a.setAttribute('aria-label', `Step ${s.n}: ${s.label}`);
     if (s.id === current) a.setAttribute('aria-current', 'step');
     const refresh = () => {
-      a.href = stageUrl(s.id, getMission());
+      // Execute while the plan has moved on from the frozen mission: Finalise first, so the new plan is what flies
+      const stale = s.id === 'execute' && s.id !== current && current !== 'finalise' && !locked() && planChanged();
+      a.href = stageUrl(stale ? 'finalise' : s.id, getMission());
       const lock = s.id === 'execute' && s.id !== current && locked();
       a.toggleAttribute('data-locked', lock);
-      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : s.title;
+      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : stale ? `${s.title}. The plan has changed since it was frozen: this opens Finalise to freeze the new plan first.` : s.title;
     };
     refresh();
     a.addEventListener('pointerenter', refresh);

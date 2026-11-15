@@ -304,7 +304,10 @@ Landing → Surface operations.
   a missing site or time stops a freeze; no-go rows are shown, not hidden.
 - **Execute** (`lander.html`, `lander/main.js`): flies only the frozen configuration (a link with `?site=&t=` flies a
   labelled rehearsal). No site, time, planner or vehicle inputs; a chip names the configuration and says when the Map
-  has changed since. The phase strip seeks the timeline and marks the phase flown; Surface operations plays the frozen
+  has changed since. When the Map's site, landing time or stay differs from the frozen one, the page opens a dialog
+  that shows both, with **Finalise the new plan** or **Fly the frozen mission** (remembered for the tab while neither
+  changes; the chip's "plan changed since" reopens it). The stage bar's *3 Execute* opens Finalise instead while the
+  plan has changed (`mission-flow.js planChanged`). The phase strip seeks the timeline and marks the phase flown; Surface operations plays the frozen
   route on the globe (`globe.html#cfg=1`) from the touchdown of the branch flown (`lsn-flown`). The planning mission
   is never written by execution.
 - **Build**: `tools/build-lander.mjs` builds `lander.html`, `planner.html` and `finalise.html` from the lander modules;

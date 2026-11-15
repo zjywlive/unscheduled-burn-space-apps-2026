@@ -128,9 +128,37 @@ export function boot() {
     chip.classList.toggle('rehearsal', rehearsal);
     chip.innerHTML = rehearsal
       ? `<span class="id">REHEARSAL</span><b>${S.site.name}</b><span>not a finalised mission</span>`
-      : `<span class="id">${config.id}</span><b>${S.site.name}</b><span>${day} UTC</span>${changed.length ? `<span class="stale">· plan changed since</span>` : ''}`;
+      : `<span class="id">${config.id}</span><b>${S.site.name}</b><span>${day} UTC</span>${changed.length ? `<button type="button" class="stale">· plan changed since</button>` : ''}`;
     chip.title = rehearsal ? 'A rehearsal from the link: finalise a mission on the Map (step 2) to fly your plan.' : `Frozen configuration ${config.id}, frozen ${new Date(config.frozenMs).toISOString().slice(0, 16).replace('T', ' ')} UTC. ${changed.length ? `The plan on the Map has changed since (${changed.join(', ')}): finalise again to fly the new one.` : 'The plan on the Map is the same.'}`;
+    chip.querySelector('button.stale')?.addEventListener('click', () => showStale(changed));
+    if (changed.length && !staleShown) {
+      staleShown = true;
+      let ok = null;
+      try { ok = sessionStorage.getItem(STALE_OK_KEY); } catch { /* storage blocked: ask */ }
+      if (ok !== staleKey()) showStale(changed);
+    }
   }
+  // the plan on the Map differs from the frozen configuration: say what each is and offer Finalise. "Fly the frozen
+  // mission" is remembered for this tab while neither changes (sessionStorage).
+  const STALE_OK_KEY = 'lsn-stale-ok';
+  let staleShown = false;
+  const staleKey = () => { const m = readMission(); return `${config?.id}|${m?.siteId ?? ''}|${m?.latDeg}|${m?.lonDeg}|${m?.landingMs}|${m?.stayDays}`; };
+  const utcDay = (ms) => (Number.isFinite(ms) ? `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC` : 'no landing time');
+  function showStale(changed) {
+    const m = readMission();
+    if (!m || !config) return;
+    $('#st-what').textContent = changed.join(', ');
+    $('#st-now').textContent = `${m.siteName ?? `${m.latDeg.toFixed(2)}°, ${m.lonDeg.toFixed(2)}°`} · ${utcDay(m.landingMs)}${Number.isFinite(m.stayDays) ? ` · ${m.stayDays} d stay` : ''}`;
+    $('#st-frozen').innerHTML = `<span class="id">${config.id}</span>${config.site.name} · ${utcDay(config.landing?.requestedMs)} · ${config.stayDays} d stay`;
+    $('#st-final').href = stageUrl('finalise');
+    $('#stale').hidden = false;
+    $('#st-final').focus();
+  }
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#stale').hidden) $('#st-keep').click(); });
+  $('#st-keep')?.addEventListener('click', () => {
+    $('#stale').hidden = true;
+    try { sessionStorage.setItem(STALE_OK_KEY, staleKey()); } catch { /* storage blocked: it asks again next time */ }
+  });
   // the action bar (in the top bar): the page's actions; the side panels keep the data
   const rover = $('#ab-rover');
   const pressed = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false');

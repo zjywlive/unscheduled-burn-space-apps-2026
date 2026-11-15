@@ -240,6 +240,11 @@
   .nc-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .nc-act .btn { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
   .nc-act .btn.primary { color: #000; }
+  .nc-card dl.stale-cmp { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 13px; }
+  .nc-card dl.stale-cmp dt { color: var(--muted); }
+  .nc-card dl.stale-cmp dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+  .nc-card dl.stale-cmp .id { font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ok); margin-right: 6px; }
+  .cfg-chip button.stale { padding: 0; border: 0; background: none; font: inherit; color: var(--sun); cursor: pointer; text-decoration: underline dotted; }
   a.btn { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
   @media (max-width: 1600px) { .phases .ph-l { display: none; } .phases .ph-s { display: inline; } }
 
@@ -477,6 +482,14 @@
     <h2>No finalised mission yet</h2>
     <p>This page flies a frozen mission configuration: plan the mission on the <b>Map</b> (step 1), then <b>Finalise</b> it (step 2).</p>
     <div class="nc-act"><a class="btn primary" id="nc-map" href="index.html">Open the Map</a><a class="btn" id="nc-final" href="finalise.html">Finalise</a><a class="btn" id="nc-demo" href="lander.html?site=shackleton&amp;t=2027-01-10T02:00Z">Fly a rehearsal at Shackleton ridge</a></div>
+  </div>
+</section>
+<section id="stale" class="noconfig" hidden aria-label="The plan has changed since this mission was frozen">
+  <div class="nc-card glass">
+    <h2>The plan on the Map has changed</h2>
+    <p>This page flies the mission as it was frozen on Finalise. The Map's plan has changed since (<span id="st-what"></span>): finalise it to fly it here.</p>
+    <dl class="stale-cmp"><dt>On the Map now</dt><dd id="st-now"></dd><dt>Frozen, flown here</dt><dd id="st-frozen"></dd></dl>
+    <div class="nc-act"><a class="btn primary" id="st-final" href="finalise.html">Finalise the new plan</a><button type="button" class="btn" id="st-keep">Fly the frozen mission</button></div>
   </div>
 </section>
 <div id="terrkey" class="glass terrkey" hidden>
@@ -4948,6 +4961,20 @@ function readMission(storage) {
   } catch { return null; }
 }
 
+// The rover route being planned on the Map ({ points, maxSlopeDeg, selected }, map km): kept here as well as in the
+// page's hash, so it survives a trip to another page (the 3D globe, Finalise) and comes back with the Map. It goes
+// only when the user clears it or draws a new one (main.js persistRoutePlan).
+const ROUTE_PLAN_KEY = 'lsn-route-plan';
+function readRoutePlan(storage) {
+  try {
+    const r = JSON.parse(store(storage)?.getItem(ROUTE_PLAN_KEY) ?? 'null');
+    return r && Array.isArray(r.points) && r.points.length >= 2 ? r : null;
+  } catch { return null; }
+}
+function writeRoutePlan(plan, storage) {
+  try { if (plan) store(storage)?.setItem(ROUTE_PLAN_KEY, JSON.stringify(plan)); else store(storage)?.removeItem(ROUTE_PLAN_KEY); } catch { /* storage blocked: the hash still carries it */ }
+}
+
 function writeMission(patch, storage) {
   const next = { ...(readMission(storage) ?? {}), ...patch, updatedMs: Date.now() };
   try { store(storage)?.setItem(MISSION_KEY, JSON.stringify(next)); } catch { /* storage blocked: the links still carry the site */ }
@@ -4962,6 +4989,17 @@ function hasRoute(storage) {
 
 function hasConfig(storage) {
   try { return !!store(storage)?.getItem(CONFIG_KEY); } catch { return false; }
+}
+// The planning mission's site, landing time or stay differs from the frozen configuration (the same test as
+// mission-config.js changesSince, repeated so this module has no imports). False when either is missing.
+function planChanged(storage) {
+  try {
+    const c = JSON.parse(store(storage)?.getItem(CONFIG_KEY) ?? 'null'), m = readMission(storage);
+    if (!c?.site || !m) return false;
+    const near = (a, b, eps) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= eps;
+    return (c.site.id ?? null) !== (m.siteId ?? null) || !near(c.site.latDeg, m.latDeg, 1e-6) || !near(c.site.lonDeg, m.lonDeg, 1e-6)
+      || !near(c.landing?.requestedMs, m.landingMs, 30e3) || (Number.isFinite(m.stayDays) && m.stayDays !== c.stayDays);
+  } catch { return false; }
 }
 
 // Great-circle distance between two lat/lon points on the Moon, km.
@@ -5053,10 +5091,12 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
     if (!showLabel) a.setAttribute('aria-label', `Step ${s.n}: ${s.label}`);
     if (s.id === current) a.setAttribute('aria-current', 'step');
     const refresh = () => {
-      a.href = stageUrl(s.id, getMission());
+      // Execute while the plan has moved on from the frozen mission: Finalise first, so the new plan is what flies
+      const stale = s.id === 'execute' && s.id !== current && current !== 'finalise' && !locked() && planChanged();
+      a.href = stageUrl(stale ? 'finalise' : s.id, getMission());
       const lock = s.id === 'execute' && s.id !== current && locked();
       a.toggleAttribute('data-locked', lock);
-      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : s.title;
+      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : stale ? `${s.title}. The plan has changed since it was frozen: this opens Finalise to freeze the new plan first.` : s.title;
     };
     refresh();
     a.addEventListener('pointerenter', refresh);
@@ -5081,7 +5121,7 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
   return nav;
 }
 
-return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
+return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, ROUTE_PLAN_KEY, readRoutePlan, writeRoutePlan, writeMission, hasRoute, hasConfig, planChanged, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
 })();
 __m['../mission-config.js'] = (() => {
 // The frozen mission configuration: what step 2 (Finalise, finalise.html) hands to step 3 (Execute, lander.html).
@@ -5973,9 +6013,37 @@ function boot() {
     chip.classList.toggle('rehearsal', rehearsal);
     chip.innerHTML = rehearsal
       ? `<span class="id">REHEARSAL</span><b>${S.site.name}</b><span>not a finalised mission</span>`
-      : `<span class="id">${config.id}</span><b>${S.site.name}</b><span>${day} UTC</span>${changed.length ? `<span class="stale">· plan changed since</span>` : ''}`;
+      : `<span class="id">${config.id}</span><b>${S.site.name}</b><span>${day} UTC</span>${changed.length ? `<button type="button" class="stale">· plan changed since</button>` : ''}`;
     chip.title = rehearsal ? 'A rehearsal from the link: finalise a mission on the Map (step 2) to fly your plan.' : `Frozen configuration ${config.id}, frozen ${new Date(config.frozenMs).toISOString().slice(0, 16).replace('T', ' ')} UTC. ${changed.length ? `The plan on the Map has changed since (${changed.join(', ')}): finalise again to fly the new one.` : 'The plan on the Map is the same.'}`;
+    chip.querySelector('button.stale')?.addEventListener('click', () => showStale(changed));
+    if (changed.length && !staleShown) {
+      staleShown = true;
+      let ok = null;
+      try { ok = sessionStorage.getItem(STALE_OK_KEY); } catch { /* storage blocked: ask */ }
+      if (ok !== staleKey()) showStale(changed);
+    }
   }
+  // the plan on the Map differs from the frozen configuration: say what each is and offer Finalise. "Fly the frozen
+  // mission" is remembered for this tab while neither changes (sessionStorage).
+  const STALE_OK_KEY = 'lsn-stale-ok';
+  let staleShown = false;
+  const staleKey = () => { const m = readMission(); return `${config?.id}|${m?.siteId ?? ''}|${m?.latDeg}|${m?.lonDeg}|${m?.landingMs}|${m?.stayDays}`; };
+  const utcDay = (ms) => (Number.isFinite(ms) ? `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC` : 'no landing time');
+  function showStale(changed) {
+    const m = readMission();
+    if (!m || !config) return;
+    $('#st-what').textContent = changed.join(', ');
+    $('#st-now').textContent = `${m.siteName ?? `${m.latDeg.toFixed(2)}°, ${m.lonDeg.toFixed(2)}°`} · ${utcDay(m.landingMs)}${Number.isFinite(m.stayDays) ? ` · ${m.stayDays} d stay` : ''}`;
+    $('#st-frozen').innerHTML = `<span class="id">${config.id}</span>${config.site.name} · ${utcDay(config.landing?.requestedMs)} · ${config.stayDays} d stay`;
+    $('#st-final').href = stageUrl('finalise');
+    $('#stale').hidden = false;
+    $('#st-final').focus();
+  }
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#stale').hidden) $('#st-keep').click(); });
+  $('#st-keep')?.addEventListener('click', () => {
+    $('#stale').hidden = true;
+    try { sessionStorage.setItem(STALE_OK_KEY, staleKey()); } catch { /* storage blocked: it asks again next time */ }
+  });
   // the action bar (in the top bar): the page's actions; the side panels keep the data
   const rover = $('#ab-rover');
   const pressed = (el, on) => el.setAttribute('aria-pressed', on ? 'true' : 'false');

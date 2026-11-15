@@ -238,6 +238,11 @@
   .nc-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .nc-act .btn { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
   .nc-act .btn.primary { color: #000; }
+  .nc-card dl.stale-cmp { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 13px; }
+  .nc-card dl.stale-cmp dt { color: var(--muted); }
+  .nc-card dl.stale-cmp dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+  .nc-card dl.stale-cmp .id { font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ok); margin-right: 6px; }
+  .cfg-chip button.stale { padding: 0; border: 0; background: none; font: inherit; color: var(--sun); cursor: pointer; text-decoration: underline dotted; }
   a.btn { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
   @media (max-width: 1600px) { .phases .ph-l { display: none; } .phases .ph-s { display: inline; } }
 
@@ -3789,6 +3794,20 @@ function readMission(storage) {
   } catch { return null; }
 }
 
+// The rover route being planned on the Map ({ points, maxSlopeDeg, selected }, map km): kept here as well as in the
+// page's hash, so it survives a trip to another page (the 3D globe, Finalise) and comes back with the Map. It goes
+// only when the user clears it or draws a new one (main.js persistRoutePlan).
+const ROUTE_PLAN_KEY = 'lsn-route-plan';
+function readRoutePlan(storage) {
+  try {
+    const r = JSON.parse(store(storage)?.getItem(ROUTE_PLAN_KEY) ?? 'null');
+    return r && Array.isArray(r.points) && r.points.length >= 2 ? r : null;
+  } catch { return null; }
+}
+function writeRoutePlan(plan, storage) {
+  try { if (plan) store(storage)?.setItem(ROUTE_PLAN_KEY, JSON.stringify(plan)); else store(storage)?.removeItem(ROUTE_PLAN_KEY); } catch { /* storage blocked: the hash still carries it */ }
+}
+
 function writeMission(patch, storage) {
   const next = { ...(readMission(storage) ?? {}), ...patch, updatedMs: Date.now() };
   try { store(storage)?.setItem(MISSION_KEY, JSON.stringify(next)); } catch { /* storage blocked: the links still carry the site */ }
@@ -3803,6 +3822,17 @@ function hasRoute(storage) {
 
 function hasConfig(storage) {
   try { return !!store(storage)?.getItem(CONFIG_KEY); } catch { return false; }
+}
+// The planning mission's site, landing time or stay differs from the frozen configuration (the same test as
+// mission-config.js changesSince, repeated so this module has no imports). False when either is missing.
+function planChanged(storage) {
+  try {
+    const c = JSON.parse(store(storage)?.getItem(CONFIG_KEY) ?? 'null'), m = readMission(storage);
+    if (!c?.site || !m) return false;
+    const near = (a, b, eps) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= eps;
+    return (c.site.id ?? null) !== (m.siteId ?? null) || !near(c.site.latDeg, m.latDeg, 1e-6) || !near(c.site.lonDeg, m.lonDeg, 1e-6)
+      || !near(c.landing?.requestedMs, m.landingMs, 30e3) || (Number.isFinite(m.stayDays) && m.stayDays !== c.stayDays);
+  } catch { return false; }
 }
 
 // Great-circle distance between two lat/lon points on the Moon, km.
@@ -3894,10 +3924,12 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
     if (!showLabel) a.setAttribute('aria-label', `Step ${s.n}: ${s.label}`);
     if (s.id === current) a.setAttribute('aria-current', 'step');
     const refresh = () => {
-      a.href = stageUrl(s.id, getMission());
+      // Execute while the plan has moved on from the frozen mission: Finalise first, so the new plan is what flies
+      const stale = s.id === 'execute' && s.id !== current && current !== 'finalise' && !locked() && planChanged();
+      a.href = stageUrl(stale ? 'finalise' : s.id, getMission());
       const lock = s.id === 'execute' && s.id !== current && locked();
       a.toggleAttribute('data-locked', lock);
-      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : s.title;
+      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : stale ? `${s.title}. The plan has changed since it was frozen: this opens Finalise to freeze the new plan first.` : s.title;
     };
     refresh();
     a.addEventListener('pointerenter', refresh);
@@ -3922,7 +3954,7 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
   return nav;
 }
 
-return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
+return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, ROUTE_PLAN_KEY, readRoutePlan, writeRoutePlan, writeMission, hasRoute, hasConfig, planChanged, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
 })();
 __m['../mission-config.js'] = (() => {
 // The frozen mission configuration: what step 2 (Finalise, finalise.html) hands to step 3 (Execute, lander.html).
