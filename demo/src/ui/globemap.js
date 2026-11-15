@@ -338,6 +338,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   const layerOn = (k) => host.dataset[k] !== 'off';
   const gratStep = (dist) => (dist > 2500 ? 30 : dist > 700 ? 10 : dist > 180 ? 5 : dist > 40 ? 1 : 0.5);
   let gratKey = '';
+  let taken = [];   // screen boxes already used by labels this frame (sites and names first, then degrees)
   function placeGraticule() {
     const on = layerOn('graticule'), c = view.camera, step = gratStep(c.dist);
     const key = `${on}|${step}`;
@@ -355,21 +356,33 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       const put = (lat, lon, text) => {
         const p = view.project(lat, lon);
         if (!p) return;
+        const w = text.length * 6 + 8;
+        if (taken.some((r) => p.x < r.x + r.w && p.x + w > r.x && Math.abs(p.y - r.y) < 14)) return;
+        taken.push({ x: p.x, y: p.y, w });
         const el = gratEl(n++);
         el.hidden = false; el.textContent = text;
         el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
       };
-      const lat0 = Math.round(c.lat / step) * step, lon0 = Math.round(c.lon / step) * step;
-      for (let k = -6; k <= 6; k++) {
-        const la = lat0 + k * step; if (la > -90 && la < 90) put(la, c.lon, fmtLat(la));
-        put(Math.max(-89, Math.min(89, c.lat)), lon0 + k * step, fmtLon(lon0 + k * step));
+      // parallels: labelled along the meridian through the view centre
+      const lat0 = Math.round(c.lat / step) * step;
+      for (let k = -6; k <= 6; k++) { const la = lat0 + k * step; if (la > -90 && la < 90) put(la, c.lon, fmtLat(la)); }
+      // meridians: labelled along a parallel where they stand at least ~70 px apart (away from a pole the view may
+      // be centred on), with the same 3× / 9× thinning as the lines
+      const kpp = view.kmPerPx(), mer = (lat) => (MOON_R_KM * Math.cos(lat * RAD) * step * RAD) / kpp;
+      const want = 70;
+      let latL = c.lat;
+      if (mer(latL) < want) {
+        const cosNeed = Math.min(1, (want * kpp) / (MOON_R_KM * step * RAD));
+        latL = Math.sign(c.lat || -1) * Math.acos(cosNeed) / RAD;
       }
+      const m = mer(latL), lonStep = step * (m >= want * 0.9 ? 1 : m * 3 >= want * 0.9 ? 3 : 9);
+      const lon0 = Math.round(c.lon / lonStep) * lonStep;
+      for (let k = -8; k <= 8; k++) put(latL, lon0 + k * lonStep, fmtLon(lon0 + k * lonStep));
     }
     for (let i = n; i < gratEls.length; i++) gratEls[i].hidden = true;
   }
   function placeLabels() {
     if (!view) return;
-    placeGraticule();
     labels.classList.toggle('labels-off', !layerOn('labels'));
     const dist = view.camera.dist, st = getState(), s0 = st.site;
     if (s0) { selEl.textContent = s0.name ?? 'Site'; const it = labelEls.find((x) => x.el === selEl); it.latDeg = s0.latDeg; it.lonDeg = s0.lonDeg; }
@@ -388,6 +401,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       L.el.hidden = !p;
       if (p) { L.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`; placed.push({ x: p.x, y: p.y, w }); }
     }
+    taken = layerOn('labels') ? placed.slice() : [];
+    placeGraticule();
   }
 
   // ---- input: globe points → the polar map's own events ----
