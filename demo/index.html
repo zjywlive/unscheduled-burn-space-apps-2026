@@ -6580,12 +6580,12 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     toFramePx(latDeg, lonDeg) { const p = view?.project(latDeg, lonDeg); return p ? [p.x, p.y] : null; },
     flyTo(cam) { view?.flyTo({ tilt: 0, heading: northUp(cam.lat, cam.lon), ms: 1400, ...cam }); },
     // + / −; the zoom readout (reset): back to the polar map's 1× scale; north (the tool column's North up): the same
-    // place turned back to the map's orientation (north up, 0°E up near the south pole) and looking straight down,
-    // since a drag turns the globe freely about its centre
+    // place with true north at the top (also south of 60°S, where the polar map keeps 0°E up) and looking straight
+    // down, since a drag turns the globe freely about its centre
     zoom(dir) {
       if (!view) return false;
       const c = view.camera;
-      if (dir === 'north') { view.flyTo({ lat: c.lat, lon: c.lon, dist: c.dist, tilt: 0, heading: northUp(c.lat, c.lon), ms: 600 }); return true; }
+      if (dir === 'north') { view.flyTo({ lat: c.lat, lon: c.lon, dist: c.dist, tilt: 0, heading: 0, ms: 600 }); return true; }   // true north at the top, at any latitude
       if (dir === 'reset') { view.flyTo({ lat: c.lat, lon: c.lon, dist: frame.geo?.W ? distForZoom(1, frame.geo) : 1600, tilt: c.tilt, heading: c.heading, ms: 600 }); return true; }
       if (dir !== 'in' && dir !== 'out') return false;
       view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.05, Math.min(14000, c.dist * (dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 400 });
