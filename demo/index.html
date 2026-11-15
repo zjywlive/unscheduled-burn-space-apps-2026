@@ -719,6 +719,8 @@ th:last-child, td:last-child { padding-right: 0; }
 .map-level-frame[hidden] { display: none; }
 /* while a frame covers the map, the map's own floating chrome (action bar, dock, dial) stays under it */
 .map-level-open .ab-wrap { visibility: hidden; }
+/* narrow screens: the action bar sits just under the top bar (which wraps to three rows and scrolls away), not over it */
+@media (max-width: 1100px) { .app:not(.is-bigmap) .ab-wrap { top: calc(var(--level-top, 56px) + 8px); } }
 
 /* styles/phase3-agent.css */
 /* Phase 3: the Ask panel, the first-visit tour prompt, and driver.js pressed into the project's tokens.
@@ -2921,6 +2923,9 @@ function createMapLevels(doc, { slot, topbar, getMission, onSite }) {
   const place = () => { const r = topbar?.getBoundingClientRect(); doc.documentElement.style.setProperty('--level-top', `${Math.max(0, Math.round(r ? r.bottom : 0))}px`); };
   if (typeof ResizeObserver === 'function' && topbar) new ResizeObserver(place).observe(topbar);
   doc.defaultView.addEventListener('resize', place);
+  // on narrow screens the top bar scrolls with the page: the action bar (phase10-flow.css) and the layer follow it
+  doc.defaultView.addEventListener('scroll', place, { passive: true });
+  place();
 
   function frame(id, src) {
     let f = frames[id];
@@ -2975,6 +2980,780 @@ function createMapLevels(doc, { slot, topbar, getMission, onSite }) {
 }
 
 return { LEVELS, createMapLevels };
+})();
+__m['terrain.js'] = (() => {
+// South-pole terrain: polar stereographic projection, LOLA height lookup and the terrain skyline
+// (spec phase 2 §2.2–§2.3). Map plane in km: pole at the origin, 0°E up (+y), 90°E right (+x).
+
+const MAP_HALF_KM = 320;
+const GRID_SIZE = 320;
+const GRID_CELL_KM = 2;
+const TERRAIN_MAX_LAT = -80;
+const OBSERVER_M = 2;
+
+const R = 1737.4;
+const RAD = Math.PI / 180;
+const DEG = 180 / Math.PI;
+
+function toXY(latDeg, lonDeg) {
+  const r = 2 * R * Math.tan(((90 + latDeg) / 2) * RAD);
+  const lon = lonDeg * RAD;
+  return [r * Math.sin(lon), r * Math.cos(lon)];
+}
+
+function fromXY(xKm, yKm) {
+  const r = Math.hypot(xKm, yKm);
+  const latDeg = 2 * Math.atan(r / (2 * R)) * DEG - 90;
+  let lonDeg = Math.atan2(xKm, yKm) * DEG;
+  if (lonDeg < 0) lonDeg += 360;
+  if (lonDeg >= 360) lonDeg -= 360;
+  return { latDeg, lonDeg };
+}
+
+// Heights in metres, bilinear between pixel centres; null outside the grid. The grid spans ±halfKm
+// to its pixel edges, centred on the pole; by default halfKm = size × kmPerPixel / 2.
+function createDem({ data, size, kmPerPixel, dnToMeters = 0.5, halfKm }) {
+  // the default keeps the phase 2 arithmetic exactly, so outputs stay byte-identical
+  const c = halfKm === undefined ? size / 2 - 0.5 : halfKm / kmPerPixel - 0.5;
+  function heightAtXY(xKm, yKm) {
+    const col = xKm / kmPerPixel + c;
+    const row = c - yKm / kmPerPixel;
+    if (!(col >= 0 && row >= 0 && col <= size - 1 && row <= size - 1)) return null;
+    const c0 = Math.min(Math.floor(col), size - 2), r0 = Math.min(Math.floor(row), size - 2);
+    const fc = col - c0, fr = row - r0;
+    const i = r0 * size + c0;
+    const top = data[i] + (data[i + 1] - data[i]) * fc;
+    const bottom = data[i + size] + (data[i + size + 1] - data[i + size]) * fc;
+    return (top + (bottom - top) * fr) * dnToMeters;
+  }
+  // sample(): the same height, NaN instead of null (phase 4)
+  function sample(xKm, yKm) {
+    const v = heightAtXY(xKm, yKm);
+    return v === null ? NaN : v;
+  }
+  // grid(xs, ys): heights at (xs[i], ys[j]) for many i, j, with the per-column and per-row arithmetic done
+  // once (the tiled hillshade, phase 4) → (i, j) => metres | NaN. Same bilinear values as sample().
+  function grid(xs, ys) {
+    const C0 = new Int32Array(xs.length), FC = new Float64Array(xs.length), R0 = new Int32Array(ys.length), FR = new Float64Array(ys.length);
+    for (let i = 0; i < xs.length; i++) {
+      const col = xs[i] / kmPerPixel + c;
+      if (!(col >= 0 && col <= size - 1)) { C0[i] = -1; continue; }
+      C0[i] = Math.min(Math.floor(col), size - 2); FC[i] = col - C0[i];
+    }
+    for (let j = 0; j < ys.length; j++) {
+      const row = c - ys[j] / kmPerPixel;
+      if (!(row >= 0 && row <= size - 1)) { R0[j] = -1; continue; }
+      R0[j] = Math.min(Math.floor(row), size - 2); FR[j] = row - R0[j];
+    }
+    return (i, j) => {
+      const c0 = C0[i], r0 = R0[j];
+      if (c0 < 0 || r0 < 0) return NaN;
+      const k = r0 * size + c0, fc = FC[i];
+      const top = data[k] + (data[k + 1] - data[k]) * fc;
+      const bottom = data[k + size] + (data[k + size + 1] - data[k + size]) * fc;
+      return (top + (bottom - top) * FR[j]) * dnToMeters;
+    };
+  }
+  return {
+    size, kmPerPixel, halfKm: halfKm ?? (size * kmPerPixel) / 2,
+    heightAtXY, sample, grid,
+    heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
+  };
+}
+
+// ---------- tiled levels (task book phase 4 §4.1) ----------
+// A tiled level is a grid of tilePx² tiles over ±halfKm; tile (row, col) covers
+// x ∈ [−halfKm + col·T, −halfKm + (col+1)·T), y ∈ (halfKm − (row+1)·T, halfKm − row·T], T = tilePx × kmPerPixel,
+// row 0 at the top (+y). Each tile file holds (tilePx + 2·apronPx)² Int16 LE values with one pixel of
+// apron from the neighbours, so a bilinear lookup anywhere in the tile reads only that tile. −32768 is
+// no data. Only the tiles listed in `tiles` ("rRRcCC") exist; the pack of a tile is "<name>_rRRcCC".
+
+const NO_DATA = -32768;
+// At most this many tile packs for one viewport, whatever the canvas size: the level is chosen so that
+// its listed tiles in view stay within the budget (64 tiles of 258² Int16 = 8.5 MB). See pick().
+const TILE_BUDGET = 64;
+
+const tileKm = (level) => level.tilePx * level.kmPerPixel;
+const tileGridSize = (level) => Math.round((2 * level.halfKm) / tileKm(level));
+const tileId = (row, col) => `r${String(row).padStart(2, '0')}c${String(col).padStart(2, '0')}`;
+const tilePack = (level, row, col) => `${level.name}_${tileId(row, col)}`;
+
+// "<level>_rRRcCC" or "rRRcCC" → { level (name or null), row, col }; null if the name is not a tile.
+function parseTile(name) {
+  const m = /^(?:(.+)_)?r(\d{2})c(\d{2})$/.exec(String(name));
+  return m ? { level: m[1] ?? null, row: Number(m[2]), col: Number(m[3]) } : null;
+}
+
+// Tile extent in km: x ∈ [x0, x1), y ∈ (y0, y1].
+function tileBounds(level, row, col) {
+  const T = tileKm(level);
+  return { x0: -level.halfKm + col * T, x1: -level.halfKm + (col + 1) * T, y0: level.halfKm - (row + 1) * T, y1: level.halfKm - row * T };
+}
+
+// Row and column ranges (inclusive) of the tile grid that meet `bounds`, clipped to the grid; null if none.
+function tileRange(level, b) {
+  const T = tileKm(level), n = tileGridSize(level);
+  if (!b) return { c0: 0, c1: n - 1, r0: 0, r1: n - 1 };
+  const c0 = Math.max(0, Math.floor((b.x0 + level.halfKm) / T)), c1 = Math.min(n - 1, Math.floor((b.x1 + level.halfKm) / T));
+  const r0 = Math.max(0, Math.floor((level.halfKm - b.y1) / T)), r1 = Math.min(n - 1, Math.floor((level.halfKm - b.y0) / T));
+  return c1 < c0 || r1 < r0 ? null : { c0, c1, r0, r1 };
+}
+
+function listedSet(level) {
+  if (level._listed) return level._listed;
+  const set = new Set();
+  for (const id of level.tiles ?? []) { const t = parseTile(id); if (t) set.add(t.row * 1000 + t.col); }
+  if (Object.isExtensible(level)) Object.defineProperty(level, '_listed', { value: set, enumerable: false });
+  return set;
+}
+
+// The listed tiles of a tiled level (terrain.json entry or createTiledDem result) that meet `bounds`
+// (km; all of them without bounds), nearest the centre of `bounds` first: [{ row, col, id, pack }].
+function tilesIn(level, bounds) {
+  const r = tileRange(level, bounds);
+  if (!r) return [];
+  const set = listedSet(level), out = [];
+  for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) {
+    if (set.has(row * 1000 + col)) out.push({ row, col, id: tileId(row, col), pack: tilePack(level, row, col) });
+  }
+  if (bounds) {
+    const mx = (bounds.x0 + bounds.x1) / 2, my = (bounds.y0 + bounds.y1) / 2, T = tileKm(level);
+    const dist = (t) => Math.hypot(-level.halfKm + (t.col + 0.5) * T - mx, level.halfKm - (t.row + 0.5) * T - my);
+    out.sort((a, b) => dist(a) - dist(b) || a.row - b.row || a.col - b.col);
+  }
+  return out;
+}
+
+// Is every part of `b` inside listed tiles of `level`?
+function listedCovers(level, b) {
+  const r = tileRange(level, b);
+  if (!r) return false;
+  const T = tileKm(level), n = tileGridSize(level);
+  // the clipped range must reach the box edges, or part of the box is off the tile grid
+  if (-level.halfKm + r.c0 * T > b.x0 || -level.halfKm + (r.c1 + 1) * T < b.x1 || level.halfKm - r.r0 * T < b.y1 || level.halfKm - (r.r1 + 1) * T > b.y0) return false;
+  const set = listedSet(level);
+  for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) if (!set.has(row * 1000 + col)) return false;
+  return n > 0;
+}
+
+// Heights from a tiled level; tiles arrive one by one with addTile(). Same interface as createDem
+// (heightAtXY → metres | null, sample → metres | NaN), plus the tile bookkeeping.
+function createTiledDem({ name, kmPerPixel, dnToMeters = 0.5, tilePx, apronPx = 1, halfKm, tiles = [] }) {
+  const level = { name, tiled: true, kmPerPixel, dnToMeters, tilePx, apronPx, halfKm, tiles: [...tiles] };
+  const n = tileGridSize(level), T = tileKm(level), stride = tilePx + 2 * apronPx;
+  const slots = new Array(n * n).fill(null);
+  const listed = listedSet(level);
+  let loaded = 0;
+  function sample(xKm, yKm) {
+    const gx = (xKm + halfKm) / kmPerPixel, gy = (halfKm - yKm) / kmPerPixel;   // in level pixels from the top left
+    const tc = Math.floor(gx / tilePx), tr = Math.floor(gy / tilePx);
+    if (tc < 0 || tr < 0 || tc >= n || tr >= n) return NaN;
+    const t = slots[tr * n + tc];
+    if (t === null) return NaN;
+    const col = gx - tc * tilePx - 0.5 + apronPx, row = gy - tr * tilePx - 0.5 + apronPx;
+    const c0 = Math.min(stride - 2, Math.max(0, Math.floor(col))), r0 = Math.min(stride - 2, Math.max(0, Math.floor(row)));
+    const i = r0 * stride + c0;
+    const a = t[i], b = t[i + 1], c = t[i + stride], d = t[i + stride + 1];
+    if (a === NO_DATA || b === NO_DATA || c === NO_DATA || d === NO_DATA) return NaN;
+    const fc = col - c0, fr = row - r0;
+    const top = a + (b - a) * fc, bottom = c + (d - c) * fc;
+    return (top + (bottom - top) * fr) * dnToMeters;
+  }
+  function heightAtXY(xKm, yKm) {
+    const v = sample(xKm, yKm);
+    return v === v ? v : null;
+  }
+  // grid(xs, ys) → (i, j) => metres | NaN at (xs[i], ys[j]): sample() with the per-column and per-row
+  // arithmetic done once (the hillshade's inner loop).
+  function grid(xs, ys) {
+    const TC = new Int32Array(xs.length), C0 = new Int32Array(xs.length), FC = new Float64Array(xs.length);
+    const TR = new Int32Array(ys.length), R0 = new Int32Array(ys.length), FR = new Float64Array(ys.length);
+    for (let i = 0; i < xs.length; i++) {
+      const gx = (xs[i] + halfKm) / kmPerPixel, tc = Math.floor(gx / tilePx);
+      if (tc < 0 || tc >= n) { TC[i] = -1; continue; }
+      const col = gx - tc * tilePx - 0.5 + apronPx, c0 = Math.min(stride - 2, Math.max(0, Math.floor(col)));
+      TC[i] = tc; C0[i] = c0; FC[i] = col - c0;
+    }
+    for (let j = 0; j < ys.length; j++) {
+      const gy = (halfKm - ys[j]) / kmPerPixel, tr = Math.floor(gy / tilePx);
+      if (tr < 0 || tr >= n) { TR[j] = -1; continue; }
+      const row = gy - tr * tilePx - 0.5 + apronPx, r0 = Math.min(stride - 2, Math.max(0, Math.floor(row)));
+      TR[j] = tr * n; R0[j] = r0 * stride; FR[j] = row - r0;
+    }
+    return (i, j) => {
+      const tc = TC[i], tr = TR[j];
+      if (tc < 0 || tr < 0) return NaN;
+      const t = slots[tr + tc];
+      if (t === null) return NaN;
+      const k = R0[j] + C0[i];
+      const a = t[k], b = t[k + 1], c = t[k + stride], d = t[k + stride + 1];
+      if (a === NO_DATA || b === NO_DATA || c === NO_DATA || d === NO_DATA) return NaN;
+      const fc = FC[i], top = a + (b - a) * fc, bottom = c + (d - c) * fc;
+      return (top + (bottom - top) * FR[j]) * dnToMeters;
+    };
+  }
+  // tile: "rRRcCC", "<name>_rRRcCC" or { row, col }; data: Int16Array, or the pack's bytes (Uint8Array)
+  function addTile(tile, data) {
+    const t = typeof tile === 'string' ? parseTile(tile) : tile;
+    if (!t || !(t.row >= 0 && t.row < n && t.col >= 0 && t.col < n)) throw new Error(`${name}: no tile ${tile}`);
+    if (t.level && t.level !== name) throw new Error(`${name}: tile ${tile} belongs to ${t.level}`);
+    let v = data;
+    if (!(v instanceof Int16Array)) {
+      const u = v instanceof Uint8Array ? v : new Uint8Array(v);
+      v = u.byteOffset % 2 === 0 ? new Int16Array(u.buffer, u.byteOffset, u.byteLength >> 1) : new Int16Array(u.slice().buffer);
+    }
+    if (v.length !== stride * stride) throw new Error(`${name}: tile ${tile} has ${v.length} values, expected ${stride * stride}`);
+    const k = t.row * n + t.col;
+    if (slots[k] === null) loaded++;
+    slots[k] = v;
+    if (!listed.has(t.row * 1000 + t.col)) { listed.add(t.row * 1000 + t.col); level.tiles.push(tileId(t.row, t.col)); }
+    return level;
+  }
+  const hasTile = (row, col) => row >= 0 && row < n && col >= 0 && col < n && slots[row * n + col] !== null;
+  Object.assign(level, {
+    tileKm: T, gridSize: n,
+    sample, heightAtXY, grid,
+    heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
+    addTile, hasTile,
+    // listed tiles meeting bounds that are not loaded yet, as pack names
+    missing: (bounds) => tilesIn(level, bounds).filter((t) => !hasTile(t.row, t.col)).map((t) => t.pack),
+  });
+  Object.defineProperty(level, 'loadedCount', { get: () => loaded, enumerable: true });
+  return level;
+}
+
+// Plain levels: a level covers a viewport when the hillshade can sample all of it: heights exist to half
+// a pixel inside halfKm, and the slope reaches out one more step of up to two pixels, so keep 2.5 pixels
+// clear (otherwise the edge columns come out black at ±156 km on the 120 m level).
+const covers = (dem, b) => !b || Math.max(Math.abs(b.x0), Math.abs(b.x1), Math.abs(b.y0), Math.abs(b.y1)) + 2.5 * dem.kmPerPixel <= dem.halfKm + 1e-9;
+const meets = (dem, b) => !b || (Math.min(b.x0, b.x1) < dem.halfKm && Math.max(b.x0, b.x1) > -dem.halfKm && Math.min(b.y0, b.y1) < dem.halfKm && Math.max(b.y0, b.y1) > -dem.halfKm);
+const pad = (b, km) => b && { x0: b.x0 - km, y0: b.y0 - km, x1: b.x1 + km, y1: b.y1 + km };
+const EPS = 1 + 1e-9;
+
+// The phase 3 rule over the plain (untiled) levels, coarse to fine.
+function pickPlain(plain, kmPerPxWanted, bounds) {
+  if (!plain.length) return null;
+  const ok = plain.filter((d) => covers(d, bounds));
+  if (!ok.length) return plain.reduce((a, b) => (b.halfKm > a.halfKm ? b : a));
+  return ok.find((d) => d.kmPerPixel <= kmPerPxWanted * EPS) ?? ok[ok.length - 1];
+}
+
+// Which tiled level to use for a viewport, and which tile packs it needs (shared by createPyramid and
+// map/tiers.js). `levels`: terrain.json entries or pyramid levels, any order. Rule:
+// 1. base = the phase 3 choice among the plain levels. If it is fine enough, no tiles.
+// 2. Candidates: tiled levels finer than base with listed tiles in view. Take the coarsest that is fine
+//    enough (else the finest); while its listed tiles in view exceed maxTiles, go one level coarser;
+//    if none fits, no tiles.
+// 3. Packs: the chosen level's tiles in view, then tiles of coarser candidates where the chosen level
+//    has no listed tile, up to maxTiles in all (nearest the centre first).
+// → { level, base, chain: [chosen, coarser candidates…] (fine to coarse), packs: [names] }, level null if none.
+function planTiles(levels, kmPerPxWanted, bounds, { maxTiles = TILE_BUDGET } = {}) {
+  const sorted = [...levels].sort((a, b) => b.kmPerPixel - a.kmPerPixel);
+  const base = pickPlain(sorted.filter((d) => !d.tiled), kmPerPxWanted, bounds);
+  const none = { level: null, base, chain: [], packs: [] };
+  if (base && base.kmPerPixel <= kmPerPxWanted * EPS) return none;
+  const sel = (l) => pad(bounds, 2.5 * l.kmPerPixel);   // the hillshade samples a little beyond the view
+  const cands = sorted.filter((d) => d.tiled && (!base || d.kmPerPixel < base.kmPerPixel) && tilesIn(d, sel(d)).length > 0);
+  if (!cands.length) return none;
+  let i = cands.findIndex((d) => d.kmPerPixel <= kmPerPxWanted * EPS);
+  if (i < 0) i = cands.length - 1;
+  while (i >= 0 && bounds && tilesIn(cands[i], sel(cands[i])).length > maxTiles) i--;
+  if (i < 0) return none;
+  const level = cands[i];
+  const chain = cands.slice(0, i + 1).reverse();
+  const packs = tilesIn(level, sel(level)).map((t) => t.pack);
+  for (const coarser of chain.slice(1)) {
+    for (const t of tilesIn(coarser, sel(coarser))) {
+      if (packs.length >= maxTiles) break;
+      const tb = tileBounds(coarser, t.row, t.col), b = sel(coarser);
+      const part = b ? { x0: Math.max(tb.x0, b.x0), x1: Math.min(tb.x1, b.x1), y0: Math.max(tb.y0, b.y0), y1: Math.min(tb.y1, b.y1) } : tb;
+      const finer = chain.slice(0, chain.indexOf(coarser));
+      if (!finer.some((f) => listedCovers(f, part))) packs.push(t.pack);
+    }
+  }
+  return { level, base, chain, packs };
+}
+
+// Several DEMs of the same ground (spec phase 3 §4.1, phase 4 §4.1). `levels` (coarse to fine, live) holds
+// plain DEMs (createDem) and tiled ones (createTiledDem). pick(kmPerPxWanted, bounds) returns:
+// - over the plain levels, as in phase 3: among the levels that cover `bounds` ({ x0, y0, x1, y1 } km),
+//   the coarsest whose pixels are no coarser than kmPerPxWanted; if none is fine enough, the finest
+//   covering one; if none covers, the widest one; null for an empty pyramid. With no tiled level this
+//   is the whole rule, so phase 3 callers get exactly what they got.
+// - when planTiles() chooses a tiled level: a composite DEM whose heights come from the chosen level and
+//   fall back, point by point, to coarser levels where a tile is not listed, not loaded yet or has no
+//   data: { tiled, composite, name, kmPerPixel (of the chosen level), halfKm, chain (fine to coarse),
+//   heightAtXY, sample, heightAt, kmPerPixelAt(x, y), missing (pack names), version }.
+function createPyramid(levels = []) {
+  const list = [];
+  let version = 0;
+  function add(dem) {
+    const i = list.findIndex((d) => d.kmPerPixel === dem.kmPerPixel);
+    if (i >= 0) list.splice(i, 1);
+    list.push(dem);
+    list.sort((a, b) => b.kmPerPixel - a.kmPerPixel);   // coarse to fine
+    version++;
+    return dem;
+  }
+  for (const dem of levels) add(dem);
+  // a tile pack ("dem_40m_r27c30") into its level; returns false if no level of that name is in the pyramid
+  function addTile(pack, data) {
+    const t = parseTile(pack);
+    const level = t && list.find((d) => d.tiled && d.name === t.level);
+    if (!level) return false;
+    level.addTile(t, data);
+    version++;
+    return true;
+  }
+  function pick(kmPerPxWanted, bounds, { maxTiles = TILE_BUDGET } = {}) {
+    if (!list.some((d) => d.tiled)) return pickPlain(list, kmPerPxWanted, bounds);
+    const plan = planTiles(list, kmPerPxWanted, bounds, { maxTiles });
+    if (!plan.level) return plan.base;
+    // fine to coarse: the chosen tiled level, coarser tiled candidates, plain levels finer than the base
+    // that reach into the view (partial coverage is fine point by point), then the base
+    const plainFiner = list.filter((d) => !d.tiled && d !== plan.base && plan.base && d.kmPerPixel < plan.base.kmPerPixel && d.kmPerPixel > plan.level.kmPerPixel && meets(d, bounds));
+    const chain = [...plan.chain, ...plainFiner, ...(plan.base ? [plan.base] : [])].sort((a, b) => a.kmPerPixel - b.kmPerPixel);
+    return composite(plan.level, chain, plan.base, plan.packs.filter((p) => { const t = parseTile(p); const l = list.find((d) => d.name === t.level); return !l.hasTile(t.row, t.col); }));
+  }
+  function composite(level, chain, base, missing) {
+    function sample(xKm, yKm) {
+      for (let i = 0; i < chain.length; i++) { const v = chain[i].sample(xKm, yKm); if (v === v) return v; }
+      return NaN;
+    }
+    function heightAtXY(xKm, yKm) { const v = sample(xKm, yKm); return v === v ? v : null; }
+    return {
+      tiled: true, composite: true, name: level.name, level, base, chain, missing, version,
+      kmPerPixel: level.kmPerPixel, halfKm: base?.halfKm ?? level.halfKm,
+      sample, heightAtXY,
+      heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
+      // the resolution that serves this point (for "Terrain 120 m" next to the readout); null off all levels
+      kmPerPixelAt(xKm, yKm) {
+        for (let i = 0; i < chain.length; i++) { const v = chain[i].sample(xKm, yKm); if (v === v) return chain[i].kmPerPixel; }
+        return null;
+      },
+    };
+  }
+  // tile packs a viewport still needs (listed, not loaded), at most maxTiles; [] when no tiled level is chosen
+  function missing(kmPerPxWanted, bounds, opts) {
+    const d = pick(kmPerPxWanted, bounds, opts);
+    return d?.composite ? d.missing : [];
+  }
+  return { levels: list, add, addTile, pick, missing, get version() { return version; } };
+}
+
+// Distances along the ground (km): one pixel, then steps of max(pixel, 1.5 % of the distance).
+const stepCache = new Map();
+function steps(kmPerPixel, maxKm) {
+  const key = `${kmPerPixel}:${maxKm}`;
+  if (stepCache.has(key)) return stepCache.get(key);
+  const cos = [], sin = [];
+  for (let d = kmPerPixel; d <= maxKm; d += Math.max(kmPerPixel, 0.015 * d)) {
+    cos.push(Math.cos(d / R));
+    sin.push(Math.sin(d / R));
+  }
+  const out = { cos: Float64Array.from(cos), sin: Float64Array.from(sin) };
+  stepCache.set(key, out);
+  return out;
+}
+
+// Highest terrain elevation angle (deg) in each azimuth seen from a point 2 m above the ground.
+function horizonProfile(dem, latDeg, lonDeg, { azimuths = 360, maxKm = 300, observerM = OBSERVER_M } = {}) {
+  const hP = dem.heightAt(latDeg, lonDeg);
+  if (hP === null) return null;
+  const phi = latDeg * RAD, lam = lonDeg * RAD;
+  const cp = Math.cos(phi), sp = Math.sin(phi), cl = Math.cos(lam), sl = Math.sin(lam);
+  const p0x = cp * cl, p0y = cp * sl, p0z = sp;
+  const ex = -sl, ey = cl;                       // local east (ez = 0)
+  const nx = -sp * cl, ny = -sp * sl, nz = cp;   // local north
+  const r0 = R + (hP + observerM) / 1000;
+  const { cos, sin } = steps(dem.kmPerPixel, maxKm);
+  const out = new Float32Array(azimuths);
+  for (let i = 0; i < azimuths; i++) {
+    const a = (i * 2 * Math.PI) / azimuths;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const tx = ca * nx + sa * ex, ty = ca * ny + sa * ey, tz = ca * nz;
+    let best = -Infinity;
+    for (let k = 0; k < cos.length; k++) {
+      const px = cos[k] * p0x + sin[k] * tx;
+      const py = cos[k] * p0y + sin[k] * ty;
+      const pz = cos[k] * p0z + sin[k] * tz;
+      const q = 2 * R / (1 - pz);
+      const h = dem.heightAtXY(q * py, q * px);
+      if (h === null) break;
+      const r1 = R + h / 1000;
+      const e = Math.atan2(r1 * cos[k] - r0, r1 * sin[k]);
+      if (e > best) best = e;
+    }
+    out[i] = best === -Infinity ? 0 : best * DEG;
+  }
+  return out;
+}
+
+function horizonAt(profile, azDeg) {
+  const n = profile.length;
+  if (azDeg === null || azDeg === undefined) {
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += profile[i];
+    return sum / n;
+  }
+  const x = ((((azDeg % 360) + 360) % 360) / 360) * n;
+  const i0 = Math.floor(x) % n;
+  const f = x - Math.floor(x);
+  return profile[i0] + (profile[(i0 + 1) % n] - profile[i0]) * f;
+}
+
+const ZERO = Object.assign(() => 0, { profile: null });
+
+function skylineFor(dem, site) {
+  if (!dem || !(site.latDeg <= TERRAIN_MAX_LAT)) return ZERO;
+  const profile = horizonProfile(dem, site.latDeg, site.lonDeg);
+  if (!profile) return ZERO;
+  return Object.assign((azDeg) => horizonAt(profile, azDeg), { profile });
+}
+
+return { MAP_HALF_KM, GRID_SIZE, GRID_CELL_KM, TERRAIN_MAX_LAT, OBSERVER_M, toXY, fromXY, createDem, NO_DATA, TILE_BUDGET, tileKm, tileGridSize, tileId, tilePack, parseTile, tileBounds, tilesIn, createTiledDem, planTiles, createPyramid, horizonProfile, horizonAt, skylineFor };
+})();
+__m['globe-terrain.js'] = (() => {
+// Global lunar terrain model (phase 1, docs/PHASES.md): one height for any latitude and longitude on the
+// Moon, from the finest level that is loaded at that point.
+//
+//   south pole   the existing polar-stereographic pyramid (20 m → 480 m), below about 75°S
+//   north pole   globe_n480, LOLA 75°N–90°N averaged to 480 m
+//   G2           globe_g2 tiles, LOLA LDEM_64, 474 m (built locally; absent packs fall back)
+//   G1           globe_g1 tiles, LOLA LDEM_16, 1.9 km
+//   G0           globe_g0, LOLA LDEM_4, 7.6 km, always loaded
+//
+// All levels are LOLA heights in 0.5 m DN above the 1737.4 km sphere, so they stack without re-levelling.
+// Pack layout and encoding: tools/build-global.mjs.
+const { toXY, createDem } = __m['terrain.js'];
+
+const MOON_R_KM = 1737.4;
+const DN_TO_M = 0.5;
+const RAD = Math.PI / 180;
+
+const G0 = Object.freeze({ name: 'globe_g0', label: '7.6 km', ppd: 4, width: 1440, height: 720, kmPerPixel: 7.58084 });
+const G1 = Object.freeze({ name: 'globe_g1', label: '1.9 km', ppd: 16, tileDeg: 15, tilePx: 240, apronPx: 1, rows: 12, cols: 24, kmPerPixel: 1.89521 });
+const G2 = Object.freeze({ name: 'globe_g2', label: '474 m', ppd: 64, tileDeg: 3.75, tilePx: 240, apronPx: 1, rows: 48, cols: 96, kmPerPixel: 0.473802 });
+const TILED = Object.freeze([G1, G2]);
+const NORTH = Object.freeze({ name: 'globe_n480', label: '480 m (north pole)', size: 1906, kmPerPixel: 0.48, minLatDeg: 75 });
+const SOUTH_MAX_LAT = -75;
+
+const normLon = (lon) => ((lon % 360) + 360) % 360;
+
+// North polar stereographic (PDS LOLA polar products): x = r sin λ, y = −r cos λ, r = 2R tan((90° − φ)/2).
+function toXYNorth(latDeg, lonDeg) {
+  const r = 2 * MOON_R_KM * Math.tan(((90 - latDeg) / 2) * RAD);
+  return [r * Math.sin(lonDeg * RAD), -r * Math.cos(lonDeg * RAD)];
+}
+
+// Undoes the delta coding of tools/build-global.mjs in place (Int16 wrap-around, as the encoder).
+function deltaDecode(d, width) {
+  for (let i = 0; i < d.length; i++) {
+    const col = i % width;
+    if (col > 0) d[i] = d[i] + d[i - 1];
+    else if (i >= width) d[i] = d[i] + d[i - width];
+  }
+  return d;
+}
+
+async function gunzip(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+// Pack bytes (gzip of delta-coded Int16 LE) → Int16Array of heights in DN.
+async function decodePack(bytes, width) {
+  const raw = await gunzip(bytes);
+  const out = new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2);
+  return deltaDecode(out, width ?? Math.round(Math.sqrt(out.length)));
+}
+
+const tileName = (level, r, c) => `${level.name}_r${String(r).padStart(2, '0')}c${String(c).padStart(2, '0')}`;
+
+function tileOf(level, latDeg, lonDeg) {
+  const r = Math.min(level.rows - 1, Math.max(0, Math.floor((90 - latDeg) / level.tileDeg)));
+  const c = Math.min(level.cols - 1, Math.floor(normLon(lonDeg) / level.tileDeg));
+  return { r, c };
+}
+
+// Tiles of a level touching a lat/lon box (lon may run past 360 or below 0; it wraps).
+function tilesInBox(level, latMin, latMax, lonMin, lonMax) {
+  const r0 = Math.max(0, Math.floor((90 - latMax) / level.tileDeg)), r1 = Math.min(level.rows - 1, Math.floor((90 - latMin) / level.tileDeg - 1e-9));
+  const span = lonMax - lonMin;
+  const c0 = Math.floor(lonMin / level.tileDeg), c1 = span >= 360 ? c0 + level.cols - 1 : Math.floor(lonMax / level.tileDeg - 1e-9);
+  const out = [];
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push({ r, c: ((c % level.cols) + level.cols) % level.cols });
+  return out;
+}
+
+// Bilinear height (DN) in the whole G0 grid; longitude wraps, latitude clamps to the outer pixel centres.
+function sampleG0(data, latDeg, lonDeg) {
+  const { width, height, ppd } = G0;
+  const y = Math.min(height - 1, Math.max(0, (90 - latDeg) * ppd - 0.5));
+  const x = normLon(lonDeg) * ppd - 0.5;
+  const y0 = Math.min(height - 2, Math.floor(y)), fy = y - y0;
+  const xf = Math.floor(x), fx = x - xf;
+  const x0 = ((xf % width) + width) % width, x1 = (x0 + 1) % width;
+  const a = data[y0 * width + x0], b = data[y0 * width + x1], c = data[(y0 + 1) * width + x0], d = data[(y0 + 1) * width + x1];
+  const top = a + (b - a) * fx, bottom = c + (d - c) * fx;
+  return top + (bottom - top) * fy;
+}
+
+// Bilinear height (DN) inside one tile with its apron.
+function sampleTile(level, tile, r, c, latDeg, lonDeg) {
+  const s = level.tilePx + 2 * level.apronPx;
+  const y = (90 - latDeg) * level.ppd - r * level.tilePx - 0.5 + level.apronPx;
+  let lon = normLon(lonDeg);
+  if (c === 0 && lon > 360 - level.tileDeg) lon -= 360;
+  const x = lon * level.ppd - c * level.tilePx - 0.5 + level.apronPx;
+  const y0 = Math.min(s - 2, Math.max(0, Math.floor(y))), x0 = Math.min(s - 2, Math.max(0, Math.floor(x)));
+  const fy = Math.min(1, Math.max(0, y - y0)), fx = Math.min(1, Math.max(0, x - x0));
+  const i = y0 * s + x0;
+  const top = tile[i] + (tile[i + 1] - tile[i]) * fx, bottom = tile[i + s] + (tile[i + s + 1] - tile[i + s]) * fx;
+  return top + (bottom - top) * fy;
+}
+
+// load(name) → Promise<Uint8Array> of a data pack (data-loader.js loadData in the page).
+// south: optional polar pyramid levels (terrain.js createDem / createTiledDem objects with sample(x, y)),
+// passed as a function returning the current list, coarse to fine; see southFrom().
+function createGlobeTerrain({ load, south = null, onChange = () => {} }) {
+  let g0 = null, north = null, version = 0;
+  const tiles = new Map(TILED.map((l) => [l.name, new Map()]));   // level → "r,c" → Int16Array
+  const pending = new Map();   // pack name → Promise
+  const failed = new Set();
+
+  async function init() {
+    g0 = await decodePack(await load(G0.name), G0.width);
+    try {
+      const data = await decodePack(await load(NORTH.name), NORTH.size);
+      north = createDem({ data, size: NORTH.size, kmPerPixel: NORTH.kmPerPixel, dnToMeters: DN_TO_M });
+    } catch { north = null; }
+    version++;
+    return api;
+  }
+
+  function hasTile(level, r, c) { return tiles.get(level.name).has(`${r},${c}`); }
+
+  function loadTile(level, r, c) {
+    const name = tileName(level, r, c);
+    if (hasTile(level, r, c)) return Promise.resolve(true);
+    if (failed.has(name)) return Promise.resolve(false);
+    if (pending.has(name)) return pending.get(name);
+    const p = load(name)
+      .then((bytes) => decodePack(bytes, level.tilePx + 2 * level.apronPx))
+      .then((data) => { tiles.get(level.name).set(`${r},${c}`, data); version++; onChange({ level, r, c }); return true; })
+      .catch(() => { failed.add(name); return false; })
+      .finally(() => pending.delete(name));
+    pending.set(name, p);
+    return p;
+  }
+
+  // Loads (at most max) tiles of a level over a lat/lon box; resolves with the number newly loaded.
+  async function need(level, latMin, latMax, lonMin, lonMax, { max = 48 } = {}) {
+    const want = tilesInBox(level, latMin, latMax, lonMin, lonMax).filter(({ r, c }) => !hasTile(level, r, c) && !failed.has(tileName(level, r, c))).slice(0, max);
+    const done = await Promise.all(want.map(({ r, c }) => loadTile(level, r, c)));
+    return done.filter(Boolean).length;
+  }
+
+  // [metres, source label, ground km per pixel] from the finest level loaded at the point.
+  function sample(latDeg, lonDeg) {
+    if (south && latDeg < SOUTH_MAX_LAT) {
+      const levels = south();
+      if (levels.length) {
+        const [x, y] = toXY(latDeg, lonDeg);
+        for (let i = levels.length - 1; i >= 0; i--) {
+          const v = levels[i].sample(x, y);
+          if (v === v) return [v, `${Math.round(levels[i].kmPerPixel * 1000)} m (south pole)`, levels[i].kmPerPixel];
+        }
+      }
+    }
+    if (north && latDeg > NORTH.minLatDeg) {
+      const v = north.sample(...toXYNorth(latDeg, lonDeg));
+      if (v === v) return [v, NORTH.label, NORTH.kmPerPixel];
+    }
+    for (let i = TILED.length - 1; i >= 0; i--) {
+      const level = TILED[i];
+      const { r, c } = tileOf(level, latDeg, lonDeg);
+      const t = tiles.get(level.name).get(`${r},${c}`);
+      if (t) return [sampleTile(level, t, r, c, latDeg, lonDeg) * DN_TO_M, level.label, level.kmPerPixel];
+    }
+    if (!g0) return [0, 'none', null];
+    return [sampleG0(g0, latDeg, lonDeg) * DN_TO_M, G0.label, G0.kmPerPixel];
+  }
+
+  const api = {
+    init, need, loadTile, hasTile, sample,
+    heightAt: (latDeg, lonDeg) => sample(latDeg, lonDeg)[0],
+    get version() { return version; },
+    get ready() { return g0 !== null; },
+    get hasNorth() { return north !== null; },
+    isMissing: (level, r, c) => failed.has(tileName(level, r, c)),
+  };
+  return api;
+}
+
+// A south() function for createGlobeTerrain from a terrain.js pyramid: its levels, coarse to fine.
+const southFrom = (pyramid) => () => pyramid.levels;
+
+return { MOON_R_KM, DN_TO_M, G0, G1, G2, TILED, NORTH, SOUTH_MAX_LAT, normLon, toXYNorth, deltaDecode, gunzip, decodePack, tileName, tileOf, tilesInBox, sampleG0, sampleTile, createGlobeTerrain, southFrom };
+})();
+__m['lander/skyline.js'] = (() => {
+// The local skyline anywhere on the Moon: highest terrain elevation angle in each azimuth, seen from 2 m above
+// the ground, ray-marched over a height function heightAt(lat, lon) → metres (the global LOLA terrain,
+// globe-terrain.js, outside the polar pyramid). The same construction as terrain.js horizonProfile (great-circle
+// steps, curvature, 2 m observer) but on latitude/longitude, so it works at the equator and on the far side.
+// Steps: one terrain pixel near the site, then max(pixel, 1.5 % of the distance), out to maxKm.
+const { horizonAt } = __m['terrain.js'];
+
+const R = 1737.4, RAD = Math.PI / 180, DEG = 180 / Math.PI;
+
+function horizonProfileLL(heightAt, latDeg, lonDeg, { azimuths = 360, maxKm = 180, observerM = 2, kmPerPixel = 0.474 } = {}) {
+  const hP = heightAt(latDeg, lonDeg);
+  if (!Number.isFinite(hP)) return null;
+  const phi = latDeg * RAD, lam = lonDeg * RAD;
+  const cp = Math.cos(phi), sp = Math.sin(phi), cl = Math.cos(lam), sl = Math.sin(lam);
+  const p0x = cp * cl, p0y = cp * sl, p0z = sp;
+  const ex = -sl, ey = cl;                       // local east
+  const nx = -sp * cl, ny = -sp * sl, nz = cp;   // local north
+  const r0 = R + (hP + observerM) / 1000;
+  const cos = [], sin = [];
+  for (let d = kmPerPixel; d <= maxKm; d += Math.max(kmPerPixel, 0.015 * d)) { cos.push(Math.cos(d / R)); sin.push(Math.sin(d / R)); }
+  const out = new Float32Array(azimuths);
+  for (let i = 0; i < azimuths; i++) {
+    const a = (i * 2 * Math.PI) / azimuths;   // from north, clockwise (east)
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const tx = ca * nx + sa * ex, ty = ca * ny + sa * ey, tz = ca * nz;
+    let best = -Infinity;
+    for (let k = 0; k < cos.length; k++) {
+      const px = cos[k] * p0x + sin[k] * tx, py = cos[k] * p0y + sin[k] * ty, pz = cos[k] * p0z + sin[k] * tz;
+      const h = heightAt(Math.asin(Math.max(-1, Math.min(1, pz))) * DEG, Math.atan2(py, px) * DEG);
+      if (!Number.isFinite(h)) continue;
+      const r1 = R + h / 1000;
+      const e = Math.atan2(r1 * cos[k] - r0, r1 * sin[k]);
+      if (e > best) best = e;
+    }
+    out[i] = best === -Infinity ? 0 : best * DEG;
+  }
+  return out;
+}
+
+// A skyline mask like terrain.js skylineFor: (azDeg) → horizon elevation (deg), with .profile and .source.
+function skylineLL(heightAt, site, opts = {}) {
+  const profile = horizonProfileLL(heightAt, site.latDeg, site.lonDeg, opts);
+  if (!profile) return Object.assign(() => 0, { profile: null, source: 'none' });
+  return Object.assign((azDeg) => horizonAt(profile, azDeg), { profile, source: opts.source ?? 'computed' });
+}
+
+// Great-circle distance (km) and initial bearing (deg from north, clockwise) from a to b.
+function distanceBearing(a, b) {
+  const p1 = a.latDeg * RAD, p2 = b.latDeg * RAD, dl = (b.lonDeg - a.lonDeg) * RAD;
+  const s = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  const km = 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+  const br = Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) * DEG;
+  return { km, bearingDeg: (br + 360) % 360 };
+}
+
+// The point at distance km and bearing (deg) from a: { latDeg, lonDeg (0–360) }.
+function destination(a, km, bearingDeg) {
+  const d = km / R, br = bearingDeg * RAD, p1 = a.latDeg * RAD, l1 = a.lonDeg * RAD;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(br));
+  const l2 = l1 + Math.atan2(Math.sin(br) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return { latDeg: p2 * DEG, lonDeg: ((l2 * DEG) % 360 + 360) % 360 };
+}
+
+// Moon-fixed unit vector → { latDeg, lonDeg (0–360) } (sub-solar / sub-Earth points).
+function subPoint(v) {
+  const lat = Math.asin(Math.max(-1, Math.min(1, v[2]))) * DEG;
+  return { latDeg: lat, lonDeg: ((Math.atan2(v[1], v[0]) * DEG) % 360 + 360) % 360 };
+}
+
+return { horizonProfileLL, skylineLL, distanceBearing, destination, subPoint };
+})();
+__m['lander/globalsite.js'] = (() => {
+// Terrain, height and skyline for a landing site anywhere on the Moon. South of 80°S the page's polar pyramid
+// (480 m skyline from terrain.js, the fine levels in terrain-local.js); elsewhere the global LOLA terrain
+// (globe-terrain.js: G0 7.6 km, G1 1.9 km, G2 474 m tiles, the north cap at 480 m), loaded around the site, with
+// the skyline computed on the fly (skyline.js). One context per site, cached.
+const { createGlobeTerrain, decodePack, G1, G2 } = __m['globe-terrain.js'];
+const { skylineFor, fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
+const { skylineLL } = __m['lander/skyline.js'];
+
+const isPolarSite = (site) => site.latDeg <= TERRAIN_MAX_LAT;
+const key = (s) => `${s.latDeg.toFixed(4)},${s.lonDeg.toFixed(4)}`;
+
+// A fine equirectangular patch (tools/fetch-hires.mjs --at, SLDEM2015 59 m): pixel (i, j) centred at
+// latMax − (j + 0.5)/ppd, lonMin + (i + 0.5)/ppd; heights DN × dnToMeters; bilinear, NaN outside.
+function equirectSampler(e, data) {
+  const { width: w, height: h, ppd, latMax, lonMin } = e, dn = e.dnToMeters ?? 0.5;
+  return (latDeg, lonDeg) => {
+    let lo = lonDeg; while (lo < lonMin - 180) lo += 360; while (lo > lonMin + 180) lo -= 360;
+    const col = (lo - lonMin) * ppd - 0.5, row = (latMax - latDeg) * ppd - 0.5;
+    if (!(col >= 0 && row >= 0 && col <= w - 1 && row <= h - 1)) return NaN;
+    const c0 = Math.min(Math.floor(col), w - 2), r0 = Math.min(Math.floor(row), h - 2), fc = col - c0, fr = row - r0, k = r0 * w + c0;
+    const top = data[k] + (data[k + 1] - data[k]) * fc, bot = data[k + w] + (data[k + w + 1] - data[k + w]) * fc;
+    return (top + (bot - top) * fr) * dn;
+  };
+}
+
+// load(name) → Promise<Uint8Array> (data-loader.js loadData); getDem() → the 480 m polar DEM; manifest: hires.json
+// (its `patches`, equirectangular ones, are the fine patches outside the south polar data).
+function createSiteContexts({ load, getDem, manifest = null }) {
+  const globe = createGlobeTerrain({ load });
+  const patches = Object.entries(manifest?.patches ?? {}).filter(([, e]) => e.projection === 'equirect').map(([id, e]) => ({ id, ...e }));
+  const patchData = new Map();
+  async function patchFor(site) {
+    const lo = ((site.lonDeg % 360) + 360) % 360;
+    const e = patches.find((p) => site.latDeg >= p.latMin && site.latDeg <= p.latMax && ((lo >= p.lonMin && lo <= p.lonMax) || (lo + 360 >= p.lonMin && lo + 360 <= p.lonMax)));
+    if (!e) return null;
+    if (!patchData.has(e.id)) patchData.set(e.id, load(e.pack).then((b) => decodePack(b, e.width)).then((d) => equirectSampler(e, d)).catch(() => null));
+    const sample = await patchData.get(e.id);
+    return sample ? { e, sample } : null;
+  }
+  let init = null;
+  const cache = new Map();
+  const ready = () => (init ??= globe.init());
+  // the global tiles within km of a site (474 m near, 1.9 km beyond)
+  async function around(site, km = 190) {
+    await ready();
+    const dLat = km / 30.3, dLon = Math.min(180, dLat / Math.max(0.05, Math.cos((site.latDeg * Math.PI) / 180)));
+    const box = (f) => [Math.max(-90, site.latDeg - dLat * f), Math.min(90, site.latDeg + dLat * f), site.lonDeg - dLon * f, site.lonDeg + dLon * f];
+    await globe.need(G1, ...box(1.5), { max: 16 });
+    await globe.need(G2, ...box(1), { max: 80 });
+  }
+  const llXY = (x, y) => { const p = fromXY(x, y); return globe.heightAt(p.latDeg, p.lonDeg); };
+  // { polar, mask, heightM, resKm, label, skyline, sampleXY, resAtXY } for a site
+  async function context(site) {
+    const k = key(site);
+    if (cache.has(k)) return cache.get(k);
+    let ctx;
+    if (isPolarSite(site)) {
+      const dem = getDem();
+      ctx = { polar: true, mask: skylineFor(dem, site), heightM: dem?.heightAt(site.latDeg, site.lonDeg) ?? 0, resKm: 0.48, label: 'LOLA polar', skyline: 'LOLA 480 m polar DEM (precomputed method)' };
+    } else {
+      await around(site);
+      const [h0, label, kpp] = globe.sample(site.latDeg, site.lonDeg);
+      // a fine patch fetched for this place (SLDEM2015, 59 m) is the finest level; the global tiles beyond it
+      const fine = await patchFor(site);
+      const hAt = fine ? (la, lo) => { const v = fine.sample(la, lo); return v === v ? v : globe.heightAt(la, lo); } : globe.heightAt;
+      const res = fine ? fine.e.kmPerPixel : kpp ?? 7.6;
+      const terrain = fine ? `SLDEM2015 ${Math.round(res * 1000)} m patch (±${fine.e.halfKm} km), LOLA ${label} beyond` : `LOLA ${label}`;
+      const mask = skylineLL(hAt, site, { kmPerPixel: fine ? res : kpp ?? 0.474, maxKm: 180, source: `computed from ${terrain}` });
+      const xy = (x, y) => { const p = fromXY(x, y); return hAt(p.latDeg, p.lonDeg); };
+      ctx = {
+        polar: false, mask, heightM: hAt(site.latDeg, site.lonDeg) ?? h0, resKm: res, label: terrain, skyline: `computed from ${terrain} to 180 km`,
+        patch: fine ? { id: fine.e.id, halfKm: fine.e.halfKm, product: fine.e.product, kmPerPixel: res } : null,
+        sampleXY: xy, resAtXY: (x, y) => { const p = fromXY(x, y); return fine && fine.sample(p.latDeg, p.lonDeg) === fine.sample(p.latDeg, p.lonDeg) ? res : globe.sample(p.latDeg, p.lonDeg)[2]; },
+      };
+    }
+    cache.set(k, ctx);
+    return ctx;
+  }
+  // a cheaper skyline for screening many points (72 azimuths, 120 km), tiles already around
+  const quickMask = (site) => skylineLL(globe.heightAt, site, { azimuths: 72, maxKm: 120, kmPerPixel: 0.474 });
+  return { globe, ready, around, context, quickMask, sampleLL: (lat, lon) => globe.heightAt(lat, lon), sampleInfo: (lat, lon) => globe.sample(lat, lon) };
+}
+
+return { isPolarSite, equirectSampler, createSiteContexts };
 })();
 __m['boot.js'] = (() => {
 // Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
@@ -3881,438 +4660,6 @@ function relayForSummary(summary, { elements, eph, site, mask, minElDeg = 0, max
 
 
 return { MOON_RADIUS_KM, MU_MOON, SIDEREAL_MONTH_S, MOON_RATE, MAX_APOLUNE_KM, EDGE_TOL_MS, PRESETS, orbitPeriodS, semiMajorForPeriod, solveKepler, validateElements, createOrbit, inertialToFixed, subPoint, lookAngles, segmentClearsSphere, relaySeesEarth, unionIntervals, scanPredicate, stepFor, relaySummary, relayForSummary };
-})();
-__m['terrain.js'] = (() => {
-// South-pole terrain: polar stereographic projection, LOLA height lookup and the terrain skyline
-// (spec phase 2 §2.2–§2.3). Map plane in km: pole at the origin, 0°E up (+y), 90°E right (+x).
-
-const MAP_HALF_KM = 320;
-const GRID_SIZE = 320;
-const GRID_CELL_KM = 2;
-const TERRAIN_MAX_LAT = -80;
-const OBSERVER_M = 2;
-
-const R = 1737.4;
-const RAD = Math.PI / 180;
-const DEG = 180 / Math.PI;
-
-function toXY(latDeg, lonDeg) {
-  const r = 2 * R * Math.tan(((90 + latDeg) / 2) * RAD);
-  const lon = lonDeg * RAD;
-  return [r * Math.sin(lon), r * Math.cos(lon)];
-}
-
-function fromXY(xKm, yKm) {
-  const r = Math.hypot(xKm, yKm);
-  const latDeg = 2 * Math.atan(r / (2 * R)) * DEG - 90;
-  let lonDeg = Math.atan2(xKm, yKm) * DEG;
-  if (lonDeg < 0) lonDeg += 360;
-  if (lonDeg >= 360) lonDeg -= 360;
-  return { latDeg, lonDeg };
-}
-
-// Heights in metres, bilinear between pixel centres; null outside the grid. The grid spans ±halfKm
-// to its pixel edges, centred on the pole; by default halfKm = size × kmPerPixel / 2.
-function createDem({ data, size, kmPerPixel, dnToMeters = 0.5, halfKm }) {
-  // the default keeps the phase 2 arithmetic exactly, so outputs stay byte-identical
-  const c = halfKm === undefined ? size / 2 - 0.5 : halfKm / kmPerPixel - 0.5;
-  function heightAtXY(xKm, yKm) {
-    const col = xKm / kmPerPixel + c;
-    const row = c - yKm / kmPerPixel;
-    if (!(col >= 0 && row >= 0 && col <= size - 1 && row <= size - 1)) return null;
-    const c0 = Math.min(Math.floor(col), size - 2), r0 = Math.min(Math.floor(row), size - 2);
-    const fc = col - c0, fr = row - r0;
-    const i = r0 * size + c0;
-    const top = data[i] + (data[i + 1] - data[i]) * fc;
-    const bottom = data[i + size] + (data[i + size + 1] - data[i + size]) * fc;
-    return (top + (bottom - top) * fr) * dnToMeters;
-  }
-  // sample(): the same height, NaN instead of null (phase 4)
-  function sample(xKm, yKm) {
-    const v = heightAtXY(xKm, yKm);
-    return v === null ? NaN : v;
-  }
-  // grid(xs, ys): heights at (xs[i], ys[j]) for many i, j, with the per-column and per-row arithmetic done
-  // once (the tiled hillshade, phase 4) → (i, j) => metres | NaN. Same bilinear values as sample().
-  function grid(xs, ys) {
-    const C0 = new Int32Array(xs.length), FC = new Float64Array(xs.length), R0 = new Int32Array(ys.length), FR = new Float64Array(ys.length);
-    for (let i = 0; i < xs.length; i++) {
-      const col = xs[i] / kmPerPixel + c;
-      if (!(col >= 0 && col <= size - 1)) { C0[i] = -1; continue; }
-      C0[i] = Math.min(Math.floor(col), size - 2); FC[i] = col - C0[i];
-    }
-    for (let j = 0; j < ys.length; j++) {
-      const row = c - ys[j] / kmPerPixel;
-      if (!(row >= 0 && row <= size - 1)) { R0[j] = -1; continue; }
-      R0[j] = Math.min(Math.floor(row), size - 2); FR[j] = row - R0[j];
-    }
-    return (i, j) => {
-      const c0 = C0[i], r0 = R0[j];
-      if (c0 < 0 || r0 < 0) return NaN;
-      const k = r0 * size + c0, fc = FC[i];
-      const top = data[k] + (data[k + 1] - data[k]) * fc;
-      const bottom = data[k + size] + (data[k + size + 1] - data[k + size]) * fc;
-      return (top + (bottom - top) * FR[j]) * dnToMeters;
-    };
-  }
-  return {
-    size, kmPerPixel, halfKm: halfKm ?? (size * kmPerPixel) / 2,
-    heightAtXY, sample, grid,
-    heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
-  };
-}
-
-// ---------- tiled levels (task book phase 4 §4.1) ----------
-// A tiled level is a grid of tilePx² tiles over ±halfKm; tile (row, col) covers
-// x ∈ [−halfKm + col·T, −halfKm + (col+1)·T), y ∈ (halfKm − (row+1)·T, halfKm − row·T], T = tilePx × kmPerPixel,
-// row 0 at the top (+y). Each tile file holds (tilePx + 2·apronPx)² Int16 LE values with one pixel of
-// apron from the neighbours, so a bilinear lookup anywhere in the tile reads only that tile. −32768 is
-// no data. Only the tiles listed in `tiles` ("rRRcCC") exist; the pack of a tile is "<name>_rRRcCC".
-
-const NO_DATA = -32768;
-// At most this many tile packs for one viewport, whatever the canvas size: the level is chosen so that
-// its listed tiles in view stay within the budget (64 tiles of 258² Int16 = 8.5 MB). See pick().
-const TILE_BUDGET = 64;
-
-const tileKm = (level) => level.tilePx * level.kmPerPixel;
-const tileGridSize = (level) => Math.round((2 * level.halfKm) / tileKm(level));
-const tileId = (row, col) => `r${String(row).padStart(2, '0')}c${String(col).padStart(2, '0')}`;
-const tilePack = (level, row, col) => `${level.name}_${tileId(row, col)}`;
-
-// "<level>_rRRcCC" or "rRRcCC" → { level (name or null), row, col }; null if the name is not a tile.
-function parseTile(name) {
-  const m = /^(?:(.+)_)?r(\d{2})c(\d{2})$/.exec(String(name));
-  return m ? { level: m[1] ?? null, row: Number(m[2]), col: Number(m[3]) } : null;
-}
-
-// Tile extent in km: x ∈ [x0, x1), y ∈ (y0, y1].
-function tileBounds(level, row, col) {
-  const T = tileKm(level);
-  return { x0: -level.halfKm + col * T, x1: -level.halfKm + (col + 1) * T, y0: level.halfKm - (row + 1) * T, y1: level.halfKm - row * T };
-}
-
-// Row and column ranges (inclusive) of the tile grid that meet `bounds`, clipped to the grid; null if none.
-function tileRange(level, b) {
-  const T = tileKm(level), n = tileGridSize(level);
-  if (!b) return { c0: 0, c1: n - 1, r0: 0, r1: n - 1 };
-  const c0 = Math.max(0, Math.floor((b.x0 + level.halfKm) / T)), c1 = Math.min(n - 1, Math.floor((b.x1 + level.halfKm) / T));
-  const r0 = Math.max(0, Math.floor((level.halfKm - b.y1) / T)), r1 = Math.min(n - 1, Math.floor((level.halfKm - b.y0) / T));
-  return c1 < c0 || r1 < r0 ? null : { c0, c1, r0, r1 };
-}
-
-function listedSet(level) {
-  if (level._listed) return level._listed;
-  const set = new Set();
-  for (const id of level.tiles ?? []) { const t = parseTile(id); if (t) set.add(t.row * 1000 + t.col); }
-  if (Object.isExtensible(level)) Object.defineProperty(level, '_listed', { value: set, enumerable: false });
-  return set;
-}
-
-// The listed tiles of a tiled level (terrain.json entry or createTiledDem result) that meet `bounds`
-// (km; all of them without bounds), nearest the centre of `bounds` first: [{ row, col, id, pack }].
-function tilesIn(level, bounds) {
-  const r = tileRange(level, bounds);
-  if (!r) return [];
-  const set = listedSet(level), out = [];
-  for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) {
-    if (set.has(row * 1000 + col)) out.push({ row, col, id: tileId(row, col), pack: tilePack(level, row, col) });
-  }
-  if (bounds) {
-    const mx = (bounds.x0 + bounds.x1) / 2, my = (bounds.y0 + bounds.y1) / 2, T = tileKm(level);
-    const dist = (t) => Math.hypot(-level.halfKm + (t.col + 0.5) * T - mx, level.halfKm - (t.row + 0.5) * T - my);
-    out.sort((a, b) => dist(a) - dist(b) || a.row - b.row || a.col - b.col);
-  }
-  return out;
-}
-
-// Is every part of `b` inside listed tiles of `level`?
-function listedCovers(level, b) {
-  const r = tileRange(level, b);
-  if (!r) return false;
-  const T = tileKm(level), n = tileGridSize(level);
-  // the clipped range must reach the box edges, or part of the box is off the tile grid
-  if (-level.halfKm + r.c0 * T > b.x0 || -level.halfKm + (r.c1 + 1) * T < b.x1 || level.halfKm - r.r0 * T < b.y1 || level.halfKm - (r.r1 + 1) * T > b.y0) return false;
-  const set = listedSet(level);
-  for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) if (!set.has(row * 1000 + col)) return false;
-  return n > 0;
-}
-
-// Heights from a tiled level; tiles arrive one by one with addTile(). Same interface as createDem
-// (heightAtXY → metres | null, sample → metres | NaN), plus the tile bookkeeping.
-function createTiledDem({ name, kmPerPixel, dnToMeters = 0.5, tilePx, apronPx = 1, halfKm, tiles = [] }) {
-  const level = { name, tiled: true, kmPerPixel, dnToMeters, tilePx, apronPx, halfKm, tiles: [...tiles] };
-  const n = tileGridSize(level), T = tileKm(level), stride = tilePx + 2 * apronPx;
-  const slots = new Array(n * n).fill(null);
-  const listed = listedSet(level);
-  let loaded = 0;
-  function sample(xKm, yKm) {
-    const gx = (xKm + halfKm) / kmPerPixel, gy = (halfKm - yKm) / kmPerPixel;   // in level pixels from the top left
-    const tc = Math.floor(gx / tilePx), tr = Math.floor(gy / tilePx);
-    if (tc < 0 || tr < 0 || tc >= n || tr >= n) return NaN;
-    const t = slots[tr * n + tc];
-    if (t === null) return NaN;
-    const col = gx - tc * tilePx - 0.5 + apronPx, row = gy - tr * tilePx - 0.5 + apronPx;
-    const c0 = Math.min(stride - 2, Math.max(0, Math.floor(col))), r0 = Math.min(stride - 2, Math.max(0, Math.floor(row)));
-    const i = r0 * stride + c0;
-    const a = t[i], b = t[i + 1], c = t[i + stride], d = t[i + stride + 1];
-    if (a === NO_DATA || b === NO_DATA || c === NO_DATA || d === NO_DATA) return NaN;
-    const fc = col - c0, fr = row - r0;
-    const top = a + (b - a) * fc, bottom = c + (d - c) * fc;
-    return (top + (bottom - top) * fr) * dnToMeters;
-  }
-  function heightAtXY(xKm, yKm) {
-    const v = sample(xKm, yKm);
-    return v === v ? v : null;
-  }
-  // grid(xs, ys) → (i, j) => metres | NaN at (xs[i], ys[j]): sample() with the per-column and per-row
-  // arithmetic done once (the hillshade's inner loop).
-  function grid(xs, ys) {
-    const TC = new Int32Array(xs.length), C0 = new Int32Array(xs.length), FC = new Float64Array(xs.length);
-    const TR = new Int32Array(ys.length), R0 = new Int32Array(ys.length), FR = new Float64Array(ys.length);
-    for (let i = 0; i < xs.length; i++) {
-      const gx = (xs[i] + halfKm) / kmPerPixel, tc = Math.floor(gx / tilePx);
-      if (tc < 0 || tc >= n) { TC[i] = -1; continue; }
-      const col = gx - tc * tilePx - 0.5 + apronPx, c0 = Math.min(stride - 2, Math.max(0, Math.floor(col)));
-      TC[i] = tc; C0[i] = c0; FC[i] = col - c0;
-    }
-    for (let j = 0; j < ys.length; j++) {
-      const gy = (halfKm - ys[j]) / kmPerPixel, tr = Math.floor(gy / tilePx);
-      if (tr < 0 || tr >= n) { TR[j] = -1; continue; }
-      const row = gy - tr * tilePx - 0.5 + apronPx, r0 = Math.min(stride - 2, Math.max(0, Math.floor(row)));
-      TR[j] = tr * n; R0[j] = r0 * stride; FR[j] = row - r0;
-    }
-    return (i, j) => {
-      const tc = TC[i], tr = TR[j];
-      if (tc < 0 || tr < 0) return NaN;
-      const t = slots[tr + tc];
-      if (t === null) return NaN;
-      const k = R0[j] + C0[i];
-      const a = t[k], b = t[k + 1], c = t[k + stride], d = t[k + stride + 1];
-      if (a === NO_DATA || b === NO_DATA || c === NO_DATA || d === NO_DATA) return NaN;
-      const fc = FC[i], top = a + (b - a) * fc, bottom = c + (d - c) * fc;
-      return (top + (bottom - top) * FR[j]) * dnToMeters;
-    };
-  }
-  // tile: "rRRcCC", "<name>_rRRcCC" or { row, col }; data: Int16Array, or the pack's bytes (Uint8Array)
-  function addTile(tile, data) {
-    const t = typeof tile === 'string' ? parseTile(tile) : tile;
-    if (!t || !(t.row >= 0 && t.row < n && t.col >= 0 && t.col < n)) throw new Error(`${name}: no tile ${tile}`);
-    if (t.level && t.level !== name) throw new Error(`${name}: tile ${tile} belongs to ${t.level}`);
-    let v = data;
-    if (!(v instanceof Int16Array)) {
-      const u = v instanceof Uint8Array ? v : new Uint8Array(v);
-      v = u.byteOffset % 2 === 0 ? new Int16Array(u.buffer, u.byteOffset, u.byteLength >> 1) : new Int16Array(u.slice().buffer);
-    }
-    if (v.length !== stride * stride) throw new Error(`${name}: tile ${tile} has ${v.length} values, expected ${stride * stride}`);
-    const k = t.row * n + t.col;
-    if (slots[k] === null) loaded++;
-    slots[k] = v;
-    if (!listed.has(t.row * 1000 + t.col)) { listed.add(t.row * 1000 + t.col); level.tiles.push(tileId(t.row, t.col)); }
-    return level;
-  }
-  const hasTile = (row, col) => row >= 0 && row < n && col >= 0 && col < n && slots[row * n + col] !== null;
-  Object.assign(level, {
-    tileKm: T, gridSize: n,
-    sample, heightAtXY, grid,
-    heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
-    addTile, hasTile,
-    // listed tiles meeting bounds that are not loaded yet, as pack names
-    missing: (bounds) => tilesIn(level, bounds).filter((t) => !hasTile(t.row, t.col)).map((t) => t.pack),
-  });
-  Object.defineProperty(level, 'loadedCount', { get: () => loaded, enumerable: true });
-  return level;
-}
-
-// Plain levels: a level covers a viewport when the hillshade can sample all of it: heights exist to half
-// a pixel inside halfKm, and the slope reaches out one more step of up to two pixels, so keep 2.5 pixels
-// clear (otherwise the edge columns come out black at ±156 km on the 120 m level).
-const covers = (dem, b) => !b || Math.max(Math.abs(b.x0), Math.abs(b.x1), Math.abs(b.y0), Math.abs(b.y1)) + 2.5 * dem.kmPerPixel <= dem.halfKm + 1e-9;
-const meets = (dem, b) => !b || (Math.min(b.x0, b.x1) < dem.halfKm && Math.max(b.x0, b.x1) > -dem.halfKm && Math.min(b.y0, b.y1) < dem.halfKm && Math.max(b.y0, b.y1) > -dem.halfKm);
-const pad = (b, km) => b && { x0: b.x0 - km, y0: b.y0 - km, x1: b.x1 + km, y1: b.y1 + km };
-const EPS = 1 + 1e-9;
-
-// The phase 3 rule over the plain (untiled) levels, coarse to fine.
-function pickPlain(plain, kmPerPxWanted, bounds) {
-  if (!plain.length) return null;
-  const ok = plain.filter((d) => covers(d, bounds));
-  if (!ok.length) return plain.reduce((a, b) => (b.halfKm > a.halfKm ? b : a));
-  return ok.find((d) => d.kmPerPixel <= kmPerPxWanted * EPS) ?? ok[ok.length - 1];
-}
-
-// Which tiled level to use for a viewport, and which tile packs it needs (shared by createPyramid and
-// map/tiers.js). `levels`: terrain.json entries or pyramid levels, any order. Rule:
-// 1. base = the phase 3 choice among the plain levels. If it is fine enough, no tiles.
-// 2. Candidates: tiled levels finer than base with listed tiles in view. Take the coarsest that is fine
-//    enough (else the finest); while its listed tiles in view exceed maxTiles, go one level coarser;
-//    if none fits, no tiles.
-// 3. Packs: the chosen level's tiles in view, then tiles of coarser candidates where the chosen level
-//    has no listed tile, up to maxTiles in all (nearest the centre first).
-// → { level, base, chain: [chosen, coarser candidates…] (fine to coarse), packs: [names] }, level null if none.
-function planTiles(levels, kmPerPxWanted, bounds, { maxTiles = TILE_BUDGET } = {}) {
-  const sorted = [...levels].sort((a, b) => b.kmPerPixel - a.kmPerPixel);
-  const base = pickPlain(sorted.filter((d) => !d.tiled), kmPerPxWanted, bounds);
-  const none = { level: null, base, chain: [], packs: [] };
-  if (base && base.kmPerPixel <= kmPerPxWanted * EPS) return none;
-  const sel = (l) => pad(bounds, 2.5 * l.kmPerPixel);   // the hillshade samples a little beyond the view
-  const cands = sorted.filter((d) => d.tiled && (!base || d.kmPerPixel < base.kmPerPixel) && tilesIn(d, sel(d)).length > 0);
-  if (!cands.length) return none;
-  let i = cands.findIndex((d) => d.kmPerPixel <= kmPerPxWanted * EPS);
-  if (i < 0) i = cands.length - 1;
-  while (i >= 0 && bounds && tilesIn(cands[i], sel(cands[i])).length > maxTiles) i--;
-  if (i < 0) return none;
-  const level = cands[i];
-  const chain = cands.slice(0, i + 1).reverse();
-  const packs = tilesIn(level, sel(level)).map((t) => t.pack);
-  for (const coarser of chain.slice(1)) {
-    for (const t of tilesIn(coarser, sel(coarser))) {
-      if (packs.length >= maxTiles) break;
-      const tb = tileBounds(coarser, t.row, t.col), b = sel(coarser);
-      const part = b ? { x0: Math.max(tb.x0, b.x0), x1: Math.min(tb.x1, b.x1), y0: Math.max(tb.y0, b.y0), y1: Math.min(tb.y1, b.y1) } : tb;
-      const finer = chain.slice(0, chain.indexOf(coarser));
-      if (!finer.some((f) => listedCovers(f, part))) packs.push(t.pack);
-    }
-  }
-  return { level, base, chain, packs };
-}
-
-// Several DEMs of the same ground (spec phase 3 §4.1, phase 4 §4.1). `levels` (coarse to fine, live) holds
-// plain DEMs (createDem) and tiled ones (createTiledDem). pick(kmPerPxWanted, bounds) returns:
-// - over the plain levels, as in phase 3: among the levels that cover `bounds` ({ x0, y0, x1, y1 } km),
-//   the coarsest whose pixels are no coarser than kmPerPxWanted; if none is fine enough, the finest
-//   covering one; if none covers, the widest one; null for an empty pyramid. With no tiled level this
-//   is the whole rule, so phase 3 callers get exactly what they got.
-// - when planTiles() chooses a tiled level: a composite DEM whose heights come from the chosen level and
-//   fall back, point by point, to coarser levels where a tile is not listed, not loaded yet or has no
-//   data: { tiled, composite, name, kmPerPixel (of the chosen level), halfKm, chain (fine to coarse),
-//   heightAtXY, sample, heightAt, kmPerPixelAt(x, y), missing (pack names), version }.
-function createPyramid(levels = []) {
-  const list = [];
-  let version = 0;
-  function add(dem) {
-    const i = list.findIndex((d) => d.kmPerPixel === dem.kmPerPixel);
-    if (i >= 0) list.splice(i, 1);
-    list.push(dem);
-    list.sort((a, b) => b.kmPerPixel - a.kmPerPixel);   // coarse to fine
-    version++;
-    return dem;
-  }
-  for (const dem of levels) add(dem);
-  // a tile pack ("dem_40m_r27c30") into its level; returns false if no level of that name is in the pyramid
-  function addTile(pack, data) {
-    const t = parseTile(pack);
-    const level = t && list.find((d) => d.tiled && d.name === t.level);
-    if (!level) return false;
-    level.addTile(t, data);
-    version++;
-    return true;
-  }
-  function pick(kmPerPxWanted, bounds, { maxTiles = TILE_BUDGET } = {}) {
-    if (!list.some((d) => d.tiled)) return pickPlain(list, kmPerPxWanted, bounds);
-    const plan = planTiles(list, kmPerPxWanted, bounds, { maxTiles });
-    if (!plan.level) return plan.base;
-    // fine to coarse: the chosen tiled level, coarser tiled candidates, plain levels finer than the base
-    // that reach into the view (partial coverage is fine point by point), then the base
-    const plainFiner = list.filter((d) => !d.tiled && d !== plan.base && plan.base && d.kmPerPixel < plan.base.kmPerPixel && d.kmPerPixel > plan.level.kmPerPixel && meets(d, bounds));
-    const chain = [...plan.chain, ...plainFiner, ...(plan.base ? [plan.base] : [])].sort((a, b) => a.kmPerPixel - b.kmPerPixel);
-    return composite(plan.level, chain, plan.base, plan.packs.filter((p) => { const t = parseTile(p); const l = list.find((d) => d.name === t.level); return !l.hasTile(t.row, t.col); }));
-  }
-  function composite(level, chain, base, missing) {
-    function sample(xKm, yKm) {
-      for (let i = 0; i < chain.length; i++) { const v = chain[i].sample(xKm, yKm); if (v === v) return v; }
-      return NaN;
-    }
-    function heightAtXY(xKm, yKm) { const v = sample(xKm, yKm); return v === v ? v : null; }
-    return {
-      tiled: true, composite: true, name: level.name, level, base, chain, missing, version,
-      kmPerPixel: level.kmPerPixel, halfKm: base?.halfKm ?? level.halfKm,
-      sample, heightAtXY,
-      heightAt: (latDeg, lonDeg) => heightAtXY(...toXY(latDeg, lonDeg)),
-      // the resolution that serves this point (for "Terrain 120 m" next to the readout); null off all levels
-      kmPerPixelAt(xKm, yKm) {
-        for (let i = 0; i < chain.length; i++) { const v = chain[i].sample(xKm, yKm); if (v === v) return chain[i].kmPerPixel; }
-        return null;
-      },
-    };
-  }
-  // tile packs a viewport still needs (listed, not loaded), at most maxTiles; [] when no tiled level is chosen
-  function missing(kmPerPxWanted, bounds, opts) {
-    const d = pick(kmPerPxWanted, bounds, opts);
-    return d?.composite ? d.missing : [];
-  }
-  return { levels: list, add, addTile, pick, missing, get version() { return version; } };
-}
-
-// Distances along the ground (km): one pixel, then steps of max(pixel, 1.5 % of the distance).
-const stepCache = new Map();
-function steps(kmPerPixel, maxKm) {
-  const key = `${kmPerPixel}:${maxKm}`;
-  if (stepCache.has(key)) return stepCache.get(key);
-  const cos = [], sin = [];
-  for (let d = kmPerPixel; d <= maxKm; d += Math.max(kmPerPixel, 0.015 * d)) {
-    cos.push(Math.cos(d / R));
-    sin.push(Math.sin(d / R));
-  }
-  const out = { cos: Float64Array.from(cos), sin: Float64Array.from(sin) };
-  stepCache.set(key, out);
-  return out;
-}
-
-// Highest terrain elevation angle (deg) in each azimuth seen from a point 2 m above the ground.
-function horizonProfile(dem, latDeg, lonDeg, { azimuths = 360, maxKm = 300, observerM = OBSERVER_M } = {}) {
-  const hP = dem.heightAt(latDeg, lonDeg);
-  if (hP === null) return null;
-  const phi = latDeg * RAD, lam = lonDeg * RAD;
-  const cp = Math.cos(phi), sp = Math.sin(phi), cl = Math.cos(lam), sl = Math.sin(lam);
-  const p0x = cp * cl, p0y = cp * sl, p0z = sp;
-  const ex = -sl, ey = cl;                       // local east (ez = 0)
-  const nx = -sp * cl, ny = -sp * sl, nz = cp;   // local north
-  const r0 = R + (hP + observerM) / 1000;
-  const { cos, sin } = steps(dem.kmPerPixel, maxKm);
-  const out = new Float32Array(azimuths);
-  for (let i = 0; i < azimuths; i++) {
-    const a = (i * 2 * Math.PI) / azimuths;
-    const ca = Math.cos(a), sa = Math.sin(a);
-    const tx = ca * nx + sa * ex, ty = ca * ny + sa * ey, tz = ca * nz;
-    let best = -Infinity;
-    for (let k = 0; k < cos.length; k++) {
-      const px = cos[k] * p0x + sin[k] * tx;
-      const py = cos[k] * p0y + sin[k] * ty;
-      const pz = cos[k] * p0z + sin[k] * tz;
-      const q = 2 * R / (1 - pz);
-      const h = dem.heightAtXY(q * py, q * px);
-      if (h === null) break;
-      const r1 = R + h / 1000;
-      const e = Math.atan2(r1 * cos[k] - r0, r1 * sin[k]);
-      if (e > best) best = e;
-    }
-    out[i] = best === -Infinity ? 0 : best * DEG;
-  }
-  return out;
-}
-
-function horizonAt(profile, azDeg) {
-  const n = profile.length;
-  if (azDeg === null || azDeg === undefined) {
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += profile[i];
-    return sum / n;
-  }
-  const x = ((((azDeg % 360) + 360) % 360) / 360) * n;
-  const i0 = Math.floor(x) % n;
-  const f = x - Math.floor(x);
-  return profile[i0] + (profile[(i0 + 1) % n] - profile[i0]) * f;
-}
-
-const ZERO = Object.assign(() => 0, { profile: null });
-
-function skylineFor(dem, site) {
-  if (!dem || !(site.latDeg <= TERRAIN_MAX_LAT)) return ZERO;
-  const profile = horizonProfile(dem, site.latDeg, site.lonDeg);
-  if (!profile) return ZERO;
-  return Object.assign((azDeg) => horizonAt(profile, azDeg), { profile });
-}
-
-return { MAP_HALF_KM, GRID_SIZE, GRID_CELL_KM, TERRAIN_MAX_LAT, OBSERVER_M, toXY, fromXY, createDem, NO_DATA, TILE_BUDGET, tileKm, tileGridSize, tileId, tilePack, parseTile, tileBounds, tilesIn, createTiledDem, planTiles, createPyramid, horizonProfile, horizonAt, skylineFor };
 })();
 __m['route-plan.js'] = (() => {
 // Route planning (task book phase 4 §6 R): three candidate routes through a start, any waypoints and an
@@ -21793,6 +22140,7 @@ __m['main.js'] = (() => {
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
 const { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } = __m['mission-flow.js'];
 const { createMapLevels } = __m['ui/maplevels.js'];
+const { createSiteContexts } = __m['lander/globalsite.js'];
 const { bootScreen } = __m['boot.js'];
 const { createEphemeris, bodyAzEl } = __m['ephemeris.js'];
 const { summarize, summarizePair, sampleSeries } = __m['windows.js'];
@@ -21915,13 +22263,31 @@ function start() {
     dem = null; grid = null; plan = null;
   }
 
-  // Skylines (Navigator, ribbon, sidebar figures) stay on the 480 m grid, as in phase 2.
+  // Skylines (Navigator, ribbon, sidebar figures) stay on the 480 m grid, as in phase 2. North of 80°S (the Map
+  // covers the whole Moon), the selected site's skyline is computed from the global LOLA terrain
+  // (lander/globalsite.js, as the region level does); until it arrives, and for the other sites in the lists, the
+  // smooth-sphere horizon stands in.
   const skylines = new Map();
+  const globalSites = createSiteContexts({ load: (name) => loadData(name, { timeoutMs: 90000 }), getDem: () => dem, manifest: null });
   function sky(site) {
     const key = `${site.latDeg.toFixed(5)},${site.lonDeg.toFixed(5)}`;
-    if (!skylines.has(key)) skylines.set(key, skylineFor(dem, site));
+    if (!skylines.has(key)) {
+      skylines.set(key, skylineFor(dem, site));
+      let selected = false;
+      try { selected = !!state?.site && state.site.latDeg === site.latDeg && state.site.lonDeg === site.lonDeg; } catch { /* before the state exists */ }
+      if (site.latDeg > TERRAIN_MAX_LAT && selected) {
+        globalSites.context(site).then((ctx) => {
+          if (!ctx?.mask?.profile) return;
+          skylines.set(key, ctx.mask);
+          globalSkyNote.set(key, ctx.skyline);
+          ribbons.clear(); allEvents.clear();
+          render();
+        }).catch(() => {});
+      }
+    }
     return skylines.get(key);
   }
+  const globalSkyNote = new Map();
 
   // mission-flow.js: a link from the lander's "Plan the rover route" carries plan=1 (open the route card at the site)
   const planOnLoad = /(^|[#&])plan=1(&|$)/.test(location.hash);
@@ -22520,7 +22886,10 @@ function start() {
       }));
       if (planned.clipped) notes.push(`Stay shortened to ${daysText(planned.stayMs)}: the ephemeris ends on 1 Jan 2029.`);
     }
-    if (!(state.site.latDeg <= TERRAIN_MAX_LAT)) notes.push('Terrain is mapped south of 80°S. Here the horizon is a smooth sphere.');
+    if (!(state.site.latDeg <= TERRAIN_MAX_LAT)) {
+      const g = globalSkyNote.get(`${state.site.latDeg.toFixed(5)},${state.site.lonDeg.toFixed(5)}`);
+      notes.push(g ? `North of 80°S: the skyline is ${g}. The detailed maps and the rover planner need the polar data south of 80°S.` : 'North of 80°S: the skyline is being computed from the global LOLA terrain (a smooth-sphere horizon until then). The detailed maps and the rover planner need the polar data south of 80°S.');
+    }
     shell.regions.finding.textContent = notes[0] ?? '';
     const rows = compareRows(compared ? cmpPlanned : planned, compared ? alt : null).slice(0, 3);
     const note = (r) => (!compared ? null : r.alt === r.planned ? 'no change' : `${r.alt} ${sameSite ? `if ${signed(state.slipDays)} d` : `at ${altScenario.site.name}`}`);

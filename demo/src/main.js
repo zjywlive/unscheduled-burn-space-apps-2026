@@ -2,6 +2,7 @@
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
 import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } from './mission-flow.js';
 import { createMapLevels } from './ui/maplevels.js';
+import { createSiteContexts } from './lander/globalsite.js';
 import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
 import { summarize, summarizePair, sampleSeries } from './windows.js';
@@ -124,13 +125,31 @@ function start() {
     dem = null; grid = null; plan = null;
   }
 
-  // Skylines (Navigator, ribbon, sidebar figures) stay on the 480 m grid, as in phase 2.
+  // Skylines (Navigator, ribbon, sidebar figures) stay on the 480 m grid, as in phase 2. North of 80°S (the Map
+  // covers the whole Moon), the selected site's skyline is computed from the global LOLA terrain
+  // (lander/globalsite.js, as the region level does); until it arrives, and for the other sites in the lists, the
+  // smooth-sphere horizon stands in.
   const skylines = new Map();
+  const globalSites = createSiteContexts({ load: (name) => loadData(name, { timeoutMs: 90000 }), getDem: () => dem, manifest: null });
   function sky(site) {
     const key = `${site.latDeg.toFixed(5)},${site.lonDeg.toFixed(5)}`;
-    if (!skylines.has(key)) skylines.set(key, skylineFor(dem, site));
+    if (!skylines.has(key)) {
+      skylines.set(key, skylineFor(dem, site));
+      let selected = false;
+      try { selected = !!state?.site && state.site.latDeg === site.latDeg && state.site.lonDeg === site.lonDeg; } catch { /* before the state exists */ }
+      if (site.latDeg > TERRAIN_MAX_LAT && selected) {
+        globalSites.context(site).then((ctx) => {
+          if (!ctx?.mask?.profile) return;
+          skylines.set(key, ctx.mask);
+          globalSkyNote.set(key, ctx.skyline);
+          ribbons.clear(); allEvents.clear();
+          render();
+        }).catch(() => {});
+      }
+    }
     return skylines.get(key);
   }
+  const globalSkyNote = new Map();
 
   // mission-flow.js: a link from the lander's "Plan the rover route" carries plan=1 (open the route card at the site)
   const planOnLoad = /(^|[#&])plan=1(&|$)/.test(location.hash);
@@ -729,7 +748,10 @@ function start() {
       }));
       if (planned.clipped) notes.push(`Stay shortened to ${daysText(planned.stayMs)}: the ephemeris ends on 1 Jan 2029.`);
     }
-    if (!(state.site.latDeg <= TERRAIN_MAX_LAT)) notes.push('Terrain is mapped south of 80°S. Here the horizon is a smooth sphere.');
+    if (!(state.site.latDeg <= TERRAIN_MAX_LAT)) {
+      const g = globalSkyNote.get(`${state.site.latDeg.toFixed(5)},${state.site.lonDeg.toFixed(5)}`);
+      notes.push(g ? `North of 80°S: the skyline is ${g}. The detailed maps and the rover planner need the polar data south of 80°S.` : 'North of 80°S: the skyline is being computed from the global LOLA terrain (a smooth-sphere horizon until then). The detailed maps and the rover planner need the polar data south of 80°S.');
+    }
     shell.regions.finding.textContent = notes[0] ?? '';
     const rows = compareRows(compared ? cmpPlanned : planned, compared ? alt : null).slice(0, 3);
     const note = (r) => (!compared ? null : r.alt === r.planned ? 'no change' : `${r.alt} ${sameSite ? `if ${signed(state.slipDays)} d` : `at ${altScenario.site.name}`}`);
