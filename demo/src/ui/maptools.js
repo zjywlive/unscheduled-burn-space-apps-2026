@@ -24,9 +24,9 @@ const SLOTS = ['A', 'B'];
 // the Map is the 3D Moon (ui/globemap.js): a drag always turns the globe, so the region tools are clicked out
 const HINTS = {
   select: 'Click a point or a site to pick it. Drag to turn the globe.',
-  rect: 'Click one corner, then the opposite corner (south of 80°S). A drag turns the globe.',
-  circle: 'Click the centre, then a point on the edge (south of 80°S). A drag turns the globe.',
-  polygon: 'Click to add corners (south of 80°S). Click the first one or double-click to close.',
+  rect: 'Click one corner, then the opposite corner. A drag turns the globe.',
+  circle: 'Click the centre, then a point on the edge. A drag turns the globe.',
+  polygon: 'Click to add corners. Click the first one or double-click to close.',
   route: 'Click to add points. Double-click or press Enter to finish.',
 };
 const DRAWING = 'Esc cancels. Backspace removes the last point.';

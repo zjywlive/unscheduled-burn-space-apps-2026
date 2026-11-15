@@ -184,8 +184,7 @@ export function createShapeEntry(cb = {}) {
           iconBtn('↓', `Move vertex ${tag} down`, i === rows.length - 1, () => move(i, 1)),
           iconBtn('×', `Remove vertex ${tag}`, rows.length <= MIN_POLYGON, () => remove(i)))));
       });
-      body.append(colsHead('Vertex'), list,
-        null);
+      body.append(colsHead('Vertex'), list);   // (a trailing null here showed as the text "null")
     } else {
       sub.textContent = 'Route points are typed in the Route plan section, with the slope limit.';
       body.append(h('button', { type: 'button', class: 'btn se-open-route', onclick: () => cb.onOpenRoutePlan?.() }, 'Open Route plan'));

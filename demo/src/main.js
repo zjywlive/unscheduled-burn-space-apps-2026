@@ -22,6 +22,7 @@ import { hasData, readData, loadData, loadPacks } from './data-loader.js';
 import { neededPacks } from './map/tiers.js';
 import { clampView } from './map/view.js';
 import { areaKm2, bbox } from './map/shapes.js';
+import { isGeo, geoStats } from './georegion.js';
 import { landingRibbon } from './ribbon.js';
 import { h, clear } from './ui/dom.js';
 import { createShell, SLIPS } from './ui/shell.js';
@@ -310,6 +311,7 @@ function start() {
     onPick: (picked) => { pickedOnMap = true; pickOnMap(picked); pickedOnMap = false; },
     onBest: (cell) => update({ site: cellPoint(grid, cell) }),
     onRegionBest: (slot) => {
+      if (isGeo(shapes[slot])) { const b = geoSlot(slot).stats?.best; if (b) update({ site: mapPoint(b) }); return; }
       const r = plan.region(slot);
       if (r?.stats.best) update({ site: cellPoint(r.tier.grid, r.stats.best.cell) });
     },
@@ -356,6 +358,8 @@ function start() {
     // the globe's own Route tool (anywhere on the Moon)
     // a route drawn on the globe is planned at once (as pressing Plan routes): its candidates replace the drawn line
     globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
+    // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
+    globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
     globeMap.ready.then(() => redrawRoutes());   // a route from the link shows as soon as the globe exists
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
@@ -401,10 +405,11 @@ function start() {
   if (shapeEntry) mapView.mountFold('coords', shapeEntry.el);
   onCoordsFold = (open) => shapeEntry?.setBar(open);
   onCoordsFold(mapView?.foldOpen('coords'));
-  let entryShapes = { A: shapes.A, B: shapes.B };   // a new object only when a region changes (it refills the form)
+  let entryShapes = polarShapes();   // a new object only when a region changes (it refills the form)
   function syncEntry() {
     if (!shapeEntry) return;
-    if (entryShapes.A !== shapes.A || entryShapes.B !== shapes.B) entryShapes = { A: shapes.A, B: shapes.B };
+    const ps = polarShapes();
+    if (entryShapes.A !== ps.A || entryShapes.B !== ps.B) entryShapes = ps;
     shapeEntry.update({ tool: state.tool, slot: state.slot, shapes: entryShapes, point: state.site });
   }
   // choosing a tool opens its form (the Route tool: the Route plan section); big layout only, where the
@@ -957,7 +962,7 @@ function start() {
       // the ground under the frame: the viewport's square in the phase 3 layout, the window in the big one
       bounds: mapView?.frame.boundsFor(state.viewport) ?? null,
       maxSlope: state.maxSlope, maxDark: state.maxDark, weights: state.weights,
-      altBlocked: !!emptyText(), regions: { A: shapes.A, B: shapes.B }, route: routePoints, keepFull: waiters.length > 0,
+      altBlocked: !!emptyText(), regions: polarShapes(), route: routePoints, keepFull: waiters.length > 0,
     });
     liveStates();
   }
@@ -1023,7 +1028,27 @@ function start() {
     };
   }
 
+  // Regions north of 80°S (georegion.js) are drawn on the globe in latitude and longitude and read over a smooth
+  // horizon; the polar map, its heat plan and the coordinates form take only the polar regions
+  function polarShapes() { return { A: isGeo(shapes.A) ? null : shapes.A, B: isGeo(shapes.B) ? null : shapes.B }; }
+  const geoCache = {};
+  function geoSlot(slot) {
+    const sh = shapes[slot];
+    const mode = ['sun', 'earth'].includes(state.mapMode) ? state.mapMode : 'both';
+    const win = state.windowOn && Number.isFinite(state.landingMs);
+    const p0 = win ? state.landingMs : state.cursorMs, len = win ? heatSpan().len : state.stayDays * DAY_MS;
+    const key = `${shapeParam(sh)}|${p0}|${len}|${mode}`;
+    if (geoCache[slot]?.key !== key) {
+      const stats = geoStats(sh, eph, p0, len, { mode });
+      const best = stats?.best ? { coords: formatCoords(stats.best), value: `${fmtPct(stats.best.value)} of the ${win ? 'stay' : 'next days'}` } : null;
+      geoCache[slot] = { key, slot: { progress: 1, stats, best, mark: null, tier: 'smooth horizon',
+        note: `Away from the polar data: the Sun and the Earth over a smooth horizon (assumed, no terrain shadows), on ${stats ? stats.cellDeg.toFixed(2) : '—'}° cells${win ? '' : ' over the next days (no mission window)'}. Passes filters and Suitability need the polar slope and darkness grids.` } };
+    }
+    return geoCache[slot].slot;
+  }
+
   function regionSlot(slot) {
+    if (isGeo(shapes[slot])) return geoSlot(slot);
     const r = plan.region(slot);
     if (!r) return null;
     const stats = { ...r.stats, areaKm2: areaKm2(r.shape) };
@@ -1240,7 +1265,7 @@ function start() {
       alternative: state.altSite !== 'same' ? altScenario.site : null,
       top, best,
       filters: filterParams(), filtersActive: filtersActive() && rankedMode(), weights: state.weights, showPsr,
-      regions: { A: shapes.A, B: shapes.B }, route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
+      regions: polarShapes(), route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
       pointInfo: {
         name: state.site.name,
         coords: `${formatCoords(state.site)}${state.site.verified ? '' : ' approx.'}`,
@@ -1753,6 +1778,7 @@ function start() {
     } : null,
     regionStats: (slot) => {
       const s = slot;
+      if (isGeo(shapes[s])) { const g = geoSlot(s); return Promise.resolve(g.stats ? { ...g.stats, best: g.stats.best ? { ...g.stats.best, coords: formatCoords(g.stats.best) } : null, note: g.note } : null); }
       if (!shapes[s] || !plan) return Promise.resolve(null);
       // the finest grid the viewport asks for first, so the answer matches the card once it is in
       return waitFor(() => !neededPacks(state.viewport).some((n) => FINE_PACKS.includes(n) && packs[n] === 'loading') && (plan.region(s)?.progress ?? 1) >= 1).then(() => {

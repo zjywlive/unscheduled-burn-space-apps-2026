@@ -45,6 +45,7 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Sun azimuth / elevation | deg | data: JPL Horizons ephemeris | ✅ | `ephemeris.js`, `data/ephemeris.json` | 2026-11 to 2029-01 |
 | Terrain horizon (skyline) | deg per azimuth | derived from DEM | ✅ | `terrain.js`, `data/horizon_*` | |
 | Sunlit fraction over time | % | derived | ✅ | `energy.js` `sunSeries`, `heat.js` | |
+| Region Sun / Earth shares north of 80°S | % of the stay | derived; **assumed** smooth horizon (no terrain shadows) | ✅ | `georegion.js` `geoStats` | Cells of about 3,000 per region (0.01–1° square), sampled every 2 h over the stay; the Sun or the Earth counts when its direction is above the cell's horizontal plane. Slope filters and suitability stay empty there (polar grids only) |
 | Long-term illumination average | % | data: NASA 18.6-year averages | ✅ | `nasa-avg.js`, `data/nasa_sun_480m.bin` | |
 | Permanently shadowed regions (PSR) | mask | data: NASA PSR map | ✅ | `psr.js`, `data/psr_120m.bin` | |
 | Distance to nearest shadow / PSR | km | derived | ✅ | `score.js`, `data/shadow_*` | |

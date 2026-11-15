@@ -13,6 +13,7 @@
 //   stats: { cells, areaKm2, sun, earth, both, pass, score } | null,   region.js regionStats output;
 //                                      sun/earth/both/pass are shares 0–1, score 0–1 or NaN
 //   best: { coords: string, value: string } | null,   the best cell, formatted by the caller
+//   note: string | undefined,          shown under the table (a region read over a smooth horizon says so)
 // }
 import { h, clear } from './dom.js';
 import { fmtHours, DASH } from '../format.js';
@@ -109,6 +110,8 @@ export function createRegionCard(el, callbacks = {}) {
     body.append(h('table', { class: 'region-table' }, head, h('tbody', null, rows, bestRow(slots, p.modeLabel))));
     const empties = slots.filter(([, s]) => isEmpty(s));
     for (const [key] of empties) body.append(h('p', { class: 'region-note' }, `Region ${SLOT[key]}: ${EMPTY}`));
+    // a region north of 80°S reads a smooth horizon, not the terrain (georegion.js): say so beside its numbers
+    for (const [key, s] of slots) if (s.note) body.append(h('p', { class: 'region-note' }, both ? `Region ${SLOT[key]}: ${s.note}` : s.note));
     body.append(h('p', { class: 'region-foot' }, 'Sunlit, Earth in view and Both in view are shares of the stay, averaged over the grid cells inside. Passes filters is the share of those cells. Planar area.'));
   }
 

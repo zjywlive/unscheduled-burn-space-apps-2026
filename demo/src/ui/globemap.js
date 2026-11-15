@@ -13,6 +13,7 @@
 // terrain (the region statistics and the rover planner run on it).
 import { createGlobeTerrain, MOON_R_KM, G2 } from '../globe-terrain.js';
 import { createRouteLayer } from '../globe-route.js';
+import { isGeo, geoRect, geoCircle, geoPolygon, geoOutline } from '../georegion.js';
 import { createGlobeView, arcGc, onGc } from '../globe-view.js';
 import { toXY, fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { loadData } from '../data-loader.js';
@@ -243,6 +244,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (gRoute?.layer) gRoute.layer.frame(`${terrain.version ?? 0}`);
     frameCandidates();
     if (draft && getState().tool !== 'route') { draft = null; drawDraft(); }
+    if (rdraft && getState().tool !== rdraft.tool) { rdraft = null; drawRegionDraft(); }
     if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); placeLabels(); }
     // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
     const st = getState();
@@ -450,6 +452,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const h = hit(e);
     if (!h) return;
     if (draft) { draft.cursor = snapped(e, h); drawDraft(); }
+    if (rdraft) { rdraft.cursor = { latDeg: h.latDeg, lonDeg: h.lonDeg }; drawRegionDraft(); return; }
     if (h.latDeg > POLAR_LAT) { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); return; }
     const at = frameClient(h.latDeg, h.lonDeg);
     send('pointermove', at, { buttons: 0 });
@@ -467,7 +470,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (d.tool === 'route') { if (!moved && h) addDraftPoint(snapped(e, h)); return; }
     if (d.tool !== 'select') {
       if (moved || !h) return;
-      if (h.latDeg > POLAR_LAT) { say('Regions need the polar data (south of 80°S): its Sun and Earth grids give their statistics. Routes can be drawn anywhere.'); return; }
+      // north of 80°S (or once started there) the shape is clicked out on the globe in latitude and longitude
+      if (rdraft || h.latDeg > POLAR_LAT) { addRegionPoint(d.tool, { latDeg: h.latDeg, lonDeg: h.lonDeg }, e); return; }
       const at = frameClient(h.latDeg, h.lonDeg);
       send('pointerdown', at); send('pointerup', at);
       schedule(30);
@@ -481,6 +485,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   canvas.addEventListener('dblclick', (e) => {
     if ((getState().tool ?? 'select') === 'select') return;   // the globe zooms in itself
     if (getState().tool === 'route') { finishDraft(); return; }
+    if (rdraft) { finishRegion(); return; }
     const h = hit(e);
     if (h && h.latDeg <= POLAR_LAT) { send('dblclick', frameClient(h.latDeg, h.lonDeg), { detail: 2 }); schedule(40); }
   });
@@ -550,6 +555,12 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     else say('A route needs a start and an end point.');
   }
   window.addEventListener('keydown', (e) => {
+    if (rdraft) {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finishRegion(); }
+      else if (e.key === 'Escape') { e.preventDefault(); rdraft = null; drawRegionDraft(); say(''); }
+      else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); rdraft.pts.pop(); if (!rdraft.pts.length) rdraft = null; drawRegionDraft(); }
+      return;
+    }
     if (!draft) return;
     // while a route is being drawn, Enter and Esc are the drawing's even with a field focused (Enter there would
     // plan the card's old points instead); Backspace stays the field's
@@ -557,6 +568,78 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     else if (e.key === 'Escape') { e.preventDefault(); draft = null; drawDraft(); say(''); }
     else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
   }, true);   // capture: before a focused field's own Enter
+
+  // ---- rectangle, circle and polygon north of 80°S, on the globe itself (georegion.js): a box from two corners, a
+  // cap from its centre and a point on its edge, a polygon from its corners (click the first, double-click or Enter
+  // to close). The page reads them over a smooth horizon; inside 80°S the polar map draws and reads them as before ----
+  let rdraft = null, rdraftObj = null, geoObj = null, geoKey = '';
+  const REGION_SAY = {
+    rect: 'Rectangle: click the opposite corner · Esc cancels',
+    circle: 'Circle: click a point on the edge · Esc cancels',
+    polygon: 'Polygon: click the next corner · click the first one, double-click or Enter to close · Backspace removes the last · Esc cancels',
+  };
+  function previewShape(d) {
+    if (!d.cursor || !d.pts.length) return null;
+    if (d.tool === 'rect') return geoRect(d.pts[0], d.cursor);
+    if (d.tool === 'circle') return geoCircle(d.pts[0], d.cursor);
+    return null;
+  }
+  function drawRegionDraft() {
+    clearObj(rdraftObj); rdraftObj = null;
+    if (!rdraft) return;
+    const T = view.THREE, g = new T.Group(), shape = previewShape(rdraft);
+    if (shape) g.add(surfaceLine(geoOutline(shape), 0xffffff, { dashed: true }));
+    else if (rdraft.tool === 'polygon') {
+      const lls = rdraft.cursor ? [...rdraft.pts, rdraft.cursor] : rdraft.pts;
+      if (lls.length >= 2) g.add(surfaceLine(lls, 0xffffff, { dashed: true }));
+    }
+    if (rdraft.pts.length) g.add(surfaceDots(rdraft.pts, 0xffffff, 8));
+    view.addObject(g); rdraftObj = g;
+  }
+  function addRegionPoint(tool, p, e) {
+    if (!rdraft) rdraft = { tool, pts: [], cursor: null };
+    say(REGION_SAY[tool] ?? '');
+    if (tool === 'rect' || tool === 'circle') {
+      if (!rdraft.pts.length) { rdraft.pts.push(p); drawRegionDraft(); return; }
+      const shape = tool === 'rect' ? geoRect(rdraft.pts[0], p) : geoCircle(rdraft.pts[0], p);
+      rdraft = null; drawRegionDraft(); say('');
+      if (shape) api.onRegionDrawn?.(shape); else say('Too small: click two points further apart.');
+      return;
+    }
+    const last = rdraft.pts[rdraft.pts.length - 1];
+    if (last && Math.abs(last.latDeg - p.latDeg) < 1e-6 && Math.abs(last.lonDeg - p.lonDeg) < 1e-6) return;   // the double-click's second click
+    if (rdraft.pts.length >= 3) {   // a click on the first corner closes it
+      const f = view.project(rdraft.pts[0].latDeg, rdraft.pts[0].lonDeg), r = canvas.getBoundingClientRect();
+      if (f && Math.hypot(f.x - (e.clientX - r.left), f.y - (e.clientY - r.top)) < 12) { finishRegion(); return; }
+    }
+    if (rdraft.pts.length >= 64) { say('At most 64 corners: click the first one, double-click or press Enter to close.'); return; }
+    rdraft.pts.push(p); drawRegionDraft();
+  }
+  function finishRegion() {
+    if (!rdraft) return;
+    const d = rdraft;
+    rdraft = null; drawRegionDraft(); say('');
+    if (d.tool !== 'polygon') return;
+    const shape = geoPolygon(d.pts);
+    if (shape) api.onRegionDrawn?.(shape); else say('A polygon needs at least three corners.');
+  }
+  // the regions held in latitude and longitude, drawn on the globe (the polar ones are in the draped picture)
+  function refreshGeoRegions() {
+    if (!view) return;
+    const regs = getState().regions ?? {};
+    const list = ['A', 'B'].filter((k) => isGeo(regs[k])).map((k) => [k, regs[k]]);
+    const key = JSON.stringify(list);
+    if (key === geoKey) return;
+    geoKey = key;
+    clearObj(geoObj); geoObj = null;
+    if (!list.length) return;
+    const T = view.THREE, g = new T.Group();
+    for (const [k, sh] of list) {
+      g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d));
+      g.add(surfaceDots(sh.type === 'polygon' ? sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b })) : [], 0xffffff, 6));
+    }
+    view.addObject(g); geoObj = g;
+  }
 
   // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
   // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----
@@ -660,6 +743,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   const api = {
     view: null, ready, el: layer,
     onRouteDrawn: null,
+    onRegionDrawn: null,   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
     // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
     heightAt: (la, lo) => terrain.heightAt(la, lo),
@@ -700,7 +784,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       return true;
     },
     // the page re-rendered (mode, window, terrain style, site, playhead): bring the globe's own layers up to date
-    update() { refreshGlobal(); refreshTerrain(); placeLabels(); schedule(150); },
+    update() { refreshGlobal(); refreshTerrain(); refreshGeoRegions(); placeLabels(); schedule(150); },
     get camera() { return view?.camera ?? null; },
   };
   void lastCam;

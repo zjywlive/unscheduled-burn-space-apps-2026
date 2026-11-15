@@ -3983,6 +3983,208 @@ function createRouteLayer(view, payload, { roverPx = null, onTop = false } = {})
 
 return { createRouteLayer };
 })();
+__m['georegion.js'] = (() => {
+// Regions anywhere on the Moon (pure; browser and Node). The polar map's regions are shapes in polar map km and read
+// the polar Sun and Earth grids (terrain skylines, heat.js). North of 80°S there are no such grids, so a region
+// drawn there on the globe is kept in latitude and longitude and read from the ephemeris over a SMOOTH horizon, as
+// the globe's heat colours outside the polar cap are (globalheat.js): no terrain shadows, an assumption the region
+// card names. Slope filters and suitability need the polar data, so they stay empty for these regions.
+//
+// Geo shapes (geo: true):
+//   { type: 'rect', geo: true, lat0, lat1, lonW, spanDeg }   a latitude/longitude box: lat0 < lat1, from lonW
+//                                                            eastward over spanDeg (0–180]
+//   { type: 'circle', geo: true, latDeg, lonDeg, rKm }       all ground within rKm (great-circle) of the centre
+//   { type: 'polygon', geo: true, pts: [[lat, lon], …] }     great-circle edges, 3–64 corners
+// Hash form: grect:lat0,lonW,lat1,spanDeg · gcircle:lat,lon,rKm · gpoly:lat,lon;lat,lon;…
+const RAD = Math.PI / 180, DEG = 180 / Math.PI;
+const MOON_R_KM = 1737.4;
+const r4 = (v) => Math.round(v * 1e4) / 1e4;
+const r2 = (v) => Math.round(v * 100) / 100;
+const lon360 = (v) => ((v % 360) + 360) % 360;
+
+const isGeo = (shape) => !!shape?.geo;
+
+// unit vector, the ephemeris frame (geometry.js unitFromLonLat): x to 0°E, z to the north pole
+function unitLL(latDeg, lonDeg) {
+  const la = latDeg * RAD, lo = lonDeg * RAD, c = Math.cos(la);
+  return [c * Math.cos(lo), c * Math.sin(lo), Math.sin(la)];
+}
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const gcKm = (a, b) => MOON_R_KM * Math.acos(Math.max(-1, Math.min(1, dot(unitLL(a[0], a[1]), unitLL(b[0], b[1])))));
+
+// the box from two clicked corners: the shorter way round in longitude
+function geoRect(a, b) {
+  const lat0 = Math.min(a.latDeg, b.latDeg), lat1 = Math.max(a.latDeg, b.latDeg);
+  let d = lon360(b.lonDeg - a.lonDeg);
+  const lonW = d <= 180 ? lon360(a.lonDeg) : lon360(b.lonDeg);
+  if (d > 180) d = 360 - d;
+  return lat1 - lat0 > 1e-4 && d > 1e-4 ? { type: 'rect', geo: true, lat0: r4(lat0), lat1: r4(lat1), lonW: r4(lonW), spanDeg: r4(d) } : null;
+}
+function geoCircle(c, edge) {
+  const rKm = gcKm([c.latDeg, c.lonDeg], [edge.latDeg, edge.lonDeg]);
+  return rKm > 0.05 ? { type: 'circle', geo: true, latDeg: r4(c.latDeg), lonDeg: r4(lon360(c.lonDeg)), rKm: r2(rKm) } : null;
+}
+function geoPolygon(points) {
+  const pts = points.map((p) => [r4(p.latDeg), r4(lon360(p.lonDeg))]);
+  return pts.length >= 3 && pts.length <= 64 ? { type: 'polygon', geo: true, pts } : null;
+}
+
+function geoParam(sh) {
+  if (!isGeo(sh)) return null;
+  if (sh.type === 'rect') return `grect:${[sh.lat0, sh.lonW, sh.lat1, sh.spanDeg].join(',')}`;
+  if (sh.type === 'circle') return `gcircle:${[sh.latDeg, sh.lonDeg, sh.rKm].join(',')}`;
+  if (sh.type === 'polygon') return `gpoly:${sh.pts.map((p) => p.join(',')).join(';')}`;
+  return null;
+}
+const nums = (s, n) => { const v = s.split(',').map(Number); return v.length === n && v.every(Number.isFinite) ? v : null; };
+const latOk = (v) => v >= -90 && v <= 90;
+function parseGeo(kind, body) {
+  if (kind === 'grect') {
+    const v = nums(body, 4);
+    return v && latOk(v[0]) && latOk(v[2]) && v[2] > v[0] && v[3] > 0 && v[3] <= 180 ? { type: 'rect', geo: true, lat0: v[0], lonW: lon360(v[1]), lat1: v[2], spanDeg: v[3] } : null;
+  }
+  if (kind === 'gcircle') {
+    const v = nums(body, 3);
+    return v && latOk(v[0]) && v[2] > 0 && v[2] <= 3000 ? { type: 'circle', geo: true, latDeg: v[0], lonDeg: lon360(v[1]), rKm: v[2] } : null;
+  }
+  if (kind === 'gpoly') {
+    const pts = body.split(';').map((p) => nums(p, 2));
+    return pts.length >= 3 && pts.length <= 64 && pts.every((p) => p && latOk(p[0])) ? { type: 'polygon', geo: true, pts: pts.map(([a, b]) => [a, lon360(b)]) } : null;
+  }
+  return null;
+}
+
+// the centre of a shape (lat, lon) and a gnomonic projection about it: great circles are straight lines in it, so a
+// polygon with great-circle edges is a plain polygon there (fine for shapes smaller than a hemisphere)
+function centreOf(sh) {
+  if (sh.type === 'rect') return [(sh.lat0 + sh.lat1) / 2, sh.lonW + sh.spanDeg / 2];
+  if (sh.type === 'circle') return [sh.latDeg, sh.lonDeg];
+  const s = [0, 0, 0];
+  for (const [a, b] of sh.pts) { const u = unitLL(a, b); s[0] += u[0]; s[1] += u[1]; s[2] += u[2]; }
+  const n = Math.hypot(...s) || 1;
+  return [Math.asin(s[2] / n) * DEG, lon360(Math.atan2(s[1], s[0]) * DEG)];
+}
+function gnomonic(c) {
+  const C = unitLL(c[0], c[1]);
+  const E = [-Math.sin(c[1] * RAD), Math.cos(c[1] * RAD), 0];
+  const N = [C[1] * E[2] - C[2] * E[1], C[2] * E[0] - C[0] * E[2], C[0] * E[1] - C[1] * E[0]];
+  return (lat, lon) => { const u = unitLL(lat, lon), d = dot(u, C); return d > 1e-6 ? [dot(u, E) / d, dot(u, N) / d] : null; };
+}
+
+// (lat, lon) → inside the shape
+function geoContains(sh) {
+  if (sh.type === 'rect') return (lat, lon) => lat >= sh.lat0 && lat <= sh.lat1 && lon360(lon - sh.lonW) <= sh.spanDeg;
+  if (sh.type === 'circle') { const c = [sh.latDeg, sh.lonDeg]; return (lat, lon) => gcKm(c, [lat, lon]) <= sh.rKm; }
+  const proj = gnomonic(centreOf(sh)), poly = sh.pts.map(([a, b]) => proj(a, b));
+  if (poly.some((p) => !p)) return () => false;
+  return (lat, lon) => {
+    const q = proj(lat, lon);
+    if (!q) return false;
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > q[1]) !== (yj > q[1]) && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+}
+
+// the outline to draw, as { latDeg, lonDeg } corners joined by great circles (the box: its parallels sampled finely,
+// since a parallel is not a great circle)
+function geoOutline(sh) {
+  if (sh.type === 'rect') {
+    const n = Math.max(2, Math.ceil(sh.spanDeg * 2)), out = [];
+    for (let k = 0; k <= n; k++) out.push({ latDeg: sh.lat0, lonDeg: sh.lonW + (sh.spanDeg * k) / n });
+    for (let k = n; k >= 0; k--) out.push({ latDeg: sh.lat1, lonDeg: sh.lonW + (sh.spanDeg * k) / n });
+    out.push(out[0]);
+    return out;
+  }
+  if (sh.type === 'circle') {
+    const d = sh.rKm / MOON_R_KM, la = sh.latDeg * RAD, lo = sh.lonDeg * RAD, out = [];
+    for (let k = 0; k <= 96; k++) {
+      const b = (2 * Math.PI * k) / 96;
+      const lat = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
+      const lon = lo + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(lat));
+      out.push({ latDeg: lat * DEG, lonDeg: lon360(lon * DEG) });
+    }
+    return out;
+  }
+  const out = sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b }));
+  out.push(out[0]);
+  return out;
+}
+
+// the latitude band and longitude span a shape covers (for the sampling grid)
+function extent(sh) {
+  if (sh.type === 'rect') return { lat0: sh.lat0, lat1: sh.lat1, lonW: sh.lonW, span: sh.spanDeg };
+  const o = geoOutline(sh);
+  let lat0 = 90, lat1 = -90;
+  for (const p of o) { lat0 = Math.min(lat0, p.latDeg); lat1 = Math.max(lat1, p.latDeg); }
+  if (sh.type === 'circle') {   // a cap over a pole covers every longitude
+    const dLat = (sh.rKm / MOON_R_KM) * DEG;
+    if (sh.latDeg + dLat >= 90) lat1 = 90;
+    if (sh.latDeg - dLat <= -90) lat0 = -90;
+  }
+  if (lat1 >= 89.99 || lat0 <= -89.99) return { lat0, lat1, lonW: 0, span: 360 };
+  // the smallest eastward span holding every outline longitude
+  const lons = o.map((p) => lon360(p.lonDeg)).sort((a, b) => a - b);
+  let gap = -1, at = 0;
+  for (let i = 0; i < lons.length; i++) { const g = lon360((lons[(i + 1) % lons.length] - lons[i]) || 360); if (g > gap) { gap = g; at = (i + 1) % lons.length; } }
+  return { lat0, lat1, lonW: lons[at], span: Math.min(360, 360 - gap) };
+}
+
+// Exact areas for the box and the cap; the polygon from the sampled cells (geoStats)
+function geoAreaKm2(sh) {
+  const R2 = MOON_R_KM * MOON_R_KM;
+  if (sh.type === 'rect') return R2 * sh.spanDeg * RAD * (Math.sin(sh.lat1 * RAD) - Math.sin(sh.lat0 * RAD));
+  if (sh.type === 'circle') return 2 * Math.PI * R2 * (1 - Math.cos(sh.rKm / MOON_R_KM));
+  return null;
+}
+
+// Sun, Earth and both above the smooth horizon over [startMs, startMs + lenMs], on cells of about `targetCells`
+// inside the shape: the area-weighted means (0–1), the cell count, the area, and the best cell for `mode`.
+// eph.at(t) → { sun, earth } unit vectors (or null outside the ephemeris).
+function geoStats(sh, eph, startMs, lenMs, { mode = 'both', stepMs = 2 * 3600e3, targetCells = 3000 } = {}) {
+  const ex = extent(sh), inside = geoContains(sh);
+  const midCos = Math.max(0.05, Math.cos(((ex.lat0 + ex.lat1) / 2) * RAD));
+  const areaDeg = Math.max(1e-6, (ex.lat1 - ex.lat0) * ex.span * midCos);
+  const step = Math.max(0.01, Math.min(1, Math.sqrt(areaDeg / targetCells)));
+  const cells = [];
+  for (let lat = ex.lat0 + step / 2; lat < ex.lat1; lat += step) {
+    const lonStep = step / Math.max(0.05, Math.cos(lat * RAD));
+    for (let d = lonStep / 2; d < ex.span; d += lonStep) {
+      const lon = lon360(ex.lonW + d);
+      if (inside(lat, lon)) cells.push({ lat, lon, u: unitLL(lat, lon), w: Math.cos(lat * RAD) * lonStep * step, sun: 0, earth: 0, both: 0 });
+    }
+  }
+  // a region smaller than one cell: its centre stands for it
+  if (!cells.length) { const c = centreOf(sh); cells.push({ lat: c[0], lon: c[1], u: unitLL(c[0], c[1]), w: 1, sun: 0, earth: 0, both: 0 }); }
+  let steps = 0;
+  for (let t = startMs; t <= startMs + lenMs; t += stepMs) {
+    const e = eph.at(t);
+    if (!e) continue;
+    steps++;
+    for (const c of cells) {
+      const s = dot(c.u, e.sun) > 0, m = dot(c.u, e.earth) > 0;
+      if (s) c.sun++;
+      if (m) c.earth++;
+      if (s && m) c.both++;
+    }
+  }
+  if (!steps) return null;
+  let W = 0, sun = 0, earth = 0, both = 0, best = null;
+  for (const c of cells) {
+    c.sun /= steps; c.earth /= steps; c.both /= steps;
+    W += c.w; sun += c.sun * c.w; earth += c.earth * c.w; both += c.both * c.w;
+    const v = c[mode] ?? c.both;
+    if (!best || v > best.value) best = { latDeg: r4(c.lat), lonDeg: r4(c.lon), value: v };
+  }
+  const area = geoAreaKm2(sh) ?? W * RAD * RAD * MOON_R_KM * MOON_R_KM;
+  return { cells: cells.length, cellDeg: step, areaKm2: area, sun: sun / W, earth: earth / W, both: both / W, pass: null, score: null, best };
+}
+
+return { MOON_R_KM, isGeo, unitLL, gcKm, geoRect, geoCircle, geoPolygon, geoParam, parseGeo, geoContains, geoOutline, geoAreaKm2, geoStats };
+})();
 __m['globe-view.js'] = (() => {
 // 3D globe of the global terrain model (phase 1). three.js comes from vendor/three.classic.js (window.THREE).
 //
@@ -5618,6 +5820,7 @@ __m['ui/globemap.js'] = (() => {
 // terrain (the region statistics and the rover planner run on it).
 const { createGlobeTerrain, MOON_R_KM, G2 } = __m['globe-terrain.js'];
 const { createRouteLayer } = __m['globe-route.js'];
+const { isGeo, geoRect, geoCircle, geoPolygon, geoOutline } = __m['georegion.js'];
 const { createGlobeView, arcGc, onGc } = __m['globe-view.js'];
 const { toXY, fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
 const { loadData } = __m['data-loader.js'];
@@ -5848,6 +6051,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     if (gRoute?.layer) gRoute.layer.frame(`${terrain.version ?? 0}`);
     frameCandidates();
     if (draft && getState().tool !== 'route') { draft = null; drawDraft(); }
+    if (rdraft && getState().tool !== rdraft.tool) { rdraft = null; drawRegionDraft(); }
     if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); placeLabels(); }
     // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
     const st = getState();
@@ -6055,6 +6259,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     const h = hit(e);
     if (!h) return;
     if (draft) { draft.cursor = snapped(e, h); drawDraft(); }
+    if (rdraft) { rdraft.cursor = { latDeg: h.latDeg, lonDeg: h.lonDeg }; drawRegionDraft(); return; }
     if (h.latDeg > POLAR_LAT) { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); return; }
     const at = frameClient(h.latDeg, h.lonDeg);
     send('pointermove', at, { buttons: 0 });
@@ -6072,7 +6277,8 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     if (d.tool === 'route') { if (!moved && h) addDraftPoint(snapped(e, h)); return; }
     if (d.tool !== 'select') {
       if (moved || !h) return;
-      if (h.latDeg > POLAR_LAT) { say('Regions need the polar data (south of 80°S): its Sun and Earth grids give their statistics. Routes can be drawn anywhere.'); return; }
+      // north of 80°S (or once started there) the shape is clicked out on the globe in latitude and longitude
+      if (rdraft || h.latDeg > POLAR_LAT) { addRegionPoint(d.tool, { latDeg: h.latDeg, lonDeg: h.lonDeg }, e); return; }
       const at = frameClient(h.latDeg, h.lonDeg);
       send('pointerdown', at); send('pointerup', at);
       schedule(30);
@@ -6086,6 +6292,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   canvas.addEventListener('dblclick', (e) => {
     if ((getState().tool ?? 'select') === 'select') return;   // the globe zooms in itself
     if (getState().tool === 'route') { finishDraft(); return; }
+    if (rdraft) { finishRegion(); return; }
     const h = hit(e);
     if (h && h.latDeg <= POLAR_LAT) { send('dblclick', frameClient(h.latDeg, h.lonDeg), { detail: 2 }); schedule(40); }
   });
@@ -6155,6 +6362,12 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     else say('A route needs a start and an end point.');
   }
   window.addEventListener('keydown', (e) => {
+    if (rdraft) {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finishRegion(); }
+      else if (e.key === 'Escape') { e.preventDefault(); rdraft = null; drawRegionDraft(); say(''); }
+      else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); rdraft.pts.pop(); if (!rdraft.pts.length) rdraft = null; drawRegionDraft(); }
+      return;
+    }
     if (!draft) return;
     // while a route is being drawn, Enter and Esc are the drawing's even with a field focused (Enter there would
     // plan the card's old points instead); Backspace stays the field's
@@ -6162,6 +6375,78 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     else if (e.key === 'Escape') { e.preventDefault(); draft = null; drawDraft(); say(''); }
     else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
   }, true);   // capture: before a focused field's own Enter
+
+  // ---- rectangle, circle and polygon north of 80°S, on the globe itself (georegion.js): a box from two corners, a
+  // cap from its centre and a point on its edge, a polygon from its corners (click the first, double-click or Enter
+  // to close). The page reads them over a smooth horizon; inside 80°S the polar map draws and reads them as before ----
+  let rdraft = null, rdraftObj = null, geoObj = null, geoKey = '';
+  const REGION_SAY = {
+    rect: 'Rectangle: click the opposite corner · Esc cancels',
+    circle: 'Circle: click a point on the edge · Esc cancels',
+    polygon: 'Polygon: click the next corner · click the first one, double-click or Enter to close · Backspace removes the last · Esc cancels',
+  };
+  function previewShape(d) {
+    if (!d.cursor || !d.pts.length) return null;
+    if (d.tool === 'rect') return geoRect(d.pts[0], d.cursor);
+    if (d.tool === 'circle') return geoCircle(d.pts[0], d.cursor);
+    return null;
+  }
+  function drawRegionDraft() {
+    clearObj(rdraftObj); rdraftObj = null;
+    if (!rdraft) return;
+    const T = view.THREE, g = new T.Group(), shape = previewShape(rdraft);
+    if (shape) g.add(surfaceLine(geoOutline(shape), 0xffffff, { dashed: true }));
+    else if (rdraft.tool === 'polygon') {
+      const lls = rdraft.cursor ? [...rdraft.pts, rdraft.cursor] : rdraft.pts;
+      if (lls.length >= 2) g.add(surfaceLine(lls, 0xffffff, { dashed: true }));
+    }
+    if (rdraft.pts.length) g.add(surfaceDots(rdraft.pts, 0xffffff, 8));
+    view.addObject(g); rdraftObj = g;
+  }
+  function addRegionPoint(tool, p, e) {
+    if (!rdraft) rdraft = { tool, pts: [], cursor: null };
+    say(REGION_SAY[tool] ?? '');
+    if (tool === 'rect' || tool === 'circle') {
+      if (!rdraft.pts.length) { rdraft.pts.push(p); drawRegionDraft(); return; }
+      const shape = tool === 'rect' ? geoRect(rdraft.pts[0], p) : geoCircle(rdraft.pts[0], p);
+      rdraft = null; drawRegionDraft(); say('');
+      if (shape) api.onRegionDrawn?.(shape); else say('Too small: click two points further apart.');
+      return;
+    }
+    const last = rdraft.pts[rdraft.pts.length - 1];
+    if (last && Math.abs(last.latDeg - p.latDeg) < 1e-6 && Math.abs(last.lonDeg - p.lonDeg) < 1e-6) return;   // the double-click's second click
+    if (rdraft.pts.length >= 3) {   // a click on the first corner closes it
+      const f = view.project(rdraft.pts[0].latDeg, rdraft.pts[0].lonDeg), r = canvas.getBoundingClientRect();
+      if (f && Math.hypot(f.x - (e.clientX - r.left), f.y - (e.clientY - r.top)) < 12) { finishRegion(); return; }
+    }
+    if (rdraft.pts.length >= 64) { say('At most 64 corners: click the first one, double-click or press Enter to close.'); return; }
+    rdraft.pts.push(p); drawRegionDraft();
+  }
+  function finishRegion() {
+    if (!rdraft) return;
+    const d = rdraft;
+    rdraft = null; drawRegionDraft(); say('');
+    if (d.tool !== 'polygon') return;
+    const shape = geoPolygon(d.pts);
+    if (shape) api.onRegionDrawn?.(shape); else say('A polygon needs at least three corners.');
+  }
+  // the regions held in latitude and longitude, drawn on the globe (the polar ones are in the draped picture)
+  function refreshGeoRegions() {
+    if (!view) return;
+    const regs = getState().regions ?? {};
+    const list = ['A', 'B'].filter((k) => isGeo(regs[k])).map((k) => [k, regs[k]]);
+    const key = JSON.stringify(list);
+    if (key === geoKey) return;
+    geoKey = key;
+    clearObj(geoObj); geoObj = null;
+    if (!list.length) return;
+    const T = view.THREE, g = new T.Group();
+    for (const [k, sh] of list) {
+      g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d));
+      g.add(surfaceDots(sh.type === 'polygon' ? sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b })) : [], 0xffffff, 6));
+    }
+    view.addObject(g); geoObj = g;
+  }
 
   // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
   // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----
@@ -6265,6 +6550,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   const api = {
     view: null, ready, el: layer,
     onRouteDrawn: null,
+    onRegionDrawn: null,   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
     // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
     heightAt: (la, lo) => terrain.heightAt(la, lo),
@@ -6305,7 +6591,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
       return true;
     },
     // the page re-rendered (mode, window, terrain style, site, playhead): bring the globe's own layers up to date
-    update() { refreshGlobal(); refreshTerrain(); placeLabels(); schedule(150); },
+    update() { refreshGlobal(); refreshTerrain(); refreshGeoRegions(); placeLabels(); schedule(150); },
     get camera() { return view?.camera ?? null; },
   };
   void lastCam;
@@ -8373,6 +8659,7 @@ const { findSite, parseCustomSite } = __m['sites.js'];
 const { ENERGY_DEFAULTS, cleanAssumptions } = __m['energy.js'];
 const { PRESETS: RELAY_PRESETS } = __m['relay.js'];
 const { DEFAULT_MAX_SLOPE } = __m['route-plan.js'];
+const { geoParam, parseGeo } = __m['georegion.js'];
 
 const DAY_MS = 86400e3;
 const HOUR_MS = 3600e3;
@@ -8601,9 +8888,11 @@ function cleanRoutePlan(v) {
   return { points: pts, maxSlopeDeg: maxSlopeDeg === DEFAULT_MAX_SLOPE ? null : maxSlopeDeg, selected: ROUTE_IDS.includes(v.selected) ? v.selected : null };
 }
 
-// Regions: "rect:x0,y0,x1,y1", "circle:cx,cy,r" or "poly:x,y;x,y;…", map km
+// Regions: "rect:x0,y0,x1,y1", "circle:cx,cy,r" or "poly:x,y;x,y;…", map km; north of 80°S in latitude and
+// longitude, "grect:…", "gcircle:…", "gpoly:…" (georegion.js)
 function shapeParam(sh) {
   if (!sh) return null;
+  if (sh.geo) return geoParam(sh);
   if (sh.type === 'rect') return `rect:${[sh.x0, sh.y0, sh.x1, sh.y1].map(r2).join(',')}`;
   if (sh.type === 'circle') return `circle:${[sh.cx, sh.cy, sh.rKm].map(r2).join(',')}`;
   if (sh.type === 'polygon') return `poly:${pointsParam(sh.points)}`;
@@ -8613,6 +8902,7 @@ function parseShape(str) {
   if (typeof str !== 'string') return null;
   const i = str.indexOf(':');
   const kind = str.slice(0, i), body = str.slice(i + 1);
+  if (kind[0] === 'g') return parseGeo(kind, body);
   if (kind === 'rect') {
     const v = numList(body, 4);
     return v && inMapKm(v[0], v[1]) && inMapKm(v[2], v[3]) && v[0] !== v[2] && v[1] !== v[3] ? { type: 'rect', x0: v[0], y0: v[1], x1: v[2], y1: v[3] } : null;
@@ -14895,9 +15185,9 @@ const SLOTS = ['A', 'B'];
 // the Map is the 3D Moon (ui/globemap.js): a drag always turns the globe, so the region tools are clicked out
 const HINTS = {
   select: 'Click a point or a site to pick it. Drag to turn the globe.',
-  rect: 'Click one corner, then the opposite corner (south of 80°S). A drag turns the globe.',
-  circle: 'Click the centre, then a point on the edge (south of 80°S). A drag turns the globe.',
-  polygon: 'Click to add corners (south of 80°S). Click the first one or double-click to close.',
+  rect: 'Click one corner, then the opposite corner. A drag turns the globe.',
+  circle: 'Click the centre, then a point on the edge. A drag turns the globe.',
+  polygon: 'Click to add corners. Click the first one or double-click to close.',
   route: 'Click to add points. Double-click or press Enter to finish.',
 };
 const DRAWING = 'Esc cancels. Backspace removes the last point.';
@@ -15166,6 +15456,7 @@ __m['ui/regioncard.js'] = (() => {
 //   stats: { cells, areaKm2, sun, earth, both, pass, score } | null,   region.js regionStats output;
 //                                      sun/earth/both/pass are shares 0–1, score 0–1 or NaN
 //   best: { coords: string, value: string } | null,   the best cell, formatted by the caller
+//   note: string | undefined,          shown under the table (a region read over a smooth horizon says so)
 // }
 const { h, clear } = __m['ui/dom.js'];
 const { fmtHours, DASH } = __m['format.js'];
@@ -15262,6 +15553,8 @@ function createRegionCard(el, callbacks = {}) {
     body.append(h('table', { class: 'region-table' }, head, h('tbody', null, rows, bestRow(slots, p.modeLabel))));
     const empties = slots.filter(([, s]) => isEmpty(s));
     for (const [key] of empties) body.append(h('p', { class: 'region-note' }, `Region ${SLOT[key]}: ${EMPTY}`));
+    // a region north of 80°S reads a smooth horizon, not the terrain (georegion.js): say so beside its numbers
+    for (const [key, s] of slots) if (s.note) body.append(h('p', { class: 'region-note' }, both ? `Region ${SLOT[key]}: ${s.note}` : s.note));
     body.append(h('p', { class: 'region-foot' }, 'Sunlit, Earth in view and Both in view are shares of the stay, averaged over the grid cells inside. Passes filters is the share of those cells. Planar area.'));
   }
 
@@ -17123,8 +17416,7 @@ function createShapeEntry(cb = {}) {
           iconBtn('↓', `Move vertex ${tag} down`, i === rows.length - 1, () => move(i, 1)),
           iconBtn('×', `Remove vertex ${tag}`, rows.length <= MIN_POLYGON, () => remove(i)))));
       });
-      body.append(colsHead('Vertex'), list,
-        null);
+      body.append(colsHead('Vertex'), list);   // (a trailing null here showed as the text "null")
     } else {
       sub.textContent = 'Route points are typed in the Route plan section, with the slope limit.';
       body.append(h('button', { type: 'button', class: 'btn se-open-route', onclick: () => cb.onOpenRoutePlan?.() }, 'Open Route plan'));
@@ -24324,6 +24616,7 @@ const { hasData, readData, loadData, loadPacks } = __m['data-loader.js'];
 const { neededPacks } = __m['map/tiers.js'];
 const { clampView } = __m['map/view.js'];
 const { areaKm2, bbox } = __m['map/shapes.js'];
+const { isGeo, geoStats } = __m['georegion.js'];
 const { landingRibbon } = __m['ribbon.js'];
 const { h, clear } = __m['ui/dom.js'];
 const { createShell, SLIPS } = __m['ui/shell.js'];
@@ -24612,6 +24905,7 @@ function start() {
     onPick: (picked) => { pickedOnMap = true; pickOnMap(picked); pickedOnMap = false; },
     onBest: (cell) => update({ site: cellPoint(grid, cell) }),
     onRegionBest: (slot) => {
+      if (isGeo(shapes[slot])) { const b = geoSlot(slot).stats?.best; if (b) update({ site: mapPoint(b) }); return; }
       const r = plan.region(slot);
       if (r?.stats.best) update({ site: cellPoint(r.tier.grid, r.stats.best.cell) });
     },
@@ -24658,6 +24952,8 @@ function start() {
     // the globe's own Route tool (anywhere on the Moon)
     // a route drawn on the globe is planned at once (as pressing Plan routes): its candidates replace the drawn line
     globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
+    // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
+    globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
     globeMap.ready.then(() => redrawRoutes());   // a route from the link shows as soon as the globe exists
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
@@ -24703,10 +24999,11 @@ function start() {
   if (shapeEntry) mapView.mountFold('coords', shapeEntry.el);
   onCoordsFold = (open) => shapeEntry?.setBar(open);
   onCoordsFold(mapView?.foldOpen('coords'));
-  let entryShapes = { A: shapes.A, B: shapes.B };   // a new object only when a region changes (it refills the form)
+  let entryShapes = polarShapes();   // a new object only when a region changes (it refills the form)
   function syncEntry() {
     if (!shapeEntry) return;
-    if (entryShapes.A !== shapes.A || entryShapes.B !== shapes.B) entryShapes = { A: shapes.A, B: shapes.B };
+    const ps = polarShapes();
+    if (entryShapes.A !== ps.A || entryShapes.B !== ps.B) entryShapes = ps;
     shapeEntry.update({ tool: state.tool, slot: state.slot, shapes: entryShapes, point: state.site });
   }
   // choosing a tool opens its form (the Route tool: the Route plan section); big layout only, where the
@@ -25259,7 +25556,7 @@ function start() {
       // the ground under the frame: the viewport's square in the phase 3 layout, the window in the big one
       bounds: mapView?.frame.boundsFor(state.viewport) ?? null,
       maxSlope: state.maxSlope, maxDark: state.maxDark, weights: state.weights,
-      altBlocked: !!emptyText(), regions: { A: shapes.A, B: shapes.B }, route: routePoints, keepFull: waiters.length > 0,
+      altBlocked: !!emptyText(), regions: polarShapes(), route: routePoints, keepFull: waiters.length > 0,
     });
     liveStates();
   }
@@ -25325,7 +25622,27 @@ function start() {
     };
   }
 
+  // Regions north of 80°S (georegion.js) are drawn on the globe in latitude and longitude and read over a smooth
+  // horizon; the polar map, its heat plan and the coordinates form take only the polar regions
+  function polarShapes() { return { A: isGeo(shapes.A) ? null : shapes.A, B: isGeo(shapes.B) ? null : shapes.B }; }
+  const geoCache = {};
+  function geoSlot(slot) {
+    const sh = shapes[slot];
+    const mode = ['sun', 'earth'].includes(state.mapMode) ? state.mapMode : 'both';
+    const win = state.windowOn && Number.isFinite(state.landingMs);
+    const p0 = win ? state.landingMs : state.cursorMs, len = win ? heatSpan().len : state.stayDays * DAY_MS;
+    const key = `${shapeParam(sh)}|${p0}|${len}|${mode}`;
+    if (geoCache[slot]?.key !== key) {
+      const stats = geoStats(sh, eph, p0, len, { mode });
+      const best = stats?.best ? { coords: formatCoords(stats.best), value: `${fmtPct(stats.best.value)} of the ${win ? 'stay' : 'next days'}` } : null;
+      geoCache[slot] = { key, slot: { progress: 1, stats, best, mark: null, tier: 'smooth horizon',
+        note: `Away from the polar data: the Sun and the Earth over a smooth horizon (assumed, no terrain shadows), on ${stats ? stats.cellDeg.toFixed(2) : '—'}° cells${win ? '' : ' over the next days (no mission window)'}. Passes filters and Suitability need the polar slope and darkness grids.` } };
+    }
+    return geoCache[slot].slot;
+  }
+
   function regionSlot(slot) {
+    if (isGeo(shapes[slot])) return geoSlot(slot);
     const r = plan.region(slot);
     if (!r) return null;
     const stats = { ...r.stats, areaKm2: areaKm2(r.shape) };
@@ -25542,7 +25859,7 @@ function start() {
       alternative: state.altSite !== 'same' ? altScenario.site : null,
       top, best,
       filters: filterParams(), filtersActive: filtersActive() && rankedMode(), weights: state.weights, showPsr,
-      regions: { A: shapes.A, B: shapes.B }, route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
+      regions: polarShapes(), route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
       pointInfo: {
         name: state.site.name,
         coords: `${formatCoords(state.site)}${state.site.verified ? '' : ' approx.'}`,
@@ -26055,6 +26372,7 @@ function start() {
     } : null,
     regionStats: (slot) => {
       const s = slot;
+      if (isGeo(shapes[s])) { const g = geoSlot(s); return Promise.resolve(g.stats ? { ...g.stats, best: g.stats.best ? { ...g.stats.best, coords: formatCoords(g.stats.best) } : null, note: g.note } : null); }
       if (!shapes[s] || !plan) return Promise.resolve(null);
       // the finest grid the viewport asks for first, so the answer matches the card once it is in
       return waitFor(() => !neededPacks(state.viewport).some((n) => FINE_PACKS.includes(n) && packs[n] === 'loading') && (plan.region(s)?.progress ?? 1) >= 1).then(() => {

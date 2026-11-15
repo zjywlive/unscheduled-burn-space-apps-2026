@@ -3,6 +3,7 @@ import { findSite, parseCustomSite } from './sites.js';
 import { ENERGY_DEFAULTS, cleanAssumptions } from './energy.js';
 import { PRESETS as RELAY_PRESETS } from './relay.js';
 import { DEFAULT_MAX_SLOPE } from './route-plan.js';
+import { geoParam, parseGeo } from './georegion.js';
 
 const DAY_MS = 86400e3;
 const HOUR_MS = 3600e3;
@@ -231,9 +232,11 @@ export function cleanRoutePlan(v) {
   return { points: pts, maxSlopeDeg: maxSlopeDeg === DEFAULT_MAX_SLOPE ? null : maxSlopeDeg, selected: ROUTE_IDS.includes(v.selected) ? v.selected : null };
 }
 
-// Regions: "rect:x0,y0,x1,y1", "circle:cx,cy,r" or "poly:x,y;x,y;…", map km
+// Regions: "rect:x0,y0,x1,y1", "circle:cx,cy,r" or "poly:x,y;x,y;…", map km; north of 80°S in latitude and
+// longitude, "grect:…", "gcircle:…", "gpoly:…" (georegion.js)
 export function shapeParam(sh) {
   if (!sh) return null;
+  if (sh.geo) return geoParam(sh);
   if (sh.type === 'rect') return `rect:${[sh.x0, sh.y0, sh.x1, sh.y1].map(r2).join(',')}`;
   if (sh.type === 'circle') return `circle:${[sh.cx, sh.cy, sh.rKm].map(r2).join(',')}`;
   if (sh.type === 'polygon') return `poly:${pointsParam(sh.points)}`;
@@ -243,6 +246,7 @@ export function parseShape(str) {
   if (typeof str !== 'string') return null;
   const i = str.indexOf(':');
   const kind = str.slice(0, i), body = str.slice(i + 1);
+  if (kind[0] === 'g') return parseGeo(kind, body);
   if (kind === 'rect') {
     const v = numList(body, 4);
     return v && inMapKm(v[0], v[1]) && inMapKm(v[2], v[3]) && v[0] !== v[2] && v[1] !== v[3] ? { type: 'rect', x0: v[0], y0: v[1], x1: v[2], y1: v[3] } : null;
