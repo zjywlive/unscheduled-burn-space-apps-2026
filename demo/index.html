@@ -209,6 +209,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: 0.7; 
   display: inline-flex; align-items: center; transition: color var(--t) var(--ease-out);
 }
 .view-tab::before { content: ""; position: absolute; inset: -2px 0; }
+button.view-tab { font: inherit; cursor: pointer; }   /* Where to land: a button among the view links */
 .view-tab:hover, .view-tab[aria-current="page"] { color: var(--text); }
 .controls { display: flex; align-items: center; gap: 20px; }
 .field-landing { position: relative; }
@@ -10442,7 +10443,8 @@ const { viewHref } = __m['state.js'];
 
 const MINUS = '−';
 const SLIPS = [-14, -7, -1, 0, 1, 7, 14];
-const VIEWS = [['map', 'Map'], ['evidence', 'Evidence'], ['brief', 'Brief']];
+// the Map itself is the stage bar's step 1; Evidence and Brief are sheets over it (a second click returns to the map)
+const VIEWS = [['evidence', 'Evidence'], ['brief', 'Brief']];
 const GROUPS = [['missions', 'Landing sites'], ['candidates', 'Artemis III candidates']];
 
 function wordmark() {
@@ -10546,6 +10548,8 @@ function createShell(root, { sites, state, onChange }) {
   }, siteOptions(sites), h('option', { value: 'custom' }, 'Custom site…'));
 
   const viewButtons = VIEWS.map(([id, label]) => h('a', { class: 'view-tab', 'data-view': id, href: `#view=${id}` }, label));
+  // "Where to land" (the planner, the Map's region level): in the top bar, reachable whatever panel is open
+  const landButton = h('button', { type: 'button', class: 'view-tab view-land', 'data-action': 'where-to-land', title: 'Where to land: landing ellipse scores and better spots around a point (Map, region level)' }, 'Where to land');
 
   // Phase 3: the guided tour and the Ask drawer open from the top bar (§4.9, §4.10).
   const tourButton = h('button', { type: 'button', class: 'top-action', 'data-action': 'tour' }, 'Tour');
@@ -10560,7 +10564,7 @@ function createShell(root, { sites, state, onChange }) {
     // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map
     h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null),
     h('div', { class: 'topbar-nav' },
-      h('nav', { class: 'views', 'aria-label': 'Views' }, viewButtons),
+      h('nav', { class: 'views', 'aria-label': 'Views' }, landButton, viewButtons),
       topModes,
       h('div', { class: 'top-actions' }, tourButton, askButton, settingsButton)));
 
@@ -10627,8 +10631,9 @@ function createShell(root, { sites, state, onChange }) {
     for (const b of viewButtons) {
       // phase 5: a view tab never carries the detail sheet (sheet=), so Evidence or Brief replaces an open
       // sheet instead of the sheet reopening over them, and Map returns to the bare map
-      b.setAttribute('href', viewHref(st, b.dataset.view));
-      if (b.dataset.view === st.view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      const on = b.dataset.view === st.view;
+      b.setAttribute('href', viewHref(st, on ? 'map' : b.dataset.view));   // open: a second click closes it
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     }
     for (const el of Object.values(views)) el.hidden = false;
     evidence.hidden = st.view !== 'evidence';
@@ -10648,7 +10653,7 @@ function createShell(root, { sites, state, onChange }) {
   return {
     regions: { finding, panorama, elevation, compare, events, evidence, brief, mapTitle, mapFinding, mapCard, pointCard, filtersCard, regionCard, routeCard },
     sheetParts, mapSection,
-    tourButton, askButton, settingsButton, topModes,
+    tourButton, askButton, settingsButton, topModes, landButton,
     app, sidebar, sideToggle, sideReopen, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
     sync,
   };
@@ -16240,7 +16245,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
       { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
       { type: 'divider' },
       // planning tools at other levels, then step 2 of the mission (mission-flow.js)
-      { id: 'next-region', label: 'Where to land', short: 'Land', icon: 'details', title: 'The region around the site: landing ellipse scores and better spots nearby (Map, Region level)', onClick: () => cb.onLevel?.('region') },
+      // (Where to land is in the top bar, reachable from every panel: ui/shell.js)
       { id: 'next-rover', label: 'Plan the rover route', short: 'Route', icon: 'route', title: 'Plan the rover route from the landing site (route card)', attrs: { 'data-stage': 'rover' }, href: () => stageUrl('rover', readMission()) },
       { id: 'next-3d', label: 'See it in 3D', short: '3D', icon: 'cube', title: 'The site (or the planned route) on the 3D Moon', attrs: { 'data-stage': '3d' }, href: () => stageUrl('3d', readMission(), { route: hasRoute() }) },
       { type: 'divider' },
@@ -26530,6 +26535,7 @@ function start() {
     dialRadius: 150,
   }) : null;
   shell.tourButton.addEventListener('click', () => (storyMode ? storyMode.toggleMenu() : startTour()));
+  shell.landButton.addEventListener('click', () => { if (state.view !== 'map') update({ view: 'map' }); regionLayer?.open(); });
   // For tools/smoke.mjs and the timing scripts: the same commands the Ask panel uses.
   panel.setProvider(provider.label, provider.name !== 'mock');
 

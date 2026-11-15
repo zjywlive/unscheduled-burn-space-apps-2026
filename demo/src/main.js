@@ -1854,6 +1854,7 @@ function start() {
     dialRadius: 150,
   }) : null;
   shell.tourButton.addEventListener('click', () => (storyMode ? storyMode.toggleMenu() : startTour()));
+  shell.landButton.addEventListener('click', () => { if (state.view !== 'map') update({ view: 'map' }); regionLayer?.open(); });
   // For tools/smoke.mjs and the timing scripts: the same commands the Ask panel uses.
   panel.setProvider(provider.label, provider.name !== 'mock');
 

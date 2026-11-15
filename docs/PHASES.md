@@ -270,6 +270,7 @@ becomes the Map and covers the whole Moon, and an explicit "Finalise mission con
 Workflow: Mission planning (Map) → Finalise → Launch → Spaceflight → Orbital manoeuvres → Lunar orbit insertion →
 Landing → Surface operations.
 
+- **Top bar** (15 Nov): one Map entry, the stage bar's step 1 (the view tab "Map" went); **Where to land** sits in the top bar beside Evidence and Brief, reachable from every panel (it left the point action bar); Evidence and Brief close on a second click.
 - **Stage bar** (`mission-flow.js`): *Plan* 1 Map (`index.html`) › 2 Finalise (`finalise.html`), *Fly* 3 Execute
   (`lander.html`). Execute is marked locked until a configuration is frozen. The six execution phases are named once
   (`EXEC_PHASES`, each with the lander phases it covers). The globe is no longer a step: it is the Map's whole-Moon

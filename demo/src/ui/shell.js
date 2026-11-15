@@ -13,7 +13,8 @@ import { viewHref } from '../state.js';
 
 const MINUS = '−';
 export const SLIPS = [-14, -7, -1, 0, 1, 7, 14];
-const VIEWS = [['map', 'Map'], ['evidence', 'Evidence'], ['brief', 'Brief']];
+// the Map itself is the stage bar's step 1; Evidence and Brief are sheets over it (a second click returns to the map)
+const VIEWS = [['evidence', 'Evidence'], ['brief', 'Brief']];
 const GROUPS = [['missions', 'Landing sites'], ['candidates', 'Artemis III candidates']];
 
 function wordmark() {
@@ -117,6 +118,8 @@ export function createShell(root, { sites, state, onChange }) {
   }, siteOptions(sites), h('option', { value: 'custom' }, 'Custom site…'));
 
   const viewButtons = VIEWS.map(([id, label]) => h('a', { class: 'view-tab', 'data-view': id, href: `#view=${id}` }, label));
+  // "Where to land" (the planner, the Map's region level): in the top bar, reachable whatever panel is open
+  const landButton = h('button', { type: 'button', class: 'view-tab view-land', 'data-action': 'where-to-land', title: 'Where to land: landing ellipse scores and better spots around a point (Map, region level)' }, 'Where to land');
 
   // Phase 3: the guided tour and the Ask drawer open from the top bar (§4.9, §4.10).
   const tourButton = h('button', { type: 'button', class: 'top-action', 'data-action': 'tour' }, 'Tour');
@@ -131,7 +134,7 @@ export function createShell(root, { sites, state, onChange }) {
     // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map
     h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null),
     h('div', { class: 'topbar-nav' },
-      h('nav', { class: 'views', 'aria-label': 'Views' }, viewButtons),
+      h('nav', { class: 'views', 'aria-label': 'Views' }, landButton, viewButtons),
       topModes,
       h('div', { class: 'top-actions' }, tourButton, askButton, settingsButton)));
 
@@ -198,8 +201,9 @@ export function createShell(root, { sites, state, onChange }) {
     for (const b of viewButtons) {
       // phase 5: a view tab never carries the detail sheet (sheet=), so Evidence or Brief replaces an open
       // sheet instead of the sheet reopening over them, and Map returns to the bare map
-      b.setAttribute('href', viewHref(st, b.dataset.view));
-      if (b.dataset.view === st.view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      const on = b.dataset.view === st.view;
+      b.setAttribute('href', viewHref(st, on ? 'map' : b.dataset.view));   // open: a second click closes it
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     }
     for (const el of Object.values(views)) el.hidden = false;
     evidence.hidden = st.view !== 'evidence';
@@ -219,7 +223,7 @@ export function createShell(root, { sites, state, onChange }) {
   return {
     regions: { finding, panorama, elevation, compare, events, evidence, brief, mapTitle, mapFinding, mapCard, pointCard, filtersCard, regionCard, routeCard },
     sheetParts, mapSection,
-    tourButton, askButton, settingsButton, topModes,
+    tourButton, askButton, settingsButton, topModes, landButton,
     app, sidebar, sideToggle, sideReopen, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
     sync,
   };

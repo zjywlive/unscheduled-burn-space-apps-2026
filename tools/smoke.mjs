@@ -727,7 +727,7 @@ SCENARIOS.push(
   { name: 'phase 5 R2 F3: switching views keeps the playhead', hash: '#now=2027-01-13T05:00Z', steps: [PAUSED,
     "(__lsn.timeline.setNow(Date.UTC(2027, 0, 18, 6)), true)", { input: [{ wait: 200 }] },
     "(document.querySelector('.view-tab[data-view=evidence]').click(), true)", { input: [{ wait: 400 }] },
-    "(document.querySelector('.view-tab[data-view=map]').click(), true)", { input: [{ wait: 400 }] }],
+    "(document.querySelector('.view-tab[data-view=evidence]').click(), true)", { input: [{ wait: 400 }] }],   // a second click returns to the map
     checks: [{ label: 'still 18 Jan 06:00 after Evidence and back', expr: "__lsn.timeline.getState().nowMs === Date.UTC(2027, 0, 18, 6) && __lsn.state().cursorMs === Date.UTC(2027, 0, 18, 6) && __lsn.state().view === 'map'" }], mustContain: [] },
   // F4: a landing typed with minutes becomes the whole hour on the page and in the timeline alike
   { name: 'phase 5 R2 F4: non-whole-hour Landing', hash: '', steps: [PAUSED,

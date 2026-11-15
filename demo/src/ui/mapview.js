@@ -419,7 +419,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
       { type: 'divider' },
       // planning tools at other levels, then step 2 of the mission (mission-flow.js)
-      { id: 'next-region', label: 'Where to land', short: 'Land', icon: 'details', title: 'The region around the site: landing ellipse scores and better spots nearby (Map, Region level)', onClick: () => cb.onLevel?.('region') },
+      // (Where to land is in the top bar, reachable from every panel: ui/shell.js)
       { id: 'next-rover', label: 'Plan the rover route', short: 'Route', icon: 'route', title: 'Plan the rover route from the landing site (route card)', attrs: { 'data-stage': 'rover' }, href: () => stageUrl('rover', readMission()) },
       { id: 'next-3d', label: 'See it in 3D', short: '3D', icon: 'cube', title: 'The site (or the planned route) on the 3D Moon', attrs: { 'data-stage': '3d' }, href: () => stageUrl('3d', readMission(), { route: hasRoute() }) },
       { type: 'divider' },
