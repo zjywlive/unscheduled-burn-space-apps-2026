@@ -810,7 +810,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       el.className = `globe-region-tag tag-${k.toLowerCase()}${k === focus ? ' is-focus' : ''}`; el.textContent = k;
       labels.appendChild(el);
       regionTags.push({ el, latDeg: Math.asin(v[2] / m) * 180 / Math.PI, lonDeg: ((Math.atan2(v[1], v[0]) * 180 / Math.PI) + 360) % 360 });
-      g.add(surfaceDots(sh.type === 'polygon' ? sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b })) : [], 0xffffff, 6));
+      g.add(surfaceDots(sh.type !== 'polygon' ? [] : isGeo(sh) ? sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b })) : sh.points.map(([x, y]) => fromXY(x, y)), 0xffffff, 6));
     }
     view.addObject(g); geoObj = g;
   }

@@ -330,7 +330,7 @@ function start() {
     onTool: (tool) => { kind = tool === 'route' ? 'route' : tool === 'select' ? 'point' : 'region'; update({ tool }); entryFold(tool); },
     onKind: (k) => { kind = k; update(k === 'point' ? { tool: 'select' } : {}); },
     onSlot: (slot) => update({ slot }),
-    onClear: (what) => { if (what === 'route') { clearPlanned(); api.setRoute(null); } else api.setRegion(what, null); },
+    onClear: (what) => { if (what === 'route') clearRoute(); else api.setRegion(what, null); },   // the route: card, hash, the browser's copy and the globe
     onShape: (shape) => {
       if (shape.type !== 'route') { kind = 'region'; api.setRegion(state.slot, shape); return; }
       setHandRoute(shape.points);
@@ -952,6 +952,7 @@ function start() {
     routePoints = null;
     routePlanCard?.update({ points: null, plan: null, selected: null });
     redrawRoutes();
+    api.setRoute(null);   // re-renders: the rail's Clear route goes with the route
   }
   function clearPlanned() {
     rpAbort?.abort();
@@ -1029,7 +1030,7 @@ function start() {
     }
     if (!(state.site.latDeg <= TERRAIN_MAX_LAT)) {
       const g = globalSkyNote.get(`${state.site.latDeg.toFixed(5)},${state.site.lonDeg.toFixed(5)}`);
-      notes.push(g ? `North of 80°S: the skyline is ${g}. The detailed maps and the rover planner need the polar data south of 80°S.` : 'North of 80°S: the skyline is being computed from the global LOLA terrain (a smooth-sphere horizon until then). The detailed maps and the rover planner need the polar data south of 80°S.');
+      notes.push(g ? `North of 80°S: the skyline is ${g}. The heat maps here assume a smooth horizon; slope filters, suitability, best cells and permanent shadow need the polar data south of 80°S.` : 'North of 80°S: the skyline is being computed from the global LOLA terrain (a smooth-sphere horizon until then). The heat maps here assume a smooth horizon; slope filters, suitability, best cells and permanent shadow need the polar data south of 80°S.');
     }
     shell.regions.finding.textContent = notes[0] ?? '';
     const rows = compareRows(compared ? cmpPlanned : planned, compared ? alt : null).slice(0, 3);
@@ -1433,7 +1434,7 @@ function start() {
       alternative: state.altSite !== 'same' ? altScenario.site : null,
       top, best,
       filters: filterParams(), filtersActive: filtersActive() && rankedMode(), weights: state.weights, showPsr,
-      regions: polarShapes(), hasRegions: { A: !!shapes.A, B: !!shapes.B }, route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
+      regions: polarShapes(), hasRegions: { A: !!shapes.A, B: !!shapes.B }, hasRoute: !!rp.points?.length, route: routePoints, regionCard, regionBest, routeCard: routeCard(), profileAt, routePlan: rp,
       pointInfo: {
         name: state.site.name,
         coords: `${formatCoords(state.site)}${state.site.verified ? '' : ' approx.'}`,
@@ -1643,10 +1644,11 @@ function start() {
     const m = readMission();
     let l = landHash ?? landedFor(m);
     if (l && s && moonKm(l.latDeg, l.lonDeg, s.latDeg, s.lonDeg) > 30) l = null;
-    const next = l && l.latDeg <= TERRAIN_MAX_LAT ? { ...l, x: toXY(l.latDeg, l.lonDeg)[0], y: toXY(l.latDeg, l.lonDeg)[1] } : null;
+    // anywhere on the Moon (routes plan off the pole too): the rover starts where the lander came down
+    const next = l ? { ...l, x: toXY(l.latDeg, l.lonDeg)[0], y: toXY(l.latDeg, l.lonDeg)[1] } : null;
     // the planned landing site (the mission's), drawn when there is no touchdown
     const pl = Number.isFinite(m?.latDeg) && Number.isFinite(m?.lonDeg) ? m : s;
-    const landing = pl && pl.latDeg <= TERRAIN_MAX_LAT ? { x: toXY(pl.latDeg, pl.lonDeg)[0], y: toXY(pl.latDeg, pl.lonDeg)[1] } : null;
+    const landing = pl ? { x: toXY(pl.latDeg, pl.lonDeg)[0], y: toXY(pl.latDeg, pl.lonDeg)[1] } : null;
     const moved = (landing?.x ?? null) !== (rp.landing?.x ?? null) || (landing?.y ?? null) !== (rp.landing?.y ?? null);
     if (moved) rp = { ...rp, landing };
     if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); } else if (moved) redrawRoutes();

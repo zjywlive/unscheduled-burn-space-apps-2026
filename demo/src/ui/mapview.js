@@ -394,7 +394,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   applyTerrain();
 
   function syncTools() {
-    lastTools = { tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!(last.hasRegions?.A ?? last.regions?.A), hasB: !!(last.hasRegions?.B ?? last.regions?.B), hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi };
+    lastTools = { tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!(last.hasRegions?.A ?? last.regions?.A), hasB: !!(last.hasRegions?.B ?? last.regions?.B), hasRoute: !!(last.hasRoute ?? last.route), drawing: last.drawing, done: last.shapeDone, full: fullUi };
     tools.update({ ...lastTools, dialOn: dialPressed });
     // "Click sets" belongs to the Select tool; with a drawing tool it stays in place, greyed, and says why
     const off = last.tool !== 'select';
