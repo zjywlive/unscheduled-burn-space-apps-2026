@@ -40,7 +40,7 @@ To run the app locally: `python3 -m http.server 8731 --directory demo`, then ope
 | Yinan Zhang | Developer | [@zjywlive](https://github.com/zjywlive) |
 | Shiyu Luo | Tester | [@PaperPlaneLSY](https://github.com/PaperPlaneLSY) |
 | Kaan Karadağ | Researcher | [@Pro-Machine](https://github.com/Pro-Machine) |
-| Rushi Vibhandik | Reviewer | [@saintbridgethefirst](https://github.com/saintbridgethefirst)) |
+| Rushi Vibhandik | Reviewer | [@saintbridgethefirst](https://github.com/saintbridgethefirst) |
 | Wantong Wu | Tester | [@1984tkr](https://github.com/1984tkr)|
 
 ## What it does
