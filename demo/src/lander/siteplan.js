@@ -123,8 +123,12 @@ export function figures({ t, sky, psrShare, psrNote = null, budget = null, earth
   add('dark', 'Longest dark spell vs battery', sky.longestDarkH, `${Math.round(sky.longestDarkH)} h of ${battH.toFixed(1)} h`, `≤ ${battH.toFixed(1)} h on battery`, grade(sky.longestDarkH / Math.max(0.1, battH), { pass: 1, near: 1.5 }),
     'battery and surface load assumed (Vehicle tab)');
   add('earth', `Earth above the skyline over ${stayDays} days`, sky.earth, `${pct(sky.earth)} (${Math.round(sky.earth * sky.hours)} h)`, '≥ 50 %', grade(sky.earth, { pass: 0.5, near: 0.25, higher: true }), 'direct-to-Earth line of sight; no relay modelled here');
-  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', earthWindow ? 'needed for a live landing link' : 'the Earth never clears the skyline in the window (far side): a relay is needed');
+  // a figure that could not be computed is shown and graded near, not left out (left out, the place would have one
+  // check fewer to fail and rank higher, and the verdict would say every figure passes: audit L7)
+  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', earthWindow ? 'needed for a live landing link' : 'the Earth does not stay above the skyline here around this landing (the far side, or a time when it is below the skyline): a relay or another landing time is needed');
+  else add('comms', 'Earth in view at touchdown', NaN, 'not computed', 'yes', 'near', 'the Earth\'s direction at touchdown could not be computed for this landing time');
   if (budget) add('dv', 'Lander Δv margin after the reserve', budget.marginMs, `${Math.round(budget.marginMs)} m/s · ${Math.round(budget.propellantLeftKg)} kg left`, '≥ 50 m/s', grade(budget.marginMs, { pass: 50, near: 0, higher: true }), 'from the planned orbit, rocket equation; vehicle assumed');
+  else add('dv', 'Lander Δv margin after the reserve', NaN, 'not computed', '≥ 50 m/s', 'near', 'the descent from the planned orbit could not be planned for this landing time; vehicle assumed');
   return out;
 }
 
@@ -173,11 +177,15 @@ export function suitability(pts, { limitDeg, battH, weights = DEFAULT_WEIGHTS })
 }
 
 // The best `count` points that pass, highest score first, each at least minKm from those taken (and from `avoid`).
-export function bestPoints(pts, { count = 5, minKm = 2, avoid = [] } = {}) {
-  const order = pts.filter((p) => p.ok && Number.isFinite(p.score)).sort((a, b) => b.score - a.score);
+// dist(a, b) → km: map km by default; a region over a wide area passes the great-circle distance (audit L2).
+// pass / by: which points qualify and their order (the nearest misses: failing, shortest dark spell first).
+const mapKm = (q, p) => Math.hypot(q.xKm - p.xKm, q.yKm - p.yKm);
+export function bestPoints(pts, { count = 5, minKm = 2, avoid = [], dist = mapKm, pass = (p) => p.ok, by = (a, b) => b.score - a.score } = {}) {
+  if (!(count > 0)) return [];
+  const order = pts.filter((p) => pass(p) && Number.isFinite(p.score)).sort(by);
   const taken = [];
   for (const p of order) {
-    if ([...avoid, ...taken].every((q) => Math.hypot(q.xKm - p.xKm, q.yKm - p.yKm) >= minKm)) taken.push(p);
+    if ([...avoid, ...taken].every((q) => dist(q, p) >= minKm)) taken.push(p);
     if (taken.length === count) break;
   }
   return taken;

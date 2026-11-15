@@ -390,3 +390,39 @@ in those half-second jumps.
 
   Full suite 853: 837 pass, 16 skipped, 0 fail. Left: in Both in view about 5 % of frames still take two vsyncs
   (the polar map's hourly veil recompute while playing).
+
+## Where to land: no more empty screens, and the audit's fixes (15 Nov, evening)
+
+The user drew a large region over the south pole (landing 31 Mar 2027, 14-day stay, battery 5000 Wh, 20 % reserve,
+960 W surface load = 4.2 h of darkness) and got "No grid point passes the hard limits" whatever the settings, even
+with listed sites inside. Measured on the real data (1943 grid points every 6.4 km): 1232 pass the slope limit, 1766
+are outside permanent shadow, but only 2 have a dark spell ≤ 4.2 h; the shortest night on usable ground in that stay is
+about a day (Shackleton ridge 25 h hourly). So the empty list was mostly the battery rule doing its job, but the card
+did not say which limit failed or what would pass, and three defects from the audit
+(`../docs/audit-2026-11-15-landing-and-route-algorithms.md` in the workspace) made it worse: the region was screened
+over the first lit window of its middle point (here 86 days after the planned landing, L1), the 6 km grid never looked
+at the listed sites, and the spots were spaced in a squeezed coordinate (L2).
+
+Changed (`lander/landeval.js`, `lander/siteplan.js`, `ui/landcard.js`, `main.js`):
+
+- **The planned landing (L1).** With a mission window, the grid is screened over the stay from the planned landing and
+  each spot lands in its first Sun-and-Earth window within two days of it (or at the planned time when it has none);
+  its own first lit window, however far, is shown beside it. Without a window, as before.
+- **Nearest misses instead of nothing.** When fewer than eight points pass, the rest of the detail list is filled with
+  the nearest misses on usable ground (slope and permanent shadow pass; shortest dark spell first), marked ≈.
+- **The funnel.** The card says how many points passed each limit and, when the battery is what blocks, the shortest
+  night on usable ground and the battery that would carry it (e.g. 24 h × 960 W / 0.8 = 28,800 Wh).
+- **Listed sites** inside a region are screened as grid points.
+- **Audit items:** L2 spacing by great-circle distance; L3 the Suitability mode's weights rank the grid; L4 ellipse
+  slopes over two DEM pixels, as labelled; L6 one sky step (4 h) of slack on the screen's dark limit, the hourly detail
+  decides; L7 a figure that cannot be computed (Δv, Earth at touchdown) shows as "not computed", graded near; L11 a
+  slope or shadow grid that fails to load is an error and loads again next time; L12 the card's "15 km" and "by
+  suitability" wording follows the settings and the real order; L13 `tests/lander-landeval.test.mjs` (real data:
+  the planned landing, listed sites, nearest misses and funnel, spacing, weights, cancel, failed load) and two
+  siteplan tests. Not done: L5 (PSR check on the 1 km grid), L8 (minimum Sun / Earth defaults), L9, L10.
+- Result on the user's case: 1 of 1943 points passes (87.97°S 193.87°E: Sun 99 %, dark 2 h of 4.2 h, Earth 74 %), four
+  nearest misses (dark 5–72 h); all five are "Not recommended" on Earth at touchdown, because the Earth stays below the
+  skyline at the pole until about 3 Apr; each spot's own first lit window (e.g. 3 Apr 22:00) is shown.
+- Checked: full suite 861 tests, 845 pass, 16 skipped, 0 fail; the Map in headless Chrome (Metal) with Region A and
+  the user's settings: the funnel text, five numbered spots on the Moon, the stay note naming the planned landing, no
+  console errors. `planner.html` rebuilt (it shares landeval.js; it has no planned landing, so it behaves as before).

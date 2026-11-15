@@ -616,6 +616,10 @@ function start() {
     // as the planner page: the first lit window from two days before the planned landing (or from the playhead)
     getFromMs: () => (state.windowOn && Number.isFinite(state.landingMs) ? state.landingMs - 2 * DAY_MS : state.cursorMs),
     getStayDays: () => state.stayDays,
+    // the planned landing: the grid and the spots are scored for it (each spot in its first lit window within two
+    // days of it), so they compare the mission being planned (audit L1); none without a mission window
+    getLandingMs: () => (state.windowOn && Number.isFinite(state.landingMs) ? state.landingMs : NaN),
+    getWeights: () => state.weights,   // the Suitability mode's weights rank the grid too (audit L3)
   });
   let land = { pick: null, region: null, busy: null, result: null, sel: 0, error: null };
   const landCard = mapView ? createLandCard({ actionBar: mapView.actionBar }, {
@@ -631,7 +635,7 @@ function start() {
     return `With these settings: ${landParams.downrangeM} × ${landParams.crossrangeM} m landing ellipse, slope limit ${v.touchdown.maxSlopeDeg}°, battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on ${v.loadsW.surface} W = ${batteryHours(v).toFixed(1)} h of darkness${landParams.minSunPct ? `, Sun ≥ ${landParams.minSunPct} %` : ''}${landParams.minEarthPct ? `, Earth ≥ ${landParams.minEarthPct} %` : ''}.`;
   }
   function showLanding() {
-    landCard?.update({ ...land, assume: landAssume(), params: landParams, stayDays: state.stayDays });
+    landCard?.update({ ...land, assume: landAssume(), params: landParams, stayDays: state.stayDays, planned: state.windowOn && Number.isFinite(state.landingMs) ? state.landingMs : null });
     mapView?.setFoldSummary('land', land.result ? land.result.list[land.sel]?.verdict.grade ?? '' : land.busy ? 'Screening…' : land.region ? `Region ${land.region}` : land.pick ? 'Point' : 'Click the Moon');
     landMarks();
   }

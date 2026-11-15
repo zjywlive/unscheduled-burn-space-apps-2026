@@ -118,8 +118,13 @@ touchdown point, so the rover step has no start until you fly a branch that land
   from the point's first lit window, the longest dark spell against the battery (3000 Wh, 20 % reserve, 220 W = 10.9 h,
   assumed), Earth in view at touchdown, and the lander's Δv margin. Each gets *pass*, *near* or *fail* and one verdict
   sentence sums them up.
-* **Better spots nearby**: a 30 × 30 km square around the point is screened with the navigator's suitability score;
-  the best five passing points at least 2 km apart are scored in full and numbered on the map and in a table.
+* **Better spots nearby**: a square of twice the search radius (30 × 30 km by default) around the point is screened with
+  the navigator's suitability score; the eight best passing points at least 2 km apart are scored in full and the five
+  with the fewest failed checks (then fewest near, then suitability) are numbered on the map and in a table. When fewer
+  than eight pass, the nearest misses on usable ground (slope and permanent shadow pass, shortest dark spell first) fill
+  the list, marked ≈, and the card says how many points failed each limit and what battery the shortest night needs.
+  In the Map's Where to land, with a mission window set, every place is scored for the planned landing (its first lit
+  window within two days of it), and a region also screens the listed sites inside it.
 * The **action bar** of the planner: **Land here** (plan the whole mission to the chosen point and its first lit
   landing window), **Find better spots**, the candidates (*Yours*, 1–5), **Known sites**, **Back to 3D**.
 * **Whole Moon** switches to a global map (LOLA 7.6 km, finer where loaded) with the near-side limb and the

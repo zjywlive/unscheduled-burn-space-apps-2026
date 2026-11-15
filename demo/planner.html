@@ -3924,8 +3924,12 @@ function figures({ t, sky, psrShare, psrNote = null, budget = null, earthAtLandi
   add('dark', 'Longest dark spell vs battery', sky.longestDarkH, `${Math.round(sky.longestDarkH)} h of ${battH.toFixed(1)} h`, `≤ ${battH.toFixed(1)} h on battery`, grade(sky.longestDarkH / Math.max(0.1, battH), { pass: 1, near: 1.5 }),
     'battery and surface load assumed (Vehicle tab)');
   add('earth', `Earth above the skyline over ${stayDays} days`, sky.earth, `${pct(sky.earth)} (${Math.round(sky.earth * sky.hours)} h)`, '≥ 50 %', grade(sky.earth, { pass: 0.5, near: 0.25, higher: true }), 'direct-to-Earth line of sight; no relay modelled here');
-  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', earthWindow ? 'needed for a live landing link' : 'the Earth never clears the skyline in the window (far side): a relay is needed');
+  // a figure that could not be computed is shown and graded near, not left out (left out, the place would have one
+  // check fewer to fail and rank higher, and the verdict would say every figure passes: audit L7)
+  if (earthAtLanding !== null) add('comms', 'Earth in view at touchdown', earthAtLanding ? 1 : 0, earthAtLanding ? 'yes' : 'no', 'yes', earthAtLanding ? 'pass' : 'fail', earthWindow ? 'needed for a live landing link' : 'the Earth does not stay above the skyline here around this landing (the far side, or a time when it is below the skyline): a relay or another landing time is needed');
+  else add('comms', 'Earth in view at touchdown', NaN, 'not computed', 'yes', 'near', 'the Earth\'s direction at touchdown could not be computed for this landing time');
   if (budget) add('dv', 'Lander Δv margin after the reserve', budget.marginMs, `${Math.round(budget.marginMs)} m/s · ${Math.round(budget.propellantLeftKg)} kg left`, '≥ 50 m/s', grade(budget.marginMs, { pass: 50, near: 0, higher: true }), 'from the planned orbit, rocket equation; vehicle assumed');
+  else add('dv', 'Lander Δv margin after the reserve', NaN, 'not computed', '≥ 50 m/s', 'near', 'the descent from the planned orbit could not be planned for this landing time; vehicle assumed');
   return out;
 }
 
@@ -3974,11 +3978,15 @@ function suitability(pts, { limitDeg, battH, weights = DEFAULT_WEIGHTS }) {
 }
 
 // The best `count` points that pass, highest score first, each at least minKm from those taken (and from `avoid`).
-function bestPoints(pts, { count = 5, minKm = 2, avoid = [] } = {}) {
-  const order = pts.filter((p) => p.ok && Number.isFinite(p.score)).sort((a, b) => b.score - a.score);
+// dist(a, b) → km: map km by default; a region over a wide area passes the great-circle distance (audit L2).
+// pass / by: which points qualify and their order (the nearest misses: failing, shortest dark spell first).
+const mapKm = (q, p) => Math.hypot(q.xKm - p.xKm, q.yKm - p.yKm);
+function bestPoints(pts, { count = 5, minKm = 2, avoid = [], dist = mapKm, pass = (p) => p.ok, by = (a, b) => b.score - a.score } = {}) {
+  if (!(count > 0)) return [];
+  const order = pts.filter((p) => pass(p) && Number.isFinite(p.score)).sort(by);
   const taken = [];
   for (const p of order) {
-    if ([...avoid, ...taken].every((q) => Math.hypot(q.xKm - p.xKm, q.yKm - p.yKm) >= minKm)) taken.push(p);
+    if ([...avoid, ...taken].every((q) => dist(q, p) >= minKm)) taken.push(p);
     if (taken.length === count) break;
   }
   return taken;
@@ -3998,15 +4006,27 @@ __m['landeval.js'] = (() => {
 //            hourly over the stay, permanent shadow, Δv from the planned orbit); the fine figures re-rank the
 //            eight (fewest fails, then fewest near limits, then suitability) and five are kept
 // createLandingEvaluator(deps) → { L, loadLayers(), slopeAt, shadowAt, detail(c, opts), evaluate(lat, lon, hooks) }
-//   deps: { eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin? }
-//   evaluate → Promise<{ list: [pick, spot 1…5], grid, limit, battH, stayDays } | null (superseded by a newer call)>
+//   deps: { eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin?, getLandingMs?,
+//     getWeights? }
+//   getLandingMs → the mission's planned landing (ms) or NaN: when there is one, the grid is screened over the stay
+//     from it and each spot lands in its first lit window within PLAN_SLACK_DAYS of it (or at the planned time when
+//     it has none there), so the spots compare the landing the user is planning (audit L1); each spot's own first lit
+//     window, however far, is given beside it (ownLandingMs). Without one, each place's first lit window from
+//     getFromMs, as before
+//   getWeights → the suitability weights (the Map's Suitability mode; score.js DEFAULT_WEIGHTS when undefined; L3)
+//   evaluate → Promise<{ list: [pick, spot 1…5], grid, limit, battH, stayDays, funnel, relaxed, planned } | null
+//     (superseded by a newer call)>
+//   funnel: how the grid fell through the hard limits { screened, slopeOk, notPsr, darkOk, usable, sharesOk, passed,
+//     minDarkH }; when fewer than eight pass, the nearest misses on usable ground (slope and permanent shadow pass,
+//     shortest dark spell first) fill the detail list, marked relaxed, so an empty screen still says what it would take
 //   hooks: { onGrid(grid), onProgress(stage 1 | 2, fraction) }
 //   opts (the screening settings, ui/landcard.js): { minSun, minEarth (0–1, shares of the stay a grid point must reach
 //     to pass, besides slope, darkness against the battery and permanent shadow), radiusKm (around a point),
 //     cells (grid points over a region), ellipse: { downrangeM, crossrangeM } }
 //   evaluateRegion(shape, hooks) → the same search inside a drawn region (polar map km, or latitude/longitude,
-//     georegion.js) instead of 15 km around a point: about REGION_CELLS grid points over it, then the eight best in
-//     detail, five kept → { list: [spot 1…5], grid, limit, battH, stayDays, region: true }
+//     georegion.js) instead of around a point: about REGION_CELLS grid points over it plus the listed sites inside it,
+//     then the eight best in detail (spaced by great-circle distance), five kept → { list: [spot 1…5], grid, limit,
+//     battH, stayDays, region: true, funnel, relaxed, planned }
 const { loadData } = __m['../data-loader.js'];
 const { createDem, toXY, fromXY, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
 const { contains: polarContains, bbox: polarBbox } = __m['../map/shapes.js'];
@@ -4023,8 +4043,11 @@ const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
 const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
 const SEARCH_RADIUS_KM = 15;
 const REGION_CELLS = 500;   // grid points screened over a drawn region (the step follows its area)
+const SKY_STEP_H = 4;               // the screen's sky sampling: its dark spells are whole multiples of this
+const DETAIL_COUNT = 8;             // places scored in detail (five kept)
+const PLAN_SLACK_DAYS = 2;          // with a planned landing, each place lands in its first lit window this close to it
 
-function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCtx, getVehicle, getFromMs, getStayDays, getMargin = () => NaN }) {
+function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCtx, getVehicle, getFromMs, getStayDays, getMargin = () => NaN, getLandingMs = () => NaN, getWeights = () => undefined }) {
   // the layers: navigator 1 km and 2 km slope and shadow grids, the LOLA PSR map, the 120 m polar DEM; fine: the
   // finest terrain loaded around the last point scored as "Your point" (the planner shades its relief with it)
   const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null, slope2: null, shadow2: null };
@@ -4043,6 +4066,12 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       if (lv) {
         const b = await get('dem_120m');
         if (b) L.dem120 = createDem({ data: new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1), size: lv.size, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, halfKm: lv.halfKm });
+      }
+      // without the slope and shadow grids every polar point would fail the hard limits: say so, and load again on
+      // the next search instead of keeping the failure for the session (audit L11)
+      if (!L.slope || !L.shadow) {
+        loading = null;
+        throw new Error(`the ${!L.slope ? 'slope' : 'shadow'} grid did not load (check the connection, then Start screening again)`);
       }
       return L;
     })();
@@ -4079,14 +4108,19 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       const ctx = await siteCtx.context(site);
       sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; patch = ctx.patch;
     }
-    // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
+    // sample the ellipse at ≤ 30 m (each slope from heights one DEM pixel either side: over two pixels, as the
+    // figure says; audit L4), in ground metres
     const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k, ...(ellipse ?? {}) });
-    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
+    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.005, resKm), limitDeg: limit, k });
     if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(xy[0], xy[1]) === 0 ? 1 : 0);
     else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
     else { psrShare = NaN; psrNote = 'unknown: no permanent-shadow map here (the page has the south polar one)'; }
     const win = pickLandingWindow(eph, site, mask, fromMs);
-    const landingMs = win?.tMs ?? fromMs;
+    const plan = planMs();
+    // (the search runs on past the slack by the window's 48 h hold, so a window may start up to the slack's end)
+    const near = Number.isFinite(plan) ? pickLandingWindow(eph, site, mask, plan - PLAN_SLACK_DAYS * 86400e3, { maxDays: 2 * PLAN_SLACK_DAYS + 2 }) : null;
+    const landingMs = Number.isFinite(plan) ? near?.tMs ?? plan : win?.tMs ?? fromMs;
+    const lit = Number.isFinite(plan) ? near : win;
     const sky = skyStats(skyDirections(eph, landingMs, stayDays, 1), site, mask, 1);
     const at = skyAt(eph, site, landingMs, mask);
     let budget = null;
@@ -4094,8 +4128,38 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       const plan = planMission({ eph, site, landingMs, vehicle, siteHeightKm: (heightM ?? 0) / 1000, mask });
       if (plan.ok) budget = plan.budget;
     } catch { budget = null; }
-    const figs = figures({ t, sky, psrShare, psrNote, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, earthWindow: win?.earth ?? true, battH, limitDeg: limit, resKm, stayDays });
-    return { site, landingMs, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, patch, distKm: from ? distanceBearing(from, c).km : 0 };
+    const figs = figures({ t, sky, psrShare, psrNote, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, earthWindow: lit?.earth ?? true, battH, limitDeg: limit, resKm, stayDays });
+    return { site, landingMs, ownLandingMs: win?.tMs ?? null, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, patch, distKm: from ? distanceBearing(from, c).km : 0 };
+  }
+
+  // the landing time screened: the planned one when the mission has it, else NaN (each place's first lit window)
+  const planMs = () => { const t = getLandingMs(); return Number.isFinite(t) ? t : NaN; };
+  // the stage-1 pass marks with the user's weights; the dark limit gets one sky step of slack, since the screen's
+  // dark spells are whole multiples of it (a 9.5 h night reads 8 or 12 h): the hourly detail decides (audit L6)
+  const screenMarks = (pts, limit, battH) => suitability(pts, { limitDeg: limit, battH: battH + SKY_STEP_H, weights: getWeights() });
+  // how the grid fell through the hard limits (the card explains an empty or thin screen with it)
+  function funnel(pts, { limit, battH, opts }) {
+    const slopeOk = (p) => p.slopeDeg <= limit, notPsr = (p) => p.shadowKm !== 0;
+    const usable = pts.filter((p) => slopeOk(p) && notPsr(p));
+    const darks = usable.map((p) => p.darkH).filter(Number.isFinite);
+    return {
+      screened: pts.length, slopeOk: pts.filter(slopeOk).length, notPsr: pts.filter(notPsr).length,
+      darkOk: pts.filter((p) => p.darkH <= battH + SKY_STEP_H).length, usable: usable.length,
+      sharesOk: pts.filter((p) => p.sun >= (opts.minSun ?? 0) && p.earth >= (opts.minEarth ?? 0)).length,
+      passed: pts.filter((p) => p.ok).length, minDarkH: darks.length ? Math.min(...darks) : NaN, stepH: SKY_STEP_H,
+    };
+  }
+  // the places for the detail: the best that pass; when fewer than DETAIL_COUNT do, the nearest misses on usable ground
+  // (slope and permanent shadow pass, the dark spell or a minimum share does not), shortest dark spell first, marked
+  // relaxed: an empty list told the user nothing about what it would take
+  function detailPicks(pts, { limit, minKm, avoid = [], dist }) {
+    const best = bestPoints(pts, { count: DETAIL_COUNT, minKm, avoid, dist });
+    const more = bestPoints(pts, {
+      count: DETAIL_COUNT - best.length, minKm, avoid: [...avoid, ...best], dist,
+      pass: (p) => !p.ok && p.slopeDeg <= limit && p.shadowKm !== 0 && Number.isFinite(p.darkH),
+      by: (a, b) => a.darkH - b.darkH || b.score - a.score,
+    });
+    return [...best, ...more.map((p) => ({ ...p, relaxed: true }))];
   }
 
   let token = 0;
@@ -4116,8 +4180,9 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const ctx0 = polar ? null : await siteCtx.context(pick0);
     if (my !== token) return null;
     const mask0 = polar ? skylineFor(dem, pick0) : ctx0.mask;
-    const land0 = pickLandingWindow(eph, pick0, mask0, fromMs)?.tMs ?? fromMs;
-    const dirs4 = skyDirections(eph, land0, stayDays, 4);
+    const plan = planMs();
+    const land0 = Number.isFinite(plan) ? plan : pickLandingWindow(eph, pick0, mask0, fromMs)?.tMs ?? fromMs;
+    const dirs4 = skyDirections(eph, land0, stayDays, SKY_STEP_H);
     const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
     const radiusKm = opts.radiusKm ?? SEARCH_RADIUS_KM;
     const grid = searchGrid(x, y, { radiusKm: radiusKm * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
@@ -4128,12 +4193,12 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const margin = getMargin();
     for (let n = 0; n < grid.length; n++) {
       const p = grid[n];
-      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
+      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), SKY_STEP_H);
       // off the poles: slope over 1 km on the global terrain; no permanent shadow there
       const slope = polar ? slopeAt(p.xKm, p.yKm) : slopeDeg(ctx0.sampleXY, p.xKm, p.yKm, 1, k);
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
       if (n % 24 === 23 || n === grid.length - 1) {
-        const done = grid.slice(0, n + 1), s = suitability(done, { limitDeg: limit, battH });
+        const done = grid.slice(0, n + 1), s = screenMarks(done, limit, battH);
         done.forEach((q, i) => { q.score = s[i].score; q.ok = passOk(q, s[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         onProgress(1, (n + 1) / grid.length);
         onGrid(grid);
@@ -4142,9 +4207,9 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       }
     }
     // stage 2
-    const best = bestPoints(grid, { count: 8, minKm: 2 * k * (polar ? 1 : 1.5), avoid: [{ xKm: x, yKm: y }] });
+    const best = detailPicks(grid, { limit, minKm: 2 * k * (polar ? 1 : 1.5), avoid: [{ xKm: x, yKm: y }] });
     const pick = { ...pick0, name: 'Your point' };
-    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score }));
+    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score, relaxed: !!p.relaxed }));
     const all = [pick, ...cands];
     onProgress(2, 0);
     for (let n = 0; n < all.length; n++) {
@@ -4157,7 +4222,8 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
     const list = [pick, ...cands.slice(0, 5)];
     list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
-    return { list, grid, limit, battH, stayDays, radiusKm, screened: grid.length, passed: grid.filter((p) => p.ok).length };
+    const fun = funnel(grid, { limit, battH, opts });
+    return { list, grid, limit, battH, stayDays, radiusKm, screened: grid.length, passed: fun.passed, funnel: fun, relaxed: list.filter((c) => c.relaxed).length, planned: Number.isFinite(plan) };
   }
   // ---- inside a drawn region ----
   async function evaluateRegion(shape, { onGrid = () => {}, onProgress = () => {} } = {}, opts = {}) {
@@ -4170,8 +4236,9 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     // candidate points: a lat/lon (geo) region on a cos-latitude grid, a polar one on its map-km box, ~REGION_CELLS
     const pts = [];
     let stepKm;
-    if (isGeo(shape)) {
-      const inside = geoContains(shape), o = geoOutline(shape);
+    const geo = isGeo(shape), inGeo = geo ? geoContains(shape) : null;
+    if (geo) {
+      const inside = inGeo, o = geoOutline(shape);
       let la0 = 90, la1 = -90;
       for (const q of o) { la0 = Math.min(la0, q.latDeg); la1 = Math.max(la1, q.latDeg); }
       const lons = o.map((q) => q.lonDeg), c = o[0].lonDeg;
@@ -4195,7 +4262,14 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
         if (polarContains(shape, x, y)) { const ll = fromXY(x, y); pts.push({ latDeg: ll.latDeg, lonDeg: ll.lonDeg, xKm: x, yKm: y }); }
       }
     }
-    if (!pts.length) return { list: [], grid: pts, limit, battH, stayDays, region: true, stepKm };
+    // the listed sites inside the region are screened as well (a grid step of kilometres can miss a narrow lit ridge)
+    for (const s of sites) {
+      if (!Number.isFinite(s.latDeg) || !Number.isFinite(s.lonDeg)) continue;
+      const lon = ((s.lonDeg % 360) + 360) % 360, [x, y] = toXY(s.latDeg, lon);
+      if (geo ? inGeo(s.latDeg, lon) : polarContains(shape, x, y)) pts.push({ latDeg: s.latDeg, lonDeg: lon, xKm: x, yKm: y, listed: s.name });
+    }
+    const plan = planMs();
+    if (!pts.length) return { list: [], grid: pts, limit, battH, stayDays, region: true, stepKm, planned: Number.isFinite(plan) };
     pts.cellKm = stepKm;
     onGrid(pts);
     // the global terrain around the region's middle (its tiles serve the skylines and slopes off the pole)
@@ -4203,8 +4277,9 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const anyGlobal = pts.some((p) => p.latDeg > TERRAIN_MAX_LAT);
     if (anyGlobal) { try { await siteCtx.around(mid, Math.min(400, Math.sqrt(pts.length) * stepKm)); } catch { /* coarse tiles stand in */ } }
     if (my !== token) return null;
-    const land0 = pickLandingWindow(eph, mid, mid.latDeg <= TERRAIN_MAX_LAT ? skylineFor(dem, mid) : siteCtx.quickMask(mid), fromMs)?.tMs ?? fromMs;
-    const dirs4 = skyDirections(eph, land0, stayDays, 4);
+    // the planned landing; without one, the first lit window of the region's middle point
+    const land0 = Number.isFinite(plan) ? plan : pickLandingWindow(eph, mid, mid.latDeg <= TERRAIN_MAX_LAT ? skylineFor(dem, mid) : siteCtx.quickMask(mid), fromMs)?.tMs ?? fromMs;
+    const dirs4 = skyDirections(eph, land0, stayDays, SKY_STEP_H);
     const margin = getMargin();
     // slope off the pole: over 1 km on the global terrain, from heights 0.5 km either side
     const slopeLL = (p) => {
@@ -4214,19 +4289,20 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     };
     for (let n = 0; n < pts.length; n++) {
       const p = pts[n], polar = p.latDeg <= TERRAIN_MAX_LAT;
-      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
+      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), SKY_STEP_H);
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: polar ? slopeAt(p.xKm, p.yKm) : slopeLL(p), shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
       if (n % 16 === 15 || n === pts.length - 1) {
-        const done = pts.slice(0, n + 1), sc = suitability(done, { limitDeg: limit, battH });
+        const done = pts.slice(0, n + 1), sc = screenMarks(done, limit, battH);
         done.forEach((q, i) => { q.score = sc[i].score; q.ok = passOk(q, sc[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         onProgress(1, (n + 1) / pts.length);
         await tick();
         if (my !== token) return null;
       }
     }
-    // the eight best that pass, apart by two grid steps (in map km at their latitude), in detail; five kept
-    const best = bestPoints(pts.map((p) => ({ ...p, xKm: p.xKm / mapScale(p.latDeg), yKm: p.yKm / mapScale(p.latDeg) })), { count: 8, minKm: 2 * stepKm });
-    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: toXY(p.latDeg, p.lonDeg)[0], yKm: toXY(p.latDeg, p.lonDeg)[1], score: p.score }));
+    // the eight best that pass (or the nearest misses), two grid steps apart on the ground (great circle: map km over
+    // the map scale squeezed north–south distances by |sin latitude|, audit L2), in detail; five kept
+    const best = detailPicks(pts, { limit, minKm: 2 * stepKm, dist: (a, b) => distanceBearing(a, b).km });
+    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score, relaxed: !!p.relaxed }));
     onProgress(2, 0);
     for (let n = 0; n < cands.length; n++) {
       Object.assign(cands[n], await detail(cands[n], { vehicle, limit, battH, stayDays, fromMs, ellipse: opts.ellipse }));
@@ -4238,7 +4314,8 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
     const list = cands.slice(0, 5);
     list.forEach((c, n) => { c.name = `Spot ${n + 1}`; c.distKm = 0; });
-    return { list, grid: pts, limit, battH, stayDays, region: true, stepKm, screened: pts.length, passed: pts.filter((p) => p.ok).length };
+    const fun = funnel(pts, { limit, battH, opts });
+    return { list, grid: pts, limit, battH, stayDays, region: true, stepKm, screened: pts.length, passed: fun.passed, funnel: fun, relaxed: list.filter((c) => c.relaxed).length, planned: Number.isFinite(plan) };
   }
 
   const cancel = () => { token++; };

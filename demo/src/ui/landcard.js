@@ -1,6 +1,6 @@
 // Where to land, in the Map's panel (the planner's method on the 3D Moon; the old planner page's 2D map is gone
-// from the Map): a click on the globe proposes a landing point; it and the five best spots found within 15 km are
-// scored by lander/landeval.js and shown here: the verdict, each figure against its limit, and the spots side by
+// from the Map): a click on the globe proposes a landing point; it and the five best spots found around it (the search
+// radius) are scored by lander/landeval.js and shown here: the verdict, each figure against its limit, and the spots side by
 // side. The actions are in the action bar (actionbar.js, kind 'land'): Use this site, Find better spots, the
 // candidate chooser. The globe draws the point, the search square and the numbered spots (ui/globemap.js).
 //
@@ -17,6 +17,7 @@
 //     error: string | null
 //     params: { slopeDeg, downrangeM, crossrangeM, batteryWh, loadW, reservePct, minSunPct, minEarthPct, radiusKm, cells }
 //     stayDays: number           shown beside the settings (it is the time dock's)
+//     planned: ms | null         the mission's planned landing (the spots are scored for it), or none
 import { h, clear } from './dom.js';
 
 // the screening settings: [key, label, unit, min, max, step, title]
@@ -37,6 +38,23 @@ const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
 const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
 const utc = (ms) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 const short = (f) => (f ? f.text.split(' (')[0].split(' · ')[0] : '—');
+
+// Why a screen found few or no places: how the grid fell through the hard limits, and what the shortest dark spell
+// on usable ground would take (landeval.js funnel). null when enough passed. Pure.
+export function funnelText(result, params = {}) {
+  const f = result?.funnel;
+  if (!f || (f.passed > 0 && !result.relaxed)) return null;
+  const lead = f.passed ? `Only ${f.passed} of ${f.screened} grid points pass every hard limit.` : `No grid point passes every hard limit.`;
+  const shares = params.minSunPct || params.minEarthPct ? `, ${f.sharesOk} with the minimum Sun / Earth shares` : '';
+  const counts = `Of ${f.screened}: ${f.slopeOk} with slope ≤ ${result.limit}°, ${f.notPsr} outside permanent shadow, ${f.darkOk} with the longest dark spell ≤ ${result.battH.toFixed(1)} h (+${f.stepH} h for the 4-hourly screen)${shares}.`;
+  let need = '';
+  if (Number.isFinite(f.minDarkH) && f.minDarkH > result.battH && params.loadW) {
+    const wh = Math.ceil((f.minDarkH * params.loadW) / Math.max(0.05, 1 - (params.reservePct ?? 20) / 100) / 100) * 100;
+    need = ` On usable ground the shortest dark spell is ${f.minDarkH} h: carrying it at ${params.loadW} W with ${params.reservePct ?? 20} % reserve takes about ${wh.toLocaleString('en-GB')} Wh of battery (now ${Number(params.batteryWh).toLocaleString('en-GB')} Wh), or choose a shorter stay or another landing date.`;
+  } else if (!f.usable) need = ' No grid point has both a slope within the limit and no permanent shadow: try a larger region or a higher slope limit.';
+  const near = result.relaxed ? ' The spots marked ≈ are the nearest misses (usable ground, shortest dark spells first), scored in detail to show what it would take.' : '';
+  return `${lead} ${counts}${need}${near}`;
+}
 
 export function createLandCard({ actionBar = null } = {}, cb = {}) {
   const assume = h('p', { class: 'ld-assume' });
@@ -60,7 +78,7 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
     })),
     stayNote);
   const el = h('section', { class: 'card card-land', 'aria-label': 'Where to land' }, h('h2', null, 'Where to land'), settings, assume, body);
-  let st = { assume: '', pick: null, region: null, busy: null, result: null, sel: 0, error: null, params: null, stayDays: 14 };
+  let st = { assume: '', pick: null, region: null, busy: null, result: null, sel: 0, error: null, params: null, stayDays: 14, planned: null };
   // the target and the Start screening button (also in the action bar)
   function startBlock() {
     const { pick, region, busy } = st;
@@ -68,7 +86,7 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
     const btn = h('button', { type: 'button', class: 'btn primary ld-start', disabled: !target || !!busy ? true : null }, busy ? 'Screening…' : 'Start screening');
     btn.addEventListener('click', () => cb.onStart?.());
     return h('div', { class: 'ld-target' },
-      h('p', { class: 'ld-note' }, target ? `Target: ${target}.` : 'Target: click the Moon for a point, or use Where to land in A / B on a drawn region.', ' ', region ? 'The whole region is screened.' : pick ? `The ground within ${st.params?.radiusKm ?? 15} km is searched for better spots.` : ''),
+      h('p', { class: 'ld-note' }, target ? `Target: ${target}.` : 'Target: click the Moon for a point, or use Where to land in A / B on a drawn region.', ' ', region ? 'The whole region is screened, with the listed sites inside it.' : pick ? `The ground within ${st.params?.radiusKm ?? 15} km is searched for better spots.` : ''),
       btn);
   }
 
@@ -87,11 +105,11 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
       return;
     }
     if (region && result && !result.list.length) {
-      body.append(h('p', { class: 'ld-point' }, h('b', null, `Region ${region}`)), h('p', { class: 'ld-note is-warn' }, `No grid point in region ${region} passes the hard limits (slope, longest dark spell against the battery, permanent shadow${st.params?.minSunPct ? `, Sun ≥ ${st.params.minSunPct} %` : ''}${st.params?.minEarthPct ? `, Earth ≥ ${st.params.minEarthPct} %` : ''})${result.screened ? `: ${result.screened} points screened every ${result.stepKm.toFixed(1)} km` : ''}. Loosen the settings, try a larger region or another stay, or a point of your own (click the Moon).`));
+      body.append(h('p', { class: 'ld-point' }, h('b', null, `Region ${region}`)), h('p', { class: 'ld-note is-warn' }, funnelText(result, st.params ?? {}) ?? `No grid point in region ${region}${result.screened ? ` (${result.screened} screened every ${result.stepKm.toFixed(1)} km)` : ''} has usable ground. Try a larger region or a point of your own (click the Moon).`));
       return;
     }
     if (!pick && !region) {
-      body.append(h('p', { class: 'ld-note' }, 'Click the Moon to propose a landing point. It is scored (terrain in the landing ellipse, Sun and Earth over the stay, permanent shadow, Δv) and the ground within 15 km is searched for better spots.'));
+      body.append(h('p', { class: 'ld-note' }, `Click the Moon to propose a landing point. It is scored (terrain in the landing ellipse, Sun and Earth over the stay, permanent shadow, Δv) and the ground within ${st.params?.radiusKm ?? 15} km is searched for better spots.`));
       return;
     }
     if (busy || !result) {
@@ -99,15 +117,21 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
       const f = busy?.f ?? 0;
       body.append(
         h('p', { class: 'ld-point' }, h('b', null, 'Your point'), ` · ${fmtLat(pick.latDeg)} ${fmtLon(pick.lonDeg)}`),
-        h('p', { class: 'ld-note' }, busy?.stage === 2 ? 'Scoring the point and the best spots in detail (terrain in the ellipse, sky over the stay, Δv)…' : `${pick.latDeg > -80 ? 'Loading the global LOLA terrain around the point and computing its skyline. ' : ''}Searching 15 km around the point for the best landing spots…`),
+        h('p', { class: 'ld-note' }, busy?.stage === 2 ? 'Scoring the point and the best spots in detail (terrain in the ellipse, sky over the stay, Δv)…' : `${pick.latDeg > -80 ? 'Loading the global LOLA terrain around the point and computing its skyline. ' : ''}Searching ${st.params?.radiusKm ?? 15} km around the point for the best landing spots…`),
         h('div', { class: 'ld-prog', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(f * 100)) }, h('i', { style: `width:${Math.round(f * 100)}%` })));
       return;
     }
     const c = result.list[sel] ?? result.list[0];
-    const num = (n) => (result.region ? String(n + 1) : n === 0 ? 'You' : String(n));
+    const num = (n) => `${result.region ? String(n + 1) : n === 0 ? 'You' : String(n)}${result.list[n]?.relaxed ? '≈' : ''}`;
     const fig = (id, x) => x.figs.find((q) => q.id === id);
+    // the landing: the first lit window within two days of the plan (or the plan), with the place's own first window
+    // beside it when that is elsewhere; without a plan, the place's first lit window
+    const own = Number.isFinite(c.ownLandingMs) && Math.abs(c.ownLandingMs - c.landingMs) > 3600e3 ? ` · its own first lit window ${utc(c.ownLandingMs)}` : '';
+    const when = result.planned ? `landing ${utc(c.landingMs)} (first lit window within 2 days of the planned landing, else the planned time)${own}` : `landing ${utc(c.landingMs)} (first lit window)`;
+    const why = funnelText(result, st.params ?? {});
     body.append(
-      h('p', { class: 'ld-point' }, h('b', null, c.name), ` · ${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}${c.distKm ? ` · ${c.distKm.toFixed(1)} km from your point` : ''}`, h('br'), h('span', { class: 'muted' }, `landing ${utc(c.landingMs)} (first lit window)`)),
+      ...(why ? [h('p', { class: `ld-note${result.funnel.passed ? '' : ' is-warn'}` }, why)] : []),
+      h('p', { class: 'ld-point' }, h('b', null, c.name), ` · ${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}${c.distKm ? ` · ${c.distKm.toFixed(1)} km from your point` : ''}${c.relaxed ? ' · ≈ nearest miss of the screen' : ''}`, h('br'), h('span', { class: 'muted' }, when)),
       h('p', { class: `ld-badge${c.resKm > 0.04 ? ' is-coarse' : ''}` }, `Terrain ${Math.round(c.resKm * 1000)} m${c.patch ? ' (SLDEM2015 patch)' : ''} · skyline ${c.polar ? 'polar 480 m' : 'computed from the global LOLA terrain'} · ${c.resKm > 0.1 ? 'lander-scale hazards not resolved' : c.resKm > 0.04 ? 'slopes at ~100 m scale, rocks not resolved' : 'lander-scale slopes resolved, rocks not'}`),
       h('p', { class: `ld-verdict g-${c.verdict.grade}` }, c.verdict.text),
       h('ul', { class: 'ld-figs' }, c.figs.map((f) => h('li', { class: `g-${f.grade}` },
@@ -115,8 +139,8 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
         h('div', { class: 'ld-f-v' }, h('b', null, f.text), h('span', { class: 'muted' }, `limit ${f.limit}`)),
         h('small', null, f.note)))),
       result.region
-        ? h('h3', { class: 'ld-h3' }, `Best spots in region ${region}`, h('small', null, `${result.screened} grid points every ${result.stepKm.toFixed(1)} km screened, ${result.passed} pass the hard limits; the 8 best by suitability scored in detail, 5 kept; same stay and method`))
-        : h('h3', { class: 'ld-h3' }, 'Better spots nearby', h('small', null, 'the 5 best that pass the hard limits within 15 km, at least 2 km apart, by suitability; same stay and method')),
+        ? h('h3', { class: 'ld-h3' }, `Best spots in region ${region}`, h('small', null, `${result.screened} grid points every ${result.stepKm.toFixed(1)} km screened (with the listed sites inside), ${result.passed} pass the hard limits; 8 scored in detail, at least ${(2 * result.stepKm).toFixed(1)} km apart, 5 kept by fewest failed checks, then fewest near, then suitability; same stay and method`))
+        : h('h3', { class: 'ld-h3' }, 'Better spots nearby', h('small', null, `8 scored in detail from a ${2 * (result.radiusKm ?? 15)} km square around your point, at least 2 km apart; the 5 with the fewest failed checks, then fewest near, then the best suitability; same stay and method`)),
       h('table', { class: 'ld-tbl' },
         h('thead', null, h('tr', null, ['#', 'km', 'Slope', 'Sun', 'Earth', 'Dark', 'Δv'].map((t, i) => h('th', { class: i ? 'r' : null }, t)))),
         h('tbody', null, result.list.map((x, n) => {
@@ -128,7 +152,7 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
           tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') cb.onSelect?.(n); });
           return tr;
         }))),
-      h('p', { class: 'ld-note' }, 'Choose a spot in the bar over the map, a row here or a numbered spot on the Moon; Use this site makes it the mission\'s site with its first lit landing time. Rocks smaller than the DEM are not modelled; the Δv is from the planned polar orbit with this vehicle (assumed).'));
+      h('p', { class: 'ld-note' }, 'Choose a spot in the bar over the map, a row here or a numbered spot on the Moon; Use this site makes it the mission\'s site with the landing time shown. Rocks smaller than the DEM are not modelled; the Δv is from the planned polar orbit with this vehicle (assumed).'));
   }
 
   function renderBar() {
@@ -150,7 +174,7 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
     st = { ...st, ...p };
     assume.textContent = st.assume;
     if (p.params) for (const [k, inp] of Object.entries(inputs)) if (document.activeElement !== inp && p.params[k] !== undefined) inp.value = String(p.params[k]);
-    stayNote.textContent = `Stay: ${st.stayDays} days from each place's first lit window (set the stay in the time dock). Battery, loads, ellipse and slope limit are assumptions.`;
+    stayNote.textContent = `Stay: ${st.stayDays} days ${Number.isFinite(st.planned) ? `from the planned landing, ${utc(st.planned)} (each spot lands in its first lit window within 2 days of it)` : 'from each place\'s first lit window'}; set the landing and the stay in the time dock. Battery, loads, ellipse and slope limit are assumptions.`;
     renderBody();
     renderBar();
   }

@@ -135,3 +135,26 @@ test('siteplan: where landing is possible — landable, possible (near a limit),
   assert.equal(landableClass({ ...good, marginMs: -5 }, lim), 0, 'not reachable');
   assert.equal(landableClass({ ...good, slopeDeg: NaN }, lim), 0, 'no data is not landable');
 });
+
+test('siteplan: a figure that could not be computed is shown and graded near, not left out (audit L7)', () => {
+  const base = { t: { overLimit: 0.02, meanDeg: 4, p95Deg: 8, roughM: 0.6 }, sky: { sun: 0.9, earth: 0.8, longestDarkH: 3, hours: 168 }, psrShare: 0, battH: 10.9, limitDeg: 10, resKm: 0.005, stayDays: 7 };
+  const f = figures({ ...base, budget: null, earthAtLanding: null });
+  assert.deepEqual(f.map((x) => x.id), ['slope', 'rough', 'psr', 'sun', 'dark', 'earth', 'comms', 'dv']);
+  for (const id of ['comms', 'dv']) { const x = f.find((q) => q.id === id); assert.equal(x.grade, 'near'); assert.equal(x.text, 'not computed'); }
+  assert.equal(verdict(f).grade, 'near', 'not "every figure passes"');
+});
+
+test('siteplan: best spots by another distance, and the nearest misses by another order', () => {
+  const pts = [
+    { name: 'a', xKm: 0, yKm: 0, score: 0.9, ok: true, darkH: 0 },
+    { name: 'b', xKm: 0, yKm: 1, score: 0.8, ok: true, darkH: 0 },
+    { name: 'c', xKm: 5, yKm: 0, score: 0.7, ok: false, darkH: 30 },
+    { name: 'd', xKm: 9, yKm: 0, score: 0.6, ok: false, darkH: 20 },
+  ];
+  // map km: b is 1 km from a; a distance that stretches y tenfold keeps it
+  assert.deepEqual(bestPoints(pts, { minKm: 2 }).map((p) => p.name), ['a']);
+  assert.deepEqual(bestPoints(pts, { minKm: 2, dist: (q, p) => Math.hypot(q.xKm - p.xKm, 10 * (q.yKm - p.yKm)) }).map((p) => p.name), ['a', 'b']);
+  // failing points, shortest dark spell first
+  assert.deepEqual(bestPoints(pts, { minKm: 2, pass: (p) => !p.ok, by: (p, q) => p.darkH - q.darkH }).map((p) => p.name), ['d', 'c']);
+  assert.deepEqual(bestPoints(pts, { count: 0 }), []);
+});
