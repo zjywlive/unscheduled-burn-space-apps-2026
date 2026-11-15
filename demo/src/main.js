@@ -360,6 +360,13 @@ function start() {
     globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
     // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
     globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
+    // a click on a region's outline or on a route: the panel turns to it (a candidate route is chosen as well)
+    globeMap.onFocus = (f) => {
+      if (f.kind === 'region') { kind = 'region'; update({ slot: f.slot }); return; }
+      kind = 'route';
+      if (f.id && f.id !== rp.selected) pickPlanned(f.id);
+      update({});
+    };
     globeMap.ready.then(() => redrawRoutes());   // a route from the link shows as soon as the globe exists
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
@@ -409,7 +416,9 @@ function start() {
   function syncEntry() {
     if (!shapeEntry) return;
     if (entryShapes.A !== shapes.A || entryShapes.B !== shapes.B) entryShapes = { A: shapes.A, B: shapes.B };
-    shapeEntry.update({ tool: state.tool, slot: state.slot, shapes: entryShapes, point: state.site });
+    // a region focused by a click on its outline (Select tool): the form shows that region's shape
+    const focused = kind === 'region' && state.tool === 'select' ? shapes[state.slot] : null;
+    shapeEntry.update({ tool: focused ? focused.type : state.tool, slot: state.slot, shapes: entryShapes, point: state.site });
   }
   // choosing a tool opens its form (the Route tool: the Route plan section); big layout only, where the
   // folds live in the floating panel and opening one does not scroll the page

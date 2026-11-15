@@ -449,6 +449,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const now = performance.now();
     if (now - moveAt < 30) return;
     moveAt = now;
+    // the Select tool: a pointer over an outline or a route says it can be clicked to focus it
+    if (!down) canvas.style.cursor = (getState().tool ?? 'select') === 'select' && focusAt(e) ? 'pointer' : '';
     const h = hit(e);
     if (!h) return;
     if (draft) { draft.cursor = snapped(e, h); drawDraft(); }
@@ -477,7 +479,11 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       schedule(30);
       return;
     }
-    if (moved || !h) return;
+    if (moved) return;
+    // a click on a region's outline or on a route focuses it (the panel follows) instead of picking a point
+    const f = focusAt(e);
+    if (f) { api.onFocus?.(f); return; }
+    if (!h) return;
     if (h.latDeg > POLAR_LAT) { onPickOutside?.({ point: { latDeg: +h.latDeg.toFixed(4), lonDeg: +h.lonDeg.toFixed(4) } }); return; }
     send('click', frameClient(h.latDeg, h.lonDeg));
     schedule(300);
@@ -623,19 +629,67 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const shape = geoPolygon(d.pts);
     if (shape) api.onRegionDrawn?.(shape); else say('A polygon needs at least three corners.');
   }
+  // ---- focus by clicking: the outlines of regions A and B (polar or latitude/longitude) and the routes on screen;
+  // the nearest within FOCUS_PX wins. → { kind: 'region', slot } | { kind: 'route', id } (id: a candidate's id, or
+  // null for the chosen route or the drawn line) ----
+  const FOCUS_PX = 8;
+  let routeHits = [];   // [{ id, pts: [{ latDeg, lonDeg }] }], set with the route
+  function polarOutline(sh) {
+    const ll = ([x, y]) => fromXY(x, y), out = [];
+    const edge = (a, b, n = 16) => { for (let k = 0; k < n; k++) out.push(ll([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n])); };
+    if (sh.type === 'rect') { const c = [[sh.x0, sh.y0], [sh.x1, sh.y0], [sh.x1, sh.y1], [sh.x0, sh.y1]]; c.forEach((p, i) => edge(p, c[(i + 1) % 4])); }
+    else if (sh.type === 'circle') { for (let k = 0; k < 72; k++) { const a = (2 * Math.PI * k) / 72; out.push(ll([sh.cx + sh.rKm * Math.cos(a), sh.cy + sh.rKm * Math.sin(a)])); } }
+    else if (sh.type === 'polygon') sh.points.forEach((p, i) => edge(p, sh.points[(i + 1) % sh.points.length], 8));
+    if (out.length) out.push(out[0]);
+    return out;
+  }
+  function screenDist(pts, x, y) {
+    let best = Infinity, prev = null;
+    const step = Math.max(1, Math.floor(pts.length / 400));
+    for (let i = 0; i < pts.length; i += step) {
+      const p = view.project(pts[i].latDeg, pts[i].lonDeg);
+      if (p && prev) {
+        const dx = p.x - prev.x, dy = p.y - prev.y, L = dx * dx + dy * dy;
+        const t = L ? Math.max(0, Math.min(1, ((x - prev.x) * dx + (y - prev.y) * dy) / L)) : 0;
+        best = Math.min(best, Math.hypot(x - prev.x - t * dx, y - prev.y - t * dy));
+      }
+      prev = p;
+    }
+    return best;
+  }
+  function focusAt(e) {
+    if (!view) return null;
+    const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    const regs = getState().regions ?? {};
+    let best = null, bd = FOCUS_PX;
+    for (const slot of ['A', 'B']) {
+      const sh = regs[slot];
+      if (!sh) continue;
+      const d = screenDist(isGeo(sh) ? geoOutline(sh) : polarOutline(sh), x, y);
+      if (d < bd) { bd = d; best = { kind: 'region', slot }; }
+    }
+    for (const rh of routeHits) {
+      const d = screenDist(rh.pts, x, y);
+      if (d < bd) { bd = d; best = { kind: 'route', id: rh.id }; }
+    }
+    return best;
+  }
+
   // the regions held in latitude and longitude, drawn on the globe (the polar ones are in the draped picture)
   function refreshGeoRegions() {
     if (!view) return;
     const regs = getState().regions ?? {};
     const list = ['A', 'B'].filter((k) => isGeo(regs[k])).map((k) => [k, regs[k]]);
-    const key = JSON.stringify(list);
+    const focus = getState().slot ?? 'A';
+    const key = JSON.stringify([list, focus]);
     if (key === geoKey) return;
     geoKey = key;
     clearObj(geoObj); geoObj = null;
     if (!list.length) return;
     const T = view.THREE, g = new T.Group();
     for (const [k, sh] of list) {
-      g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d));
+      // the focused slot (the one the panel and the form act on) bright, the other one dimmed
+      g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d, { opacity: list.length > 1 && k !== focus ? 0.45 : 0.95 }));
       g.add(surfaceDots(sh.type === 'polygon' ? sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b })) : [], 0xffffff, 6));
     }
     view.addObject(g); geoObj = g;
@@ -710,6 +764,11 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     gKeyRoute = k;
     if (gRoute) { gRoute.layer?.dispose(); clearObj(gRoute.extras); gRoute = null; }
     candLines = []; candBuilt = null;
+    // what a click can focus: the chosen route (or the drawn line) and each candidate
+    routeHits = !data ? [] : [
+      ...(data.payload ? [{ id: null, pts: data.payload.pts.map((q) => ({ latDeg: q[0], lonDeg: q[1] })) }] : data.hand?.length >= 2 ? [{ id: null, pts: data.hand }] : []),
+      ...(data.candidates ?? []).filter((c) => c.points.length >= 2).map((c) => ({ id: c.id, pts: c.points })),
+    ];
     if (!data) { view.redraw(); return; }
     const T = view.THREE, extras = new T.Group();
     let lay = null;
@@ -743,7 +802,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   const api = {
     view: null, ready, el: layer,
     onRouteDrawn: null,
-    onRegionDrawn: null,   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
+    onRegionDrawn: null,
+    onFocus: null,   // ({ kind: 'region', slot } | { kind: 'route', id }) an outline or a route clicked with the Select tool   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
     // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
     heightAt: (la, lo) => terrain.heightAt(la, lo),
