@@ -55,7 +55,8 @@ carries each one. Code references are to `demo/src/`.
 | Readout line, scale bar, legend, terrain chip, Sun & Earth panel | page | Unchanged (they belong to the page, not the canvas) |
 | Sky dial | site | Placed at the site's screen position on the globe; hidden when the site is out of sight |
 | Wheel, drag, pinch, double-click, keyboard zoom | viewport | The globe's camera: wheel, drag to pan, right-drag or shift-drag to turn and tilt, double-click to zoom in; the map's + / − buttons zoom the camera |
-| Drawing north of 80°S | — | Refused with a note: the region statistics and the rover planner need the polar terrain |
+| Rover routes north of 80°S | global LOLA 474 m | The Route tool draws on the globe anywhere (snaps to listed sites). A route with a point north of 80°S is planned by the same planner (A* candidates, directional limits, one-way stretches, traps) on the global terrain in a local frame that turns the sphere so the route's centre sits at the south pole, where the planner's stereographic formulas hold exactly (`localframe.js`); the sunny candidate and the drive use the ephemeris Sun over a smooth horizon (assumed); no PSR or havens there (polar data). Drawn on the globe as a ribbon; Fly along in 3D, Finalise and Execute take it as any route |
+| Regions north of 80°S | — | Refused with a note: their statistics come from the polar Sun and Earth grids |
 
 ## Known limits
 

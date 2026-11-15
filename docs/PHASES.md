@@ -288,6 +288,13 @@ Landing → Surface operations.
   playhead) and contours. North of 80°S the selected site's skyline is computed from the global LOLA terrain for the
   site card. **Where to land** (`planner.html`) is a tool from the action bar; the point and route action bars end with
   **Finalise mission**.
+- **Rover routes anywhere on the Moon** (`localframe.js`): the Route tool draws on the globe; a route with a point
+  north of 80°S is planned by the same planner on the global LOLA terrain (474 m) in a local frame that turns the
+  sphere so the route's centre sits at the south pole, where the planner's polar stereographic geometry holds
+  exactly; the plan comes back in the Map's polar km, so the route card, energy, 3D playback, Finalise and Execute
+  take it unchanged. Away from the polar grids the drive's Sun and Earth come from the ephemeris over a smooth
+  horizon (assumed); havens and PSR stay polar. Checked: Apollo 11, 41.7 km, three candidates, the drive simulated,
+  played on the globe (91 h, max 1°).
 - **Finalise** (`finalise.html`, `lander/finalise-main.js`, `mission-config.js`): plans the flight to the Map's site
   and time with the lander's planner, finds the landing window (Sun and Earth above the skyline around the requested
   time), reads the chosen rover route, shows the assumed vehicle (editable here for the last time) and what each phase
