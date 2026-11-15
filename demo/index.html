@@ -777,6 +777,18 @@ button.globe-label { pointer-events: auto; cursor: pointer; }
 .globe-land-spot.is-on { background: #7fd18b; color: #000; }
 .globe-land-spot.g-near.is-on { background: #f2b33d; } .globe-land-spot.g-fail.is-on { background: #e5484d; color: #fff; }
 
+/* the screening settings and the Start screening button */
+.ld-settings { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.12)); border-radius: 10px; }
+.ld-settings > summary { cursor: pointer; font-weight: 500; }
+.ld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+.ld-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+.ld-in { display: flex; align-items: center; gap: 4px; }
+.ld-in input { width: 100%; min-width: 0; height: 28px; padding: 0 6px; font: inherit; font-size: 12px; color: var(--text); }
+.ld-unit { color: var(--muted); font-size: 11px; }
+.ld-target { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+.ld-target .ld-note { flex: 1; margin: 0; }
+.ld-start { flex: none; }
+
 /* styles/phase3-agent.css */
 /* Phase 3: the Ask panel, the first-visit tour prompt, and driver.js pressed into the project's tokens.
    No new colours: surface, raised and rule steps only; no shadows, gradients or glow. */
@@ -6576,18 +6588,62 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     }
   }
 
+  // a translucent fill over a closed ring of { latDeg, lonDeg } (the highlighted region): the ring in a gnomonic plane
+  // about its centre (great circles straight), triangulated (concave outlines too), each triangle split so the fill
+  // follows the sphere, lifted a little and drawn over the terrain
+  function regionFill(ring, color, opacity) {
+    const T = view.THREE, R = Math.PI / 180;
+    const u = (p) => { const la = p.latDeg * R, lo = p.lonDeg * R; return [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)]; };
+    const pts = ring.slice(0, -1);
+    if (pts.length < 3) return null;
+    const c = [0, 0, 0];
+    for (const p of pts) { const v = u(p); c[0] += v[0]; c[1] += v[1]; c[2] += v[2]; }
+    const n = Math.hypot(...c); if (!n) return null;
+    const C = c.map((v) => v / n);
+    let E = [-C[1], C[0], 0]; const e = Math.hypot(...E); E = e > 1e-9 ? E.map((v) => v / e) : [1, 0, 0];
+    const N = [C[1] * E[2] - C[2] * E[1], C[2] * E[0] - C[0] * E[2], C[0] * E[1] - C[1] * E[0]];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const flat = pts.map((p) => { const v = u(p), d = dot(v, C); return d > 1e-6 ? new T.Vector2(dot(v, E) / d, dot(v, N) / d) : null; });
+    if (flat.some((q) => !q)) return null;
+    const back = (x, y) => { const v = [C[0] + x * E[0] + y * N[0], C[1] + x * E[1] + y * N[1], C[2] + x * E[2] + y * N[2]], m = Math.hypot(...v); return { latDeg: Math.asin(v[2] / m) / R, lonDeg: Math.atan2(v[1], v[0]) / R }; };
+    const tris = T.ShapeUtils.triangulateShape(flat, []);
+    const lift = Math.min(0.012 * view.exaggeration, 0.002 + view.kmPerPx() * 0.5), pos = [];
+    const K = 6;   // each triangle in K² pieces
+    for (const [ia, ib, ic] of tris) {
+      const A = flat[ia], B = flat[ib], Cc = flat[ic];
+      const at = (i, j) => { const a = i / K, b = j / K; const x = A.x + (B.x - A.x) * a + (Cc.x - A.x) * b, y = A.y + (B.y - A.y) * a + (Cc.y - A.y) * b; const q = back(x, y); return view.surface(q.latDeg, q.lonDeg, lift); };
+      for (let i = 0; i < K; i++) for (let j = 0; j < K - i; j++) {
+        pos.push(...at(i, j), ...at(i + 1, j), ...at(i, j + 1));
+        if (i + j < K - 1) pos.push(...at(i + 1, j), ...at(i + 1, j + 1), ...at(i, j + 1));
+      }
+    }
+    const geom = new T.BufferGeometry();
+    geom.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    const mesh = new T.Mesh(geom, new T.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, side: T.DoubleSide }));
+    mesh.renderOrder = 12;
+    return mesh;
+  }
+
   // the regions held in latitude and longitude, drawn on the globe (the polar ones are in the draped picture)
   function refreshGeoRegions() {
     if (!view) return;
     const regs = getState().regions ?? {};
     const list = ['A', 'B'].filter((k) => isGeo(regs[k])).map((k) => [k, regs[k]]);
     const focus = getState().slot ?? 'A';
-    const key = JSON.stringify([list, focus]);
+    // the region the panel works on (main.js: the Regions panel, or Where to land in a region) is filled
+    const hi = api.regionFocus?.() ?? null, hiShape = hi ? regs[hi] : null;
+    const key = JSON.stringify([list, focus, hi, hiShape]);
     if (key === geoKey) return;
     geoKey = key;
     clearObj(geoObj); geoObj = null;
-    if (!list.length) return;
+    if (!list.length && !hiShape) return;
     const T = view.THREE, g = new T.Group();
+    if (hiShape) {
+      const ring = isGeo(hiShape) ? geoOutline(hiShape) : polarOutline(hiShape), col = hi === 'A' ? 0xffffff : 0xffd23d;
+      const fill = regionFill(ring, col, 0.16);
+      if (fill) g.add(fill);
+      if (!isGeo(hiShape)) g.add(surfaceLine(ring, col, { opacity: 0.95 }));   // a polar region's outline is in the drape; drawn bright here too
+    }
     for (const [k, sh] of list) {
       // the focused slot (the one the panel and the form act on) bright, the other one dimmed
       g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d, { opacity: list.length > 1 && k !== focus ? 0.45 : 0.95 }));
@@ -6706,7 +6762,8 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     onRegionDrawn: null,
     onFocus: null,
     onLandSpot: null,
-    isDrawing: null,   // () → a shape is half drawn on the polar map (main.js: mapView.drawing)   // (n) a numbered Where to land spot clicked
+    isDrawing: null,
+    regionFocus: null,   // () → 'A' | 'B' | null: the region to fill (the panel works on it)   // () → a shape is half drawn on the polar map (main.js: mapView.drawing)   // (n) a numbered Where to land spot clicked
     setLanding: (d) => { ready.then(() => setLanding(d)); },   // ({ pick, box, spots: [{ n, latDeg, lonDeg, grade, title }], sel } | null)   // ({ kind: 'region', slot } | { kind: 'route', id }) an outline or a route clicked with the Select tool   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
     // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
@@ -9503,6 +9560,9 @@ __m['lander/landeval.js'] = (() => {
 //   deps: { eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin? }
 //   evaluate → Promise<{ list: [pick, spot 1…5], grid, limit, battH, stayDays } | null (superseded by a newer call)>
 //   hooks: { onGrid(grid), onProgress(stage 1 | 2, fraction) }
+//   opts (the screening settings, ui/landcard.js): { minSun, minEarth (0–1, shares of the stay a grid point must reach
+//     to pass, besides slope, darkness against the battery and permanent shadow), radiusKm (around a point),
+//     cells (grid points over a region), ellipse: { downrangeM, crossrangeM } }
 //   evaluateRegion(shape, hooks) → the same search inside a drawn region (polar map km, or latitude/longitude,
 //     georegion.js) instead of 15 km around a point: about REGION_CELLS grid points over it, then the eight best in
 //     detail, five kept → { list: [spot 1…5], grid, limit, battH, stayDays, region: true }
@@ -9558,7 +9618,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
 
   // one place in detail: { site, landingMs, figs, verdict, resKm, polar, skyline, patch, distKm }
   // from: the proposed point, for distKm; fine: keep this place's terrain as L.fine
-  async function detail(c, { vehicle, limit, battH, stayDays, fromMs, from = null, fine = false }) {
+  async function detail(c, { vehicle, limit, battH, stayDays, fromMs, from = null, fine = false, ellipse = null }) {
     const dem = getDem();
     const polar = c.latDeg <= TERRAIN_MAX_LAT;
     const listed = sites.find((s) => distanceBearing(s, c).km < 0.2);
@@ -9579,7 +9639,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; patch = ctx.patch;
     }
     // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
-    const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
+    const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k, ...(ellipse ?? {}) });
     const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
     if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(xy[0], xy[1]) === 0 ? 1 : 0);
     else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
@@ -9598,7 +9658,10 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
   }
 
   let token = 0;
-  async function evaluate(latDeg, lonDeg, { onGrid = () => {}, onProgress = () => {} } = {}) {
+  // the hard limits of the screen: the navigator's (slope, longest dark against the battery, not in permanent shadow)
+  // and the settings' minimum Sun and Earth shares
+  const passOk = (q, ok, o) => ok && q.sun >= (o.minSun ?? 0) && q.earth >= (o.minEarth ?? 0);
+  async function evaluate(latDeg, lonDeg, { onGrid = () => {}, onProgress = () => {} } = {}, opts = {}) {
     const my = ++token;
     await loadLayers();
     if (my !== token) return null;
@@ -9615,8 +9678,9 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const land0 = pickLandingWindow(eph, pick0, mask0, fromMs)?.tMs ?? fromMs;
     const dirs4 = skyDirections(eph, land0, stayDays, 4);
     const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
-    const grid = searchGrid(x, y, { radiusKm: SEARCH_RADIUS_KM * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
-    const hb = (SEARCH_RADIUS_KM + stepKm / 2) * k;
+    const radiusKm = opts.radiusKm ?? SEARCH_RADIUS_KM;
+    const grid = searchGrid(x, y, { radiusKm: radiusKm * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
+    const hb = (radiusKm + stepKm / 2) * k;
     grid.box = { x0: x - hb, x1: x + hb, y0: y - hb, y1: y + hb };
     grid.cellKm = stepKm * k;
     onGrid(grid);
@@ -9629,7 +9693,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
       if (n % 24 === 23 || n === grid.length - 1) {
         const done = grid.slice(0, n + 1), s = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, i) => { q.score = s[i].score; q.ok = s[i].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        done.forEach((q, i) => { q.score = s[i].score; q.ok = passOk(q, s[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         onProgress(1, (n + 1) / grid.length);
         onGrid(grid);
         await tick();
@@ -9643,7 +9707,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const all = [pick, ...cands];
     onProgress(2, 0);
     for (let n = 0; n < all.length; n++) {
-      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs, from: pick0, fine: n === 0 }));
+      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs, from: pick0, fine: n === 0, ellipse: opts.ellipse }));
       if (my !== token) return null;
       onProgress(2, (n + 1) / all.length);
       await tick();
@@ -9652,10 +9716,10 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
     const list = [pick, ...cands.slice(0, 5)];
     list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
-    return { list, grid, limit, battH, stayDays };
+    return { list, grid, limit, battH, stayDays, radiusKm, screened: grid.length, passed: grid.filter((p) => p.ok).length };
   }
   // ---- inside a drawn region ----
-  async function evaluateRegion(shape, { onGrid = () => {}, onProgress = () => {} } = {}) {
+  async function evaluateRegion(shape, { onGrid = () => {}, onProgress = () => {} } = {}, opts = {}) {
     const my = ++token;
     await loadLayers();
     if (my !== token) return null;
@@ -9674,7 +9738,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       const lo0 = c + Math.min(...rel), lo1 = c + Math.max(...rel);
       const midCos = Math.max(0.05, Math.cos(((la0 + la1) / 2) * Math.PI / 180));
       const areaKm2 = (la1 - la0) * 30.32 * (lo1 - lo0) * 30.32 * midCos;
-      stepKm = Math.max(2, Math.sqrt(areaKm2 / REGION_CELLS));
+      stepKm = Math.max(2, Math.sqrt(areaKm2 / (opts.cells ?? REGION_CELLS)));
       const dLat = stepKm / 30.32;
       for (let la = la0 + dLat / 2; la < la1; la += dLat) {
         const dLon = dLat / Math.max(0.05, Math.cos((la * Math.PI) / 180));
@@ -9685,7 +9749,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       }
     } else {
       const b = polarBbox(shape), area = (b.x1 - b.x0) * (b.y1 - b.y0);
-      stepKm = Math.max(1, Math.sqrt(area / REGION_CELLS));
+      stepKm = Math.max(1, Math.sqrt(area / (opts.cells ?? REGION_CELLS)));
       for (let y = b.y0 + stepKm / 2; y < b.y1; y += stepKm) for (let x = b.x0 + stepKm / 2; x < b.x1; x += stepKm) {
         if (polarContains(shape, x, y)) { const ll = fromXY(x, y); pts.push({ latDeg: ll.latDeg, lonDeg: ll.lonDeg, xKm: x, yKm: y }); }
       }
@@ -9713,7 +9777,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: polar ? slopeAt(p.xKm, p.yKm) : slopeLL(p), shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
       if (n % 16 === 15 || n === pts.length - 1) {
         const done = pts.slice(0, n + 1), sc = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, i) => { q.score = sc[i].score; q.ok = sc[i].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        done.forEach((q, i) => { q.score = sc[i].score; q.ok = passOk(q, sc[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         onProgress(1, (n + 1) / pts.length);
         await tick();
         if (my !== token) return null;
@@ -9724,7 +9788,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: toXY(p.latDeg, p.lonDeg)[0], yKm: toXY(p.latDeg, p.lonDeg)[1], score: p.score }));
     onProgress(2, 0);
     for (let n = 0; n < cands.length; n++) {
-      Object.assign(cands[n], await detail(cands[n], { vehicle, limit, battH, stayDays, fromMs }));
+      Object.assign(cands[n], await detail(cands[n], { vehicle, limit, battH, stayDays, fromMs, ellipse: opts.ellipse }));
       if (my !== token) return null;
       onProgress(2, (n + 1) / cands.length);
       await tick();
@@ -9853,7 +9917,9 @@ __m['ui/landcard.js'] = (() => {
 // candidate chooser. The globe draws the point, the search square and the numbered spots (ui/globemap.js).
 //
 // createLandCard({ actionBar }, cb) → { el, update(params) }
-//   cb: { onUse(candidate), onSearch(), onSelect(n) }
+//   cb: { onUse(candidate), onStart(), onSelect(n), onParams(params) }
+//   The settings (LAND_FIELDS) sit at the top; nothing runs until Start screening (in the panel and the bar). The
+//   target is a drawn region (Where to land in A/B) or a point (a click on the Moon; the site when the panel opens).
 //   params (each optional; missing keeps what is shown):
 //     assume: string            the assumptions line (ellipse, slope limit, stay, battery)
 //     pick: { latDeg, lonDeg } | null   the proposed point
@@ -9861,7 +9927,23 @@ __m['ui/landcard.js'] = (() => {
 //     busy: { stage: 1 | 2, f } | null  the search running (stage 1: the grid, stage 2: the detail)
 //     result: { list: [pick, spot 1…5] } | null, sel: number   landeval.js evaluate() result and the chosen one
 //     error: string | null
+//     params: { slopeDeg, downrangeM, crossrangeM, batteryWh, loadW, reservePct, minSunPct, minEarthPct, radiusKm, cells }
+//     stayDays: number           shown beside the settings (it is the time dock's)
 const { h, clear } = __m['ui/dom.js'];
+
+// the screening settings: [key, label, unit, min, max, step, title]
+const LAND_FIELDS = [
+  ['slopeDeg', 'Slope limit', '°', 2, 30, 1, 'The lander\'s touchdown slope limit: steeper ground fails (assumed)'],
+  ['downrangeM', 'Ellipse down-range', 'm', 10, 5000, 10, '3σ landing dispersion along the descent (assumed)'],
+  ['crossrangeM', 'Ellipse cross-range', 'm', 10, 5000, 10, '3σ landing dispersion across the descent (assumed)'],
+  ['batteryWh', 'Battery', 'Wh', 100, 100000, 100, 'Battery capacity (assumed)'],
+  ['loadW', 'Surface load', 'W', 10, 5000, 10, 'Power drawn on the surface through the night (assumed)'],
+  ['reservePct', 'Battery reserve', '%', 0, 90, 5, 'Charge kept unused: the longest dark spell must fit in the rest'],
+  ['minSunPct', 'Min. Sun over the stay', '%', 0, 100, 5, 'A grid point passes only with the Sun above the skyline at least this share of the stay'],
+  ['minEarthPct', 'Min. Earth over the stay', '%', 0, 100, 5, 'A grid point passes only with the Earth in view at least this share of the stay (0: no direct link needed)'],
+  ['radiusKm', 'Search radius (point)', 'km', 2, 60, 1, 'Around a point: the square searched for better spots'],
+  ['cells', 'Grid points (region)', '', 50, 2000, 50, 'Over a region: how many points are screened (more is finer and slower)'],
+];
 
 const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
 const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
@@ -9871,13 +9953,43 @@ const short = (f) => (f ? f.text.split(' (')[0].split(' · ')[0] : '—');
 function createLandCard({ actionBar = null } = {}, cb = {}) {
   const assume = h('p', { class: 'ld-assume' });
   const body = h('div', { class: 'ld-body' });
-  const el = h('section', { class: 'card card-land', 'aria-label': 'Where to land' }, h('h2', null, 'Where to land'), assume, body);
-  let st = { assume: '', pick: null, region: null, busy: null, result: null, sel: 0, error: null };
+  // the settings, built once (a re-render would take the focus out of a field being typed in)
+  const inputs = {};
+  const stayNote = h('p', { class: 'ld-note' });
+  const settings = h('details', { class: 'ld-settings', open: true },
+    h('summary', null, 'Screening settings'),
+    h('div', { class: 'ld-grid' }, LAND_FIELDS.map(([key, label, unit, min, max, step, title]) => {
+      const inp = h('input', { type: 'number', class: 'input num', min: String(min), max: String(max), step: String(step), 'aria-label': label, title });
+      inp.addEventListener('change', () => {
+        const v = Number(inp.value);
+        if (!Number.isFinite(v)) return;
+        const c = Math.min(max, Math.max(min, v));
+        if (c !== v) inp.value = String(c);
+        cb.onParams?.({ ...st.params, [key]: c });
+      });
+      inputs[key] = inp;
+      return h('label', { class: 'ld-field', title }, h('span', null, label), h('span', { class: 'ld-in' }, inp, unit ? h('span', { class: 'ld-unit' }, unit) : null));
+    })),
+    stayNote);
+  const el = h('section', { class: 'card card-land', 'aria-label': 'Where to land' }, h('h2', null, 'Where to land'), settings, assume, body);
+  let st = { assume: '', pick: null, region: null, busy: null, result: null, sel: 0, error: null, params: null, stayDays: 14 };
+  // the target and the Start screening button (also in the action bar)
+  function startBlock() {
+    const { pick, region, busy } = st;
+    const target = region ? `Region ${region}` : pick ? `the point ${fmtLat(pick.latDeg)} ${fmtLon(pick.lonDeg)}` : null;
+    const btn = h('button', { type: 'button', class: 'btn primary ld-start', disabled: !target || !!busy ? true : null }, busy ? 'Screening…' : 'Start screening');
+    btn.addEventListener('click', () => cb.onStart?.());
+    return h('div', { class: 'ld-target' },
+      h('p', { class: 'ld-note' }, target ? `Target: ${target}.` : 'Target: click the Moon for a point, or use Where to land in A / B on a drawn region.', ' ', region ? 'The whole region is screened.' : pick ? `The ground within ${st.params?.radiusKm ?? 15} km is searched for better spots.` : ''),
+      btn);
+  }
 
   function renderBody() {
     clear(body);
     const { pick, region, busy, result, sel, error } = st;
+    body.append(startBlock());
     if (error) { body.append(h('p', { class: 'ld-note is-warn' }, error)); return; }
+    if ((pick || region) && !busy && !result && !error) return;   // ready: waits for Start screening
     if (region && (busy || !result)) {
       const f = busy?.f ?? 0;
       body.append(
@@ -9887,7 +9999,7 @@ function createLandCard({ actionBar = null } = {}, cb = {}) {
       return;
     }
     if (region && result && !result.list.length) {
-      body.append(h('p', { class: 'ld-point' }, h('b', null, `Region ${region}`)), h('p', { class: 'ld-note is-warn' }, `No grid point in region ${region} passes the hard limits (slope, longest dark spell against the battery, permanent shadow)${result.screened ? `: ${result.screened} points screened every ${result.stepKm.toFixed(1)} km` : ''}. Try a larger region, another stay, or a point of your own (click the Moon).`));
+      body.append(h('p', { class: 'ld-point' }, h('b', null, `Region ${region}`)), h('p', { class: 'ld-note is-warn' }, `No grid point in region ${region} passes the hard limits (slope, longest dark spell against the battery, permanent shadow${st.params?.minSunPct ? `, Sun ≥ ${st.params.minSunPct} %` : ''}${st.params?.minEarthPct ? `, Earth ≥ ${st.params.minEarthPct} %` : ''})${result.screened ? `: ${result.screened} points screened every ${result.stepKm.toFixed(1)} km` : ''}. Loosen the settings, try a larger region or another stay, or a point of your own (click the Moon).`));
       return;
     }
     if (!pick && !region) {
@@ -9895,6 +10007,7 @@ function createLandCard({ actionBar = null } = {}, cb = {}) {
       return;
     }
     if (busy || !result) {
+      if (!busy) return;
       const f = busy?.f ?? 0;
       body.append(
         h('p', { class: 'ld-point' }, h('b', null, 'Your point'), ` · ${fmtLat(pick.latDeg)} ${fmtLon(pick.lonDeg)}`),
@@ -9937,7 +10050,7 @@ function createLandCard({ actionBar = null } = {}, cb = {}) {
     const target = c ? (c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name) : '';
     actionBar.set('land', 'land', [
       { id: 'use', label: c ? `Use this site: ${target}` : 'Use this site', short: 'Use', icon: 'use', primary: !!c, disabled: !c, hint: busy ? 'Searching…' : 'Click the Moon to propose a point', title: c ? `Make ${target} the mission's site, landing ${utc(c.landingMs)}` : undefined, onClick: () => c && cb.onUse?.(c) },
-      { id: 'search', label: busy ? 'Searching…' : region ? `Search region ${region} again` : 'Find better spots', short: 'Search', icon: 'route', disabled: !(pick || region) || !!busy, hint: 'Click the Moon to propose a point', title: region ? `Screen region ${region} again` : 'Search 15 km around your point again', onClick: () => cb.onSearch?.() },
+      { id: 'start', label: busy ? 'Screening…' : 'Start screening', short: 'Start', icon: 'go', primary: !c && !!(pick || region) && !busy, disabled: !(pick || region) || !!busy, hint: 'Click the Moon or choose a region first', title: region ? `Screen region ${region} with the settings` : 'Search around the point with the settings', onClick: () => cb.onStart?.() },
       { type: 'segmented', id: 'spot', label: 'Candidate', value: result ? String(sel) : null, hint: busy ? `Searching… ${Math.round((busy.stage === 2 ? 50 : 0) + (busy.f ?? 0) * 50)}%` : 'No spots yet',
         options: result ? result.list.map((x, n) => ({ id: String(n), label: result.region ? String(n + 1) : n === 0 ? 'Yours' : String(n), title: `${x.name}: ${x.verdict.text}` })) : [],
         onChange: (id) => cb.onSelect?.(Number(id)) },
@@ -9947,6 +10060,8 @@ function createLandCard({ actionBar = null } = {}, cb = {}) {
   function update(p = {}) {
     st = { ...st, ...p };
     assume.textContent = st.assume;
+    if (p.params) for (const [k, inp] of Object.entries(inputs)) if (document.activeElement !== inp && p.params[k] !== undefined) inp.value = String(p.params[k]);
+    stayNote.textContent = `Stay: ${st.stayDays} days from each place's first lit window (set the stay in the time dock). Battery, loads, ellipse and slope limit are assumptions.`;
     renderBody();
     renderBar();
   }
@@ -9954,7 +10069,7 @@ function createLandCard({ actionBar = null } = {}, cb = {}) {
   return { el, update };
 }
 
-return { createLandCard };
+return { LAND_FIELDS, createLandCard };
 })();
 __m['boot.js'] = (() => {
 // Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
@@ -27131,6 +27246,8 @@ function start() {
     globeMap.onLandSpot = (n) => selectLanding(land.region ? n - 1 : n);
     // a click on a region's outline or on a route: the panel turns to it (a candidate route is chosen as well)
     globeMap.isDrawing = () => !!mapView?.drawing;
+    // the region to fill: the one the Regions panel works on, or the Where to land target
+    globeMap.regionFocus = () => { try { return kind === 'land' ? land.region : kind === 'region' ? state.slot : null; } catch { return null; } };
     globeMap.onFocus = (f) => {
       if (f.kind === 'region') {
         kind = 'region';
@@ -27331,10 +27448,25 @@ function start() {
   }
   if (routePlanCard) mapView.mountFold('plan', routePlanCard.el);
 
-  // ---- Where to land in the Map's panel (ui/landcard.js; the planner's method, lander/landeval.js): a click on the
-  // Moon proposes a point while the panel is open; the point and the best spots within 15 km are scored; the globe
-  // shows the point, the search square and the numbered spots; Use this site makes one the mission's site ----
-  const landVehicle = () => cleanVehicle(readMission()?.vehicle ?? { ...VEHICLE_DEFAULTS });
+  // ---- Where to land in the Map's panel (ui/landcard.js; the planner's method, lander/landeval.js). The target is a
+  // point (a click on the Moon while the panel is open; the site when it opens) or a drawn region (Where to land in
+  // A / B); the settings sit in the panel and nothing runs until Start screening. The globe shows the point, the
+  // search square or the filled region, and the numbered spots; Use this site makes one the mission's site ----
+  const LAND_KEY = 'lsn-land-params';
+  const baseVehicle = () => cleanVehicle(readMission()?.vehicle ?? { ...VEHICLE_DEFAULTS });
+  const v0 = baseVehicle();
+  let landParams = {
+    slopeDeg: v0.touchdown.maxSlopeDeg, downrangeM: ELLIPSE.downrangeM, crossrangeM: ELLIPSE.crossrangeM,
+    batteryWh: v0.batteryWh, loadW: v0.loadsW.surface, reservePct: Math.round(v0.batteryMinSoc * 100),
+    minSunPct: 0, minEarthPct: 0, radiusKm: 15, cells: 500,
+    ...(() => { try { return JSON.parse(localStorage.getItem(LAND_KEY) ?? 'null') ?? {}; } catch { return {}; } })(),
+  };
+  // the mission's vehicle with the screening settings over it (the settings stay the screen's own: Finalise keeps its vehicle)
+  const landVehicle = () => {
+    const v = baseVehicle(), p = landParams;
+    return { ...v, batteryWh: p.batteryWh, batteryMinSoc: p.reservePct / 100, loadsW: { ...v.loadsW, surface: p.loadW }, touchdown: { ...v.touchdown, maxSlopeDeg: p.slopeDeg } };
+  };
+  const landOpts = () => ({ minSun: landParams.minSunPct / 100, minEarth: landParams.minEarthPct / 100, radiusKm: landParams.radiusKm, cells: landParams.cells, ellipse: { downrangeM: landParams.downrangeM, crossrangeM: landParams.crossrangeM } });
   const landEval = createLandingEvaluator({
     eph, sites, meta, getDem: () => dem, siteCtx: globalSites,
     hires: (() => { const m = readJson('data-hires'); return m ? createHiresSet(m, (name) => loadData(name, { timeoutMs: 60000 })) : null; })(),
@@ -27346,17 +27478,18 @@ function start() {
   let land = { pick: null, region: null, busy: null, result: null, sel: 0, error: null };
   const landCard = mapView ? createLandCard({ actionBar: mapView.actionBar }, {
     onUse: (c) => useLanding(c),
-    onSearch: () => { if (land.region) searchRegion(land.region); else if (land.pick) proposeLanding(land.pick); },
+    onStart: () => runLanding(),
     onSelect: (n) => selectLanding(n),
+    onParams: (p) => { landParams = p; try { localStorage.setItem(LAND_KEY, JSON.stringify(p)); } catch { /* not remembered */ } showLanding(); },
   }) : null;
   if (landCard) mapView.mountFold('land', landCard.el);
   function landAssume() {
     const v = landVehicle();
-    return `Assumed: 3σ landing ellipse ${ELLIPSE.downrangeM} m down-range × ${ELLIPSE.crossrangeM} m cross-range (terrain-relative navigation); slope limit ${v.touchdown.maxSlopeDeg}°; stay ${state.stayDays} days from the first lit window; battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on a ${v.loadsW.surface} W surface load = ${batteryHours(v).toFixed(1)} h of darkness.`;
+    return `With these settings: ${landParams.downrangeM} × ${landParams.crossrangeM} m landing ellipse, slope limit ${v.touchdown.maxSlopeDeg}°, battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on ${v.loadsW.surface} W = ${batteryHours(v).toFixed(1)} h of darkness${landParams.minSunPct ? `, Sun ≥ ${landParams.minSunPct} %` : ''}${landParams.minEarthPct ? `, Earth ≥ ${landParams.minEarthPct} %` : ''}.`;
   }
   function showLanding() {
-    landCard?.update({ ...land, assume: landAssume() });
-    mapView?.setFoldSummary('land', land.result ? land.result.list[land.sel]?.verdict.grade ?? '' : land.busy ? 'Searching…' : land.pick ? '' : 'Click the Moon');
+    landCard?.update({ ...land, assume: landAssume(), params: landParams, stayDays: state.stayDays });
+    mapView?.setFoldSummary('land', land.result ? land.result.list[land.sel]?.verdict.grade ?? '' : land.busy ? 'Screening…' : land.region ? `Region ${land.region}` : land.pick ? 'Point' : 'Click the Moon');
     landMarks();
   }
   // the point, the square and the spots on the globe, while the panel is open (globemap.js skips an unchanged set)
@@ -27368,35 +27501,34 @@ function start() {
     const spots = (land.result?.list ?? []).slice(from).map((c, i) => ({ n: i + 1, latDeg: c.latDeg, lonDeg: c.lonDeg, grade: c.verdict.grade, title: `${c.name}: ${c.verdict.text}` }));
     globeMap.setLanding({ pick: land.pick, box: land.box ?? null, spots, sel: land.sel + off });
   }
+  // the target: a point (ready, not run)
   function proposeLanding(p) {
+    landEval.cancel();
     const pick = { latDeg: +p.latDeg.toFixed(5), lonDeg: +(((p.lonDeg % 360) + 360) % 360).toFixed(5) };
-    land = { pick, region: null, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null };
+    land = { pick, region: null, busy: null, result: null, sel: 0, error: null, box: null };
     showLanding();
-    landEval.evaluate(pick.latDeg, pick.lonDeg, {
-      onGrid: (g) => { if (land.pick === pick && land.box !== g.box) { land.box = g.box; showLanding(); } },
-      onProgress: (stage, f) => { if (land.pick !== pick) return; land.busy = { stage, f }; landCard?.update({ busy: land.busy }); },
-    }).then((res) => {
-      if (!res || land.pick !== pick) return;
-      land = { ...land, busy: null, result: res, sel: 0 };
-      showLanding();
-    }).catch((e) => {
-      if (land.pick !== pick) return;
-      land = { ...land, busy: null, error: `The search failed: ${e?.message ?? e}` };
-      showLanding();
-    });
   }
-  // Where to land inside a drawn region (its outline is already on the globe): the best spots in it
+  // the target: a drawn region (its outline is on the globe; it is filled while it is the target)
   function searchRegion(slot) {
-    const shape = shapes[slot];
-    if (!shape) return;
-    const token = {};
-    land = { pick: null, region: slot, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null, token };
+    if (!shapes[slot]) return;
+    landEval.cancel();
+    land = { pick: null, region: slot, busy: null, result: null, sel: 0, error: null, box: null };
     kind = 'land';
-    update({ tool: 'select' });
+    update({ tool: 'select', slot });
     showLanding();
-    landEval.evaluateRegion(shape, {
+  }
+  // Start screening: the point's search or the region's, with the settings
+  function runLanding() {
+    if (!(land.pick || land.region) || land.busy) return;
+    const token = {}, region = land.region, pick = land.pick;
+    land = { ...land, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null, token };
+    showLanding();
+    const hooks = {
+      onGrid: (g) => { if (land.token === token && g.box && land.box !== g.box) { land.box = g.box; landMarks(); } },
       onProgress: (stage, f) => { if (land.token !== token) return; land.busy = { stage, f }; landCard?.update({ busy: land.busy }); },
-    }).then((res) => {
+    };
+    const job = region ? landEval.evaluateRegion(shapes[region], hooks, landOpts()) : landEval.evaluate(pick.latDeg, pick.lonDeg, hooks, landOpts());
+    job.then((res) => {
       if (!res || land.token !== token) return;
       land = { ...land, busy: null, result: res, sel: 0 };
       showLanding();
@@ -27409,7 +27541,7 @@ function start() {
   // the Regions panel's bar: Where to land in the current region
   function syncRegionLandBar() {
     const slot = state.slot ?? 'A', sh = shapes[slot];
-    mapView?.actionBar.set('region', 'land', sh ? [{ id: 'land-region', label: `Where to land in ${slot}`, short: 'Land', icon: 'go', title: `Find the best landing spots inside region ${slot} (the Where to land method, over the whole region)`, onClick: () => searchRegion(slot) }] : []);
+    mapView?.actionBar.set('region', 'land', sh ? [{ id: 'land-region', label: `Where to land in ${slot}`, short: 'Land', icon: 'go', title: `Screen region ${slot} for the best landing spots: opens Where to land with the region as the target; set the screening, then Start screening`, onClick: () => searchRegion(slot) }] : []);
   }
   function selectLanding(n) {
     const c = land.result?.list[n];
@@ -27431,7 +27563,7 @@ function start() {
   function openLanding() {
     kind = 'land';
     update(state.view !== 'map' ? { view: 'map', tool: 'select' } : { tool: 'select' });
-    if (!land.pick && state.site) proposeLanding(state.site);
+    if (!land.pick && !land.region && state.site) proposeLanding(state.site);   // the site as the first target; Start runs it
     else showLanding();
   }
   if (routePlanCard && rp.points) routePlanCard.update({ points: rp.points, ...(rp.maxSlopeDeg ? { maxSlopeDeg: rp.maxSlopeDeg } : {}) });

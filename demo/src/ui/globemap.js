@@ -726,18 +726,62 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     }
   }
 
+  // a translucent fill over a closed ring of { latDeg, lonDeg } (the highlighted region): the ring in a gnomonic plane
+  // about its centre (great circles straight), triangulated (concave outlines too), each triangle split so the fill
+  // follows the sphere, lifted a little and drawn over the terrain
+  function regionFill(ring, color, opacity) {
+    const T = view.THREE, R = Math.PI / 180;
+    const u = (p) => { const la = p.latDeg * R, lo = p.lonDeg * R; return [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)]; };
+    const pts = ring.slice(0, -1);
+    if (pts.length < 3) return null;
+    const c = [0, 0, 0];
+    for (const p of pts) { const v = u(p); c[0] += v[0]; c[1] += v[1]; c[2] += v[2]; }
+    const n = Math.hypot(...c); if (!n) return null;
+    const C = c.map((v) => v / n);
+    let E = [-C[1], C[0], 0]; const e = Math.hypot(...E); E = e > 1e-9 ? E.map((v) => v / e) : [1, 0, 0];
+    const N = [C[1] * E[2] - C[2] * E[1], C[2] * E[0] - C[0] * E[2], C[0] * E[1] - C[1] * E[0]];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const flat = pts.map((p) => { const v = u(p), d = dot(v, C); return d > 1e-6 ? new T.Vector2(dot(v, E) / d, dot(v, N) / d) : null; });
+    if (flat.some((q) => !q)) return null;
+    const back = (x, y) => { const v = [C[0] + x * E[0] + y * N[0], C[1] + x * E[1] + y * N[1], C[2] + x * E[2] + y * N[2]], m = Math.hypot(...v); return { latDeg: Math.asin(v[2] / m) / R, lonDeg: Math.atan2(v[1], v[0]) / R }; };
+    const tris = T.ShapeUtils.triangulateShape(flat, []);
+    const lift = Math.min(0.012 * view.exaggeration, 0.002 + view.kmPerPx() * 0.5), pos = [];
+    const K = 6;   // each triangle in K² pieces
+    for (const [ia, ib, ic] of tris) {
+      const A = flat[ia], B = flat[ib], Cc = flat[ic];
+      const at = (i, j) => { const a = i / K, b = j / K; const x = A.x + (B.x - A.x) * a + (Cc.x - A.x) * b, y = A.y + (B.y - A.y) * a + (Cc.y - A.y) * b; const q = back(x, y); return view.surface(q.latDeg, q.lonDeg, lift); };
+      for (let i = 0; i < K; i++) for (let j = 0; j < K - i; j++) {
+        pos.push(...at(i, j), ...at(i + 1, j), ...at(i, j + 1));
+        if (i + j < K - 1) pos.push(...at(i + 1, j), ...at(i + 1, j + 1), ...at(i, j + 1));
+      }
+    }
+    const geom = new T.BufferGeometry();
+    geom.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    const mesh = new T.Mesh(geom, new T.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, side: T.DoubleSide }));
+    mesh.renderOrder = 12;
+    return mesh;
+  }
+
   // the regions held in latitude and longitude, drawn on the globe (the polar ones are in the draped picture)
   function refreshGeoRegions() {
     if (!view) return;
     const regs = getState().regions ?? {};
     const list = ['A', 'B'].filter((k) => isGeo(regs[k])).map((k) => [k, regs[k]]);
     const focus = getState().slot ?? 'A';
-    const key = JSON.stringify([list, focus]);
+    // the region the panel works on (main.js: the Regions panel, or Where to land in a region) is filled
+    const hi = api.regionFocus?.() ?? null, hiShape = hi ? regs[hi] : null;
+    const key = JSON.stringify([list, focus, hi, hiShape]);
     if (key === geoKey) return;
     geoKey = key;
     clearObj(geoObj); geoObj = null;
-    if (!list.length) return;
+    if (!list.length && !hiShape) return;
     const T = view.THREE, g = new T.Group();
+    if (hiShape) {
+      const ring = isGeo(hiShape) ? geoOutline(hiShape) : polarOutline(hiShape), col = hi === 'A' ? 0xffffff : 0xffd23d;
+      const fill = regionFill(ring, col, 0.16);
+      if (fill) g.add(fill);
+      if (!isGeo(hiShape)) g.add(surfaceLine(ring, col, { opacity: 0.95 }));   // a polar region's outline is in the drape; drawn bright here too
+    }
     for (const [k, sh] of list) {
       // the focused slot (the one the panel and the form act on) bright, the other one dimmed
       g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d, { opacity: list.length > 1 && k !== focus ? 0.45 : 0.95 }));
@@ -856,7 +900,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     onRegionDrawn: null,
     onFocus: null,
     onLandSpot: null,
-    isDrawing: null,   // () → a shape is half drawn on the polar map (main.js: mapView.drawing)   // (n) a numbered Where to land spot clicked
+    isDrawing: null,
+    regionFocus: null,   // () → 'A' | 'B' | null: the region to fill (the panel works on it)   // () → a shape is half drawn on the polar map (main.js: mapView.drawing)   // (n) a numbered Where to land spot clicked
     setLanding: (d) => { ready.then(() => setLanding(d)); },   // ({ pick, box, spots: [{ n, latDeg, lonDeg, grade, title }], sel } | null)   // ({ kind: 'region', slot } | { kind: 'route', id }) an outline or a route clicked with the Select tool   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
     // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand

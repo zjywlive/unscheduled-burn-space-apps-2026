@@ -371,6 +371,8 @@ function start() {
     globeMap.onLandSpot = (n) => selectLanding(land.region ? n - 1 : n);
     // a click on a region's outline or on a route: the panel turns to it (a candidate route is chosen as well)
     globeMap.isDrawing = () => !!mapView?.drawing;
+    // the region to fill: the one the Regions panel works on, or the Where to land target
+    globeMap.regionFocus = () => { try { return kind === 'land' ? land.region : kind === 'region' ? state.slot : null; } catch { return null; } };
     globeMap.onFocus = (f) => {
       if (f.kind === 'region') {
         kind = 'region';
@@ -571,10 +573,25 @@ function start() {
   }
   if (routePlanCard) mapView.mountFold('plan', routePlanCard.el);
 
-  // ---- Where to land in the Map's panel (ui/landcard.js; the planner's method, lander/landeval.js): a click on the
-  // Moon proposes a point while the panel is open; the point and the best spots within 15 km are scored; the globe
-  // shows the point, the search square and the numbered spots; Use this site makes one the mission's site ----
-  const landVehicle = () => cleanVehicle(readMission()?.vehicle ?? { ...VEHICLE_DEFAULTS });
+  // ---- Where to land in the Map's panel (ui/landcard.js; the planner's method, lander/landeval.js). The target is a
+  // point (a click on the Moon while the panel is open; the site when it opens) or a drawn region (Where to land in
+  // A / B); the settings sit in the panel and nothing runs until Start screening. The globe shows the point, the
+  // search square or the filled region, and the numbered spots; Use this site makes one the mission's site ----
+  const LAND_KEY = 'lsn-land-params';
+  const baseVehicle = () => cleanVehicle(readMission()?.vehicle ?? { ...VEHICLE_DEFAULTS });
+  const v0 = baseVehicle();
+  let landParams = {
+    slopeDeg: v0.touchdown.maxSlopeDeg, downrangeM: ELLIPSE.downrangeM, crossrangeM: ELLIPSE.crossrangeM,
+    batteryWh: v0.batteryWh, loadW: v0.loadsW.surface, reservePct: Math.round(v0.batteryMinSoc * 100),
+    minSunPct: 0, minEarthPct: 0, radiusKm: 15, cells: 500,
+    ...(() => { try { return JSON.parse(localStorage.getItem(LAND_KEY) ?? 'null') ?? {}; } catch { return {}; } })(),
+  };
+  // the mission's vehicle with the screening settings over it (the settings stay the screen's own: Finalise keeps its vehicle)
+  const landVehicle = () => {
+    const v = baseVehicle(), p = landParams;
+    return { ...v, batteryWh: p.batteryWh, batteryMinSoc: p.reservePct / 100, loadsW: { ...v.loadsW, surface: p.loadW }, touchdown: { ...v.touchdown, maxSlopeDeg: p.slopeDeg } };
+  };
+  const landOpts = () => ({ minSun: landParams.minSunPct / 100, minEarth: landParams.minEarthPct / 100, radiusKm: landParams.radiusKm, cells: landParams.cells, ellipse: { downrangeM: landParams.downrangeM, crossrangeM: landParams.crossrangeM } });
   const landEval = createLandingEvaluator({
     eph, sites, meta, getDem: () => dem, siteCtx: globalSites,
     hires: (() => { const m = readJson('data-hires'); return m ? createHiresSet(m, (name) => loadData(name, { timeoutMs: 60000 })) : null; })(),
@@ -586,17 +603,18 @@ function start() {
   let land = { pick: null, region: null, busy: null, result: null, sel: 0, error: null };
   const landCard = mapView ? createLandCard({ actionBar: mapView.actionBar }, {
     onUse: (c) => useLanding(c),
-    onSearch: () => { if (land.region) searchRegion(land.region); else if (land.pick) proposeLanding(land.pick); },
+    onStart: () => runLanding(),
     onSelect: (n) => selectLanding(n),
+    onParams: (p) => { landParams = p; try { localStorage.setItem(LAND_KEY, JSON.stringify(p)); } catch { /* not remembered */ } showLanding(); },
   }) : null;
   if (landCard) mapView.mountFold('land', landCard.el);
   function landAssume() {
     const v = landVehicle();
-    return `Assumed: 3σ landing ellipse ${ELLIPSE.downrangeM} m down-range × ${ELLIPSE.crossrangeM} m cross-range (terrain-relative navigation); slope limit ${v.touchdown.maxSlopeDeg}°; stay ${state.stayDays} days from the first lit window; battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on a ${v.loadsW.surface} W surface load = ${batteryHours(v).toFixed(1)} h of darkness.`;
+    return `With these settings: ${landParams.downrangeM} × ${landParams.crossrangeM} m landing ellipse, slope limit ${v.touchdown.maxSlopeDeg}°, battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on ${v.loadsW.surface} W = ${batteryHours(v).toFixed(1)} h of darkness${landParams.minSunPct ? `, Sun ≥ ${landParams.minSunPct} %` : ''}${landParams.minEarthPct ? `, Earth ≥ ${landParams.minEarthPct} %` : ''}.`;
   }
   function showLanding() {
-    landCard?.update({ ...land, assume: landAssume() });
-    mapView?.setFoldSummary('land', land.result ? land.result.list[land.sel]?.verdict.grade ?? '' : land.busy ? 'Searching…' : land.pick ? '' : 'Click the Moon');
+    landCard?.update({ ...land, assume: landAssume(), params: landParams, stayDays: state.stayDays });
+    mapView?.setFoldSummary('land', land.result ? land.result.list[land.sel]?.verdict.grade ?? '' : land.busy ? 'Screening…' : land.region ? `Region ${land.region}` : land.pick ? 'Point' : 'Click the Moon');
     landMarks();
   }
   // the point, the square and the spots on the globe, while the panel is open (globemap.js skips an unchanged set)
@@ -608,35 +626,34 @@ function start() {
     const spots = (land.result?.list ?? []).slice(from).map((c, i) => ({ n: i + 1, latDeg: c.latDeg, lonDeg: c.lonDeg, grade: c.verdict.grade, title: `${c.name}: ${c.verdict.text}` }));
     globeMap.setLanding({ pick: land.pick, box: land.box ?? null, spots, sel: land.sel + off });
   }
+  // the target: a point (ready, not run)
   function proposeLanding(p) {
+    landEval.cancel();
     const pick = { latDeg: +p.latDeg.toFixed(5), lonDeg: +(((p.lonDeg % 360) + 360) % 360).toFixed(5) };
-    land = { pick, region: null, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null };
+    land = { pick, region: null, busy: null, result: null, sel: 0, error: null, box: null };
     showLanding();
-    landEval.evaluate(pick.latDeg, pick.lonDeg, {
-      onGrid: (g) => { if (land.pick === pick && land.box !== g.box) { land.box = g.box; showLanding(); } },
-      onProgress: (stage, f) => { if (land.pick !== pick) return; land.busy = { stage, f }; landCard?.update({ busy: land.busy }); },
-    }).then((res) => {
-      if (!res || land.pick !== pick) return;
-      land = { ...land, busy: null, result: res, sel: 0 };
-      showLanding();
-    }).catch((e) => {
-      if (land.pick !== pick) return;
-      land = { ...land, busy: null, error: `The search failed: ${e?.message ?? e}` };
-      showLanding();
-    });
   }
-  // Where to land inside a drawn region (its outline is already on the globe): the best spots in it
+  // the target: a drawn region (its outline is on the globe; it is filled while it is the target)
   function searchRegion(slot) {
-    const shape = shapes[slot];
-    if (!shape) return;
-    const token = {};
-    land = { pick: null, region: slot, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null, token };
+    if (!shapes[slot]) return;
+    landEval.cancel();
+    land = { pick: null, region: slot, busy: null, result: null, sel: 0, error: null, box: null };
     kind = 'land';
-    update({ tool: 'select' });
+    update({ tool: 'select', slot });
     showLanding();
-    landEval.evaluateRegion(shape, {
+  }
+  // Start screening: the point's search or the region's, with the settings
+  function runLanding() {
+    if (!(land.pick || land.region) || land.busy) return;
+    const token = {}, region = land.region, pick = land.pick;
+    land = { ...land, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null, token };
+    showLanding();
+    const hooks = {
+      onGrid: (g) => { if (land.token === token && g.box && land.box !== g.box) { land.box = g.box; landMarks(); } },
       onProgress: (stage, f) => { if (land.token !== token) return; land.busy = { stage, f }; landCard?.update({ busy: land.busy }); },
-    }).then((res) => {
+    };
+    const job = region ? landEval.evaluateRegion(shapes[region], hooks, landOpts()) : landEval.evaluate(pick.latDeg, pick.lonDeg, hooks, landOpts());
+    job.then((res) => {
       if (!res || land.token !== token) return;
       land = { ...land, busy: null, result: res, sel: 0 };
       showLanding();
@@ -649,7 +666,7 @@ function start() {
   // the Regions panel's bar: Where to land in the current region
   function syncRegionLandBar() {
     const slot = state.slot ?? 'A', sh = shapes[slot];
-    mapView?.actionBar.set('region', 'land', sh ? [{ id: 'land-region', label: `Where to land in ${slot}`, short: 'Land', icon: 'go', title: `Find the best landing spots inside region ${slot} (the Where to land method, over the whole region)`, onClick: () => searchRegion(slot) }] : []);
+    mapView?.actionBar.set('region', 'land', sh ? [{ id: 'land-region', label: `Where to land in ${slot}`, short: 'Land', icon: 'go', title: `Screen region ${slot} for the best landing spots: opens Where to land with the region as the target; set the screening, then Start screening`, onClick: () => searchRegion(slot) }] : []);
   }
   function selectLanding(n) {
     const c = land.result?.list[n];
@@ -671,7 +688,7 @@ function start() {
   function openLanding() {
     kind = 'land';
     update(state.view !== 'map' ? { view: 'map', tool: 'select' } : { tool: 'select' });
-    if (!land.pick && state.site) proposeLanding(state.site);
+    if (!land.pick && !land.region && state.site) proposeLanding(state.site);   // the site as the first target; Start runs it
     else showLanding();
   }
   if (routePlanCard && rp.points) routePlanCard.update({ points: rp.points, ...(rp.maxSlopeDeg ? { maxSlopeDeg: rp.maxSlopeDeg } : {}) });

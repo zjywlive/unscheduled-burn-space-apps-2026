@@ -10,6 +10,9 @@
 //   deps: { eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin? }
 //   evaluate → Promise<{ list: [pick, spot 1…5], grid, limit, battH, stayDays } | null (superseded by a newer call)>
 //   hooks: { onGrid(grid), onProgress(stage 1 | 2, fraction) }
+//   opts (the screening settings, ui/landcard.js): { minSun, minEarth (0–1, shares of the stay a grid point must reach
+//     to pass, besides slope, darkness against the battery and permanent shadow), radiusKm (around a point),
+//     cells (grid points over a region), ellipse: { downrangeM, crossrangeM } }
 //   evaluateRegion(shape, hooks) → the same search inside a drawn region (polar map km, or latitude/longitude,
 //     georegion.js) instead of 15 km around a point: about REGION_CELLS grid points over it, then the eight best in
 //     detail, five kept → { list: [spot 1…5], grid, limit, battH, stayDays, region: true }
@@ -65,7 +68,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
 
   // one place in detail: { site, landingMs, figs, verdict, resKm, polar, skyline, patch, distKm }
   // from: the proposed point, for distKm; fine: keep this place's terrain as L.fine
-  async function detail(c, { vehicle, limit, battH, stayDays, fromMs, from = null, fine = false }) {
+  async function detail(c, { vehicle, limit, battH, stayDays, fromMs, from = null, fine = false, ellipse = null }) {
     const dem = getDem();
     const polar = c.latDeg <= TERRAIN_MAX_LAT;
     const listed = sites.find((s) => distanceBearing(s, c).km < 0.2);
@@ -86,7 +89,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
       sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; patch = ctx.patch;
     }
     // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
-    const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
+    const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k, ...(ellipse ?? {}) });
     const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
     if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(xy[0], xy[1]) === 0 ? 1 : 0);
     else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
@@ -105,7 +108,10 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
   }
 
   let token = 0;
-  async function evaluate(latDeg, lonDeg, { onGrid = () => {}, onProgress = () => {} } = {}) {
+  // the hard limits of the screen: the navigator's (slope, longest dark against the battery, not in permanent shadow)
+  // and the settings' minimum Sun and Earth shares
+  const passOk = (q, ok, o) => ok && q.sun >= (o.minSun ?? 0) && q.earth >= (o.minEarth ?? 0);
+  async function evaluate(latDeg, lonDeg, { onGrid = () => {}, onProgress = () => {} } = {}, opts = {}) {
     const my = ++token;
     await loadLayers();
     if (my !== token) return null;
@@ -122,8 +128,9 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
     const land0 = pickLandingWindow(eph, pick0, mask0, fromMs)?.tMs ?? fromMs;
     const dirs4 = skyDirections(eph, land0, stayDays, 4);
     const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
-    const grid = searchGrid(x, y, { radiusKm: SEARCH_RADIUS_KM * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
-    const hb = (SEARCH_RADIUS_KM + stepKm / 2) * k;
+    const radiusKm = opts.radiusKm ?? SEARCH_RADIUS_KM;
+    const grid = searchGrid(x, y, { radiusKm: radiusKm * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
+    const hb = (radiusKm + stepKm / 2) * k;
     grid.box = { x0: x - hb, x1: x + hb, y0: y - hb, y1: y + hb };
     grid.cellKm = stepKm * k;
     onGrid(grid);
@@ -136,7 +143,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
       if (n % 24 === 23 || n === grid.length - 1) {
         const done = grid.slice(0, n + 1), s = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, i) => { q.score = s[i].score; q.ok = s[i].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        done.forEach((q, i) => { q.score = s[i].score; q.ok = passOk(q, s[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         onProgress(1, (n + 1) / grid.length);
         onGrid(grid);
         await tick();
@@ -150,7 +157,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
     const all = [pick, ...cands];
     onProgress(2, 0);
     for (let n = 0; n < all.length; n++) {
-      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs, from: pick0, fine: n === 0 }));
+      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs, from: pick0, fine: n === 0, ellipse: opts.ellipse }));
       if (my !== token) return null;
       onProgress(2, (n + 1) / all.length);
       await tick();
@@ -159,10 +166,10 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
     cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
     const list = [pick, ...cands.slice(0, 5)];
     list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
-    return { list, grid, limit, battH, stayDays };
+    return { list, grid, limit, battH, stayDays, radiusKm, screened: grid.length, passed: grid.filter((p) => p.ok).length };
   }
   // ---- inside a drawn region ----
-  async function evaluateRegion(shape, { onGrid = () => {}, onProgress = () => {} } = {}) {
+  async function evaluateRegion(shape, { onGrid = () => {}, onProgress = () => {} } = {}, opts = {}) {
     const my = ++token;
     await loadLayers();
     if (my !== token) return null;
@@ -181,7 +188,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
       const lo0 = c + Math.min(...rel), lo1 = c + Math.max(...rel);
       const midCos = Math.max(0.05, Math.cos(((la0 + la1) / 2) * Math.PI / 180));
       const areaKm2 = (la1 - la0) * 30.32 * (lo1 - lo0) * 30.32 * midCos;
-      stepKm = Math.max(2, Math.sqrt(areaKm2 / REGION_CELLS));
+      stepKm = Math.max(2, Math.sqrt(areaKm2 / (opts.cells ?? REGION_CELLS)));
       const dLat = stepKm / 30.32;
       for (let la = la0 + dLat / 2; la < la1; la += dLat) {
         const dLon = dLat / Math.max(0.05, Math.cos((la * Math.PI) / 180));
@@ -192,7 +199,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
       }
     } else {
       const b = polarBbox(shape), area = (b.x1 - b.x0) * (b.y1 - b.y0);
-      stepKm = Math.max(1, Math.sqrt(area / REGION_CELLS));
+      stepKm = Math.max(1, Math.sqrt(area / (opts.cells ?? REGION_CELLS)));
       for (let y = b.y0 + stepKm / 2; y < b.y1; y += stepKm) for (let x = b.x0 + stepKm / 2; x < b.x1; x += stepKm) {
         if (polarContains(shape, x, y)) { const ll = fromXY(x, y); pts.push({ latDeg: ll.latDeg, lonDeg: ll.lonDeg, xKm: x, yKm: y }); }
       }
@@ -220,7 +227,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: polar ? slopeAt(p.xKm, p.yKm) : slopeLL(p), shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
       if (n % 16 === 15 || n === pts.length - 1) {
         const done = pts.slice(0, n + 1), sc = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, i) => { q.score = sc[i].score; q.ok = sc[i].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        done.forEach((q, i) => { q.score = sc[i].score; q.ok = passOk(q, sc[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         onProgress(1, (n + 1) / pts.length);
         await tick();
         if (my !== token) return null;
@@ -231,7 +238,7 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
     const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: toXY(p.latDeg, p.lonDeg)[0], yKm: toXY(p.latDeg, p.lonDeg)[1], score: p.score }));
     onProgress(2, 0);
     for (let n = 0; n < cands.length; n++) {
-      Object.assign(cands[n], await detail(cands[n], { vehicle, limit, battH, stayDays, fromMs }));
+      Object.assign(cands[n], await detail(cands[n], { vehicle, limit, battH, stayDays, fromMs, ellipse: opts.ellipse }));
       if (my !== token) return null;
       onProgress(2, (n + 1) / cands.length);
       await tick();
