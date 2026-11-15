@@ -748,7 +748,9 @@ function start() {
     rp = { ...rp, selected: id };
     routePlanCard.update({ selected: id });
     plannedRoute = { id, label: r.label, maxSlopeDeg: r.maxSlopeDeg, baselineKm: rp.plan.baselineKm, lengthKm: r.lengthKm };
-    api.setRoute(simplify(r.points, 0.25));
+    // (the polar map's route card measures in its plane on the polar DEM: not for a route on the global terrain,
+    // whose figures are in the Route plan card)
+    api.setRoute(isGlobalRoute(rp.points) ? null : simplify(r.points, 0.25));
     persistRoutePlan();
     updateEnergy();
   }
@@ -761,7 +763,7 @@ function start() {
     plannedRoute = null;
     rp = { ...rp, points, plan: null, selected: null };
     routePlanCard?.update({ points, plan: null, selected: null });
-    api.setRoute(points);
+    api.setRoute(isGlobalRoute(points) ? null : points);
     persistRoutePlan();
     redrawRoutes();
   }

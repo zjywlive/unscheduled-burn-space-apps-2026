@@ -62,14 +62,16 @@ test('L5: custom relay elements and every region shape type', () => {
 });
 
 test('L5: old links and garbage still load; bad values are dropped, not thrown', () => {
-  for (const h of ['#psr=yes', '#en=fly,1,2', '#en=track,a,b,c', '#relay=apollo', '#relay=c:1,2', '#rp=1,2', '#rp=1,2;3', '#rp=999,0;1,1',
+  for (const h of ['#psr=yes', '#en=fly,1,2', '#en=track,a,b,c', '#relay=apollo', '#relay=c:1,2', '#rp=1,2', '#rp=1,2;3', '#rp=999999,0;1,1',
     '#ra=rect:1,2,3', '#ra=circle:0,0,-4', '#rb=poly:1,1;2,2', '#ra=hexagon:1', '#rpsel=fast&rp=1,2;3,4']) {
     const s = parseHash(h, sites, eph);
     assert.equal(s.site.id, 'im2', h);
     assert.ok(toHash(s).startsWith(BASE), h);
   }
   assert.equal(parseHash('#psr=yes', sites, eph).psr, false);
-  assert.equal(parseHash('#rp=999,0;1,1', sites, eph).routePlan, null);
+  assert.equal(parseHash('#rp=999999,0;1,1', sites, eph).routePlan, null);
+  // routes may lie anywhere on the Moon now: 999 km from the pole (about 56°S) is a point like any other
+  assert.deepEqual(parseHash('#rp=999,0;1,1', sites, eph).routePlan.points, [[999, 0], [1, 1]]);
   assert.equal(parseHash('#rpsel=fast&rp=1,2;3,4', sites, eph).routePlan.selected, null);
   // the slope limit is held to the card's 5°–30°
   assert.equal(cleanRoutePlan({ points: [[0, 0], [1, 1]], maxSlopeDeg: 60 }).maxSlopeDeg, 30);

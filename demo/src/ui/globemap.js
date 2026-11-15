@@ -330,7 +330,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     labelEls.push({ latDeg, lonDeg, el, cls, ...extra });
     return el;
   };
-  for (const s0 of sites) if (Number.isFinite(s0.latDeg)) addLabel(s0.latDeg, s0.lonDeg, s0.name, 'is-site', () => onPickOutside?.({ site: s0 }), { rank: 1 });
+  // a site's label picks it as the site, or adds it as a point while the Route tool is drawing
+  for (const s0 of sites) if (Number.isFinite(s0.latDeg)) addLabel(s0.latDeg, s0.lonDeg, s0.name, 'is-site', () => (getState().tool === 'route' ? addDraftPoint({ latDeg: s0.latDeg, lonDeg: s0.lonDeg, name: s0.name }) : onPickOutside?.({ site: s0 })), { rank: 1 });
   for (const f of features) if (Number.isFinite(f.latDeg)) addLabel(f.latDeg, f.lonDeg, f.name, 'is-feature is-crater', null, { rank: 3, diameterKm: f.diameterKm ?? 20 });
   for (const g of GAZETTEER) if (!features.some((f) => f.name === g.name)) addLabel(g.latDeg, g.lonDeg, g.name, `is-feature is-${g.type}`, null, { rank: 2, diameterKm: g.diameterKm ?? 100 });
   const selEl = addLabel(0, 0, '', 'is-selected', null, { rank: 0 });

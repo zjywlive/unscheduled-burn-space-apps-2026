@@ -5859,7 +5859,8 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     labelEls.push({ latDeg, lonDeg, el, cls, ...extra });
     return el;
   };
-  for (const s0 of sites) if (Number.isFinite(s0.latDeg)) addLabel(s0.latDeg, s0.lonDeg, s0.name, 'is-site', () => onPickOutside?.({ site: s0 }), { rank: 1 });
+  // a site's label picks it as the site, or adds it as a point while the Route tool is drawing
+  for (const s0 of sites) if (Number.isFinite(s0.latDeg)) addLabel(s0.latDeg, s0.lonDeg, s0.name, 'is-site', () => (getState().tool === 'route' ? addDraftPoint({ latDeg: s0.latDeg, lonDeg: s0.lonDeg, name: s0.name }) : onPickOutside?.({ site: s0 })), { rank: 1 });
   for (const f of features) if (Number.isFinite(f.latDeg)) addLabel(f.latDeg, f.lonDeg, f.name, 'is-feature is-crater', null, { rank: 3, diameterKm: f.diameterKm ?? 20 });
   for (const g of GAZETTEER) if (!features.some((f) => f.name === g.name)) addLabel(g.latDeg, g.lonDeg, g.name, `is-feature is-${g.type}`, null, { rank: 2, diameterKm: g.diameterKm ?? 100 });
   const selEl = addLabel(0, 0, '', 'is-selected', null, { rank: 0 });
@@ -8342,12 +8343,14 @@ const numList = (str, n) => {
 };
 const inMapKm = (x, y) => Math.abs(x) <= VIEW_HALF_KM && Math.abs(y) <= VIEW_HALF_KM;
 const pointsParam = (pts) => pts.map(([x, y]) => `${r2(x)},${r2(y)}`).join(';');
-function parsePoints(str, min, max) {
+// anywhere: route points may lie anywhere on the Moon (the Map plans routes on the global terrain too); the polar
+// km of the whole sphere bar the north pole stay under 100,000 km
+function parsePoints(str, min, max, { anywhere = false } = {}) {
   if (typeof str !== 'string' || !str) return null;
   const pts = [];
   for (const pair of str.split(';')) {
     const v = numList(pair, 2);
-    if (!v || !inMapKm(v[0], v[1])) return null;
+    if (!v || !(anywhere ? Math.abs(v[0]) < 1e5 && Math.abs(v[1]) < 1e5 : inMapKm(v[0], v[1]))) return null;
     pts.push(v);
   }
   return pts.length >= min && pts.length <= max ? pts : null;
@@ -8408,7 +8411,7 @@ function relayParams(v) {
 // Route plan: points in map km "x,y;x,y" (2–8), the slope limit when not the default, the picked candidate
 function cleanRoutePlan(v) {
   if (v == null) return null;
-  const pts = Array.isArray(v.points) ? parsePoints(pointsParam(v.points), 2, 8) : null;
+  const pts = Array.isArray(v.points) ? parsePoints(pointsParam(v.points), 2, 8, { anywhere: true }) : null;
   if (!pts) return null;
   const s0 = num(v.maxSlopeDeg);
   const maxSlopeDeg = Number.isFinite(s0) ? clamp(Math.round(s0), 5, 30) : null;
@@ -8467,7 +8470,7 @@ function parseHash(hash, sites, eph) {
     tool: DEFAULTS.tool, slot: DEFAULTS.slot,
     psr: f.psr === '1', energy: cleanEnergy(f.en ?? null),
     relay: f.relay || f.relaymin ? cleanRelay({ ...(relayFromString(f.relay) ?? {}), minElDeg: f.relaymin }) : null,
-    routePlan: (() => { const pts = parsePoints(f.rp, 2, 8); return pts ? cleanRoutePlan({ points: pts, maxSlopeDeg: f.rpslope, selected: f.rpsel }) : null; })(),
+    routePlan: (() => { const pts = parsePoints(f.rp, 2, 8, { anywhere: true }); return pts ? cleanRoutePlan({ points: pts, maxSlopeDeg: f.rpslope, selected: f.rpsel }) : null; })(),
     regions: { A: parseShape(f.ra), B: parseShape(f.rb) },
   };
 }
@@ -24674,7 +24677,9 @@ function start() {
     rp = { ...rp, selected: id };
     routePlanCard.update({ selected: id });
     plannedRoute = { id, label: r.label, maxSlopeDeg: r.maxSlopeDeg, baselineKm: rp.plan.baselineKm, lengthKm: r.lengthKm };
-    api.setRoute(simplify(r.points, 0.25));
+    // (the polar map's route card measures in its plane on the polar DEM: not for a route on the global terrain,
+    // whose figures are in the Route plan card)
+    api.setRoute(isGlobalRoute(rp.points) ? null : simplify(r.points, 0.25));
     persistRoutePlan();
     updateEnergy();
   }
@@ -24687,7 +24692,7 @@ function start() {
     plannedRoute = null;
     rp = { ...rp, points, plan: null, selected: null };
     routePlanCard?.update({ points, plan: null, selected: null });
-    api.setRoute(points);
+    api.setRoute(isGlobalRoute(points) ? null : points);
     persistRoutePlan();
     redrawRoutes();
   }

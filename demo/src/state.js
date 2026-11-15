@@ -156,12 +156,14 @@ const numList = (str, n) => {
 };
 const inMapKm = (x, y) => Math.abs(x) <= VIEW_HALF_KM && Math.abs(y) <= VIEW_HALF_KM;
 const pointsParam = (pts) => pts.map(([x, y]) => `${r2(x)},${r2(y)}`).join(';');
-function parsePoints(str, min, max) {
+// anywhere: route points may lie anywhere on the Moon (the Map plans routes on the global terrain too); the polar
+// km of the whole sphere bar the north pole stay under 100,000 km
+function parsePoints(str, min, max, { anywhere = false } = {}) {
   if (typeof str !== 'string' || !str) return null;
   const pts = [];
   for (const pair of str.split(';')) {
     const v = numList(pair, 2);
-    if (!v || !inMapKm(v[0], v[1])) return null;
+    if (!v || !(anywhere ? Math.abs(v[0]) < 1e5 && Math.abs(v[1]) < 1e5 : inMapKm(v[0], v[1]))) return null;
     pts.push(v);
   }
   return pts.length >= min && pts.length <= max ? pts : null;
@@ -222,7 +224,7 @@ function relayParams(v) {
 // Route plan: points in map km "x,y;x,y" (2–8), the slope limit when not the default, the picked candidate
 export function cleanRoutePlan(v) {
   if (v == null) return null;
-  const pts = Array.isArray(v.points) ? parsePoints(pointsParam(v.points), 2, 8) : null;
+  const pts = Array.isArray(v.points) ? parsePoints(pointsParam(v.points), 2, 8, { anywhere: true }) : null;
   if (!pts) return null;
   const s0 = num(v.maxSlopeDeg);
   const maxSlopeDeg = Number.isFinite(s0) ? clamp(Math.round(s0), 5, 30) : null;
@@ -281,7 +283,7 @@ export function parseHash(hash, sites, eph) {
     tool: DEFAULTS.tool, slot: DEFAULTS.slot,
     psr: f.psr === '1', energy: cleanEnergy(f.en ?? null),
     relay: f.relay || f.relaymin ? cleanRelay({ ...(relayFromString(f.relay) ?? {}), minElDeg: f.relaymin }) : null,
-    routePlan: (() => { const pts = parsePoints(f.rp, 2, 8); return pts ? cleanRoutePlan({ points: pts, maxSlopeDeg: f.rpslope, selected: f.rpsel }) : null; })(),
+    routePlan: (() => { const pts = parsePoints(f.rp, 2, 8, { anywhere: true }); return pts ? cleanRoutePlan({ points: pts, maxSlopeDeg: f.rpslope, selected: f.rpsel }) : null; })(),
     regions: { A: parseShape(f.ra), B: parseShape(f.rb) },
   };
 }
