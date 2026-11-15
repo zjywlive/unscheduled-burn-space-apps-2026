@@ -426,6 +426,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     taken = layerOn('labels') ? placed.slice() : [];
     placeGraticule();
     placeLandSpots();
+    placeRegionTags();
   }
 
   // ---- input: globe points → the polar map's own events ----
@@ -483,11 +484,10 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       if (moved || !h) return;
       const f = idle ? focusAt(e) : null;
       if (f) { api.onFocus?.(f); return; }
-      // north of 80°S (or once started there) the shape is clicked out on the globe in latitude and longitude
-      if (rdraft || h.latDeg > POLAR_LAT) { addRegionPoint(d.tool, { latDeg: h.latDeg, lonDeg: h.lonDeg }, e); return; }
-      const at = frameClient(h.latDeg, h.lonDeg);
-      send('pointerdown', at); send('pointerup', at);
-      schedule(30);
+      // rectangle, circle and polygon are clicked out on the globe itself, wherever they are (one way of drawing, one
+      // preview, a shape that crosses 80°S stays one shape); main.js turns one that lies south of 80°S into a polar
+      // region, read from the polar grids
+      addRegionPoint(d.tool, { latDeg: h.latDeg, lonDeg: h.lonDeg }, e);
       return;
     }
     if (moved) return;
@@ -502,9 +502,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   canvas.addEventListener('dblclick', (e) => {
     if ((getState().tool ?? 'select') === 'select') return;   // the globe zooms in itself
     if (getState().tool === 'route') { finishDraft(); return; }
-    if (rdraft) { finishRegion(); return; }
-    const h = hit(e);
-    if (h && h.latDeg <= POLAR_LAT) { send('dblclick', frameClient(h.latDeg, h.lonDeg), { detail: 2 }); schedule(40); }
+    if (rdraft) finishRegion();   // (rectangle, circle and polygon are the globe's own drawing: nothing goes to the polar map)
   });
   canvas.addEventListener('pointerleave', () => { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); });
 
@@ -586,18 +584,29 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
   }, true);   // capture: before a focused field's own Enter
 
-  // ---- rectangle, circle and polygon north of 80°S, on the globe itself (georegion.js): a box from two corners, a
-  // cap from its centre and a point on its edge, a polygon from its corners (click the first, double-click or Enter
-  // to close). The page reads them over a smooth horizon; inside 80°S the polar map draws and reads them as before ----
-  let rdraft = null, rdraftObj = null, geoObj = null, geoKey = '';
+  // ---- rectangle, circle and polygon, on the globe itself (georegion.js): a box from two corners, a cap from its centre
+  // and a point on its edge, a polygon from its corners (click the first, double-click or Enter to close). main.js
+  // keeps a shape that lies south of 80°S as a polar region (the polar grids read it); elsewhere the page reads it
+  // over a smooth horizon ----
+  let rdraft = null, rdraftObj = null, geoObj = null, geoKey = '', regionTags = [];
   const REGION_SAY = {
     rect: 'Rectangle: click the opposite corner · Esc cancels',
     circle: 'Circle: click a point on the edge · Esc cancels',
     polygon: 'Polygon: click the next corner · click the first one, double-click or Enter to close · Backspace removes the last · Esc cancels',
   };
+  // a box with both corners south of 80°S is square to the polar map (map km), as the polar regions always were;
+  // elsewhere it runs along latitude and longitude
+  function boxShape(a, b) {
+    if (a.latDeg <= POLAR_LAT && b.latDeg <= POLAR_LAT) {
+      const [x0, y0] = toXY(a.latDeg, a.lonDeg), [x1, y1] = toXY(b.latDeg, b.lonDeg);
+      const r2 = (v) => Math.round(v * 100) / 100;
+      return x0 !== x1 && y0 !== y1 ? { type: 'rect', x0: r2(Math.min(x0, x1)), y0: r2(Math.min(y0, y1)), x1: r2(Math.max(x0, x1)), y1: r2(Math.max(y0, y1)) } : null;
+    }
+    return geoRect(a, b);
+  }
   function previewShape(d) {
     if (!d.cursor || !d.pts.length) return null;
-    if (d.tool === 'rect') return geoRect(d.pts[0], d.cursor);
+    if (d.tool === 'rect') return boxShape(d.pts[0], d.cursor);
     if (d.tool === 'circle') return geoCircle(d.pts[0], d.cursor);
     return null;
   }
@@ -605,7 +614,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     clearObj(rdraftObj); rdraftObj = null;
     if (!rdraft) return;
     const T = view.THREE, g = new T.Group(), shape = previewShape(rdraft);
-    if (shape) g.add(surfaceLine(geoOutline(shape), 0xffffff, { dashed: true }));
+    if (shape) g.add(surfaceLine(isGeo(shape) ? geoOutline(shape) : polarOutline(shape), 0xffffff, { dashed: true }));
     else if (rdraft.tool === 'polygon') {
       const lls = rdraft.cursor ? [...rdraft.pts, rdraft.cursor] : rdraft.pts;
       if (lls.length >= 2) g.add(surfaceLine(lls, 0xffffff, { dashed: true }));
@@ -614,11 +623,12 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     view.addObject(g); rdraftObj = g;
   }
   function addRegionPoint(tool, p, e) {
+    const slot = getState().slot ?? 'A';
     if (!rdraft) rdraft = { tool, pts: [], cursor: null };
-    say(REGION_SAY[tool] ?? '');
+    say(`Region ${slot}${getState().regions?.[slot] ? ` (replaces the region ${slot} there)` : ''} · ${REGION_SAY[tool] ?? ''}`);
     if (tool === 'rect' || tool === 'circle') {
       if (!rdraft.pts.length) { rdraft.pts.push(p); drawRegionDraft(); return; }
-      const shape = tool === 'rect' ? geoRect(rdraft.pts[0], p) : geoCircle(rdraft.pts[0], p);
+      const shape = tool === 'rect' ? boxShape(rdraft.pts[0], p) : geoCircle(rdraft.pts[0], p);
       rdraft = null; drawRegionDraft(); say('');
       if (shape) api.onRegionDrawn?.(shape); else say('Too small: click two points further apart.');
       return;
@@ -718,6 +728,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     placeLandSpots();
     schedule(30);
   }
+  function placeRegionTags() {
+    for (const t of regionTags) { const p = view.project(t.latDeg, t.lonDeg); t.el.hidden = !p; if (p) t.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`; }
+  }
   function placeLandSpots() {
     for (const s of landSpots) {
       const p = view.project(s.latDeg, s.lonDeg);
@@ -766,7 +779,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   function refreshGeoRegions() {
     if (!view) return;
     const regs = getState().regions ?? {};
-    const list = ['A', 'B'].filter((k) => isGeo(regs[k])).map((k) => [k, regs[k]]);
+    // every region, polar (map km) or latitude/longitude, drawn on the globe with its letter (the polar map's own
+    // drawing is thin once draped)
+    const list = ['A', 'B'].filter((k) => regs[k]).map((k) => [k, regs[k]]);
     const focus = getState().slot ?? 'A';
     // the region the panel works on (main.js: the Regions panel, or Where to land in a region) is filled
     const hi = api.regionFocus?.() ?? null, hiShape = hi ? regs[hi] : null;
@@ -774,17 +789,27 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (key === geoKey) return;
     geoKey = key;
     clearObj(geoObj); geoObj = null;
+    for (const t of regionTags) t.el.remove();
+    regionTags = [];
     if (!list.length && !hiShape) return;
     const T = view.THREE, g = new T.Group();
     if (hiShape) {
       const ring = isGeo(hiShape) ? geoOutline(hiShape) : polarOutline(hiShape), col = hi === 'A' ? 0xffffff : 0xffd23d;
       const fill = regionFill(ring, col, 0.16);
       if (fill) g.add(fill);
-      if (!isGeo(hiShape)) g.add(surfaceLine(ring, col, { opacity: 0.95 }));   // a polar region's outline is in the drape; drawn bright here too
     }
     for (const [k, sh] of list) {
       // the focused slot (the one the panel and the form act on) bright, the other one dimmed
-      g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d, { opacity: list.length > 1 && k !== focus ? 0.45 : 0.95 }));
+      const ring = isGeo(sh) ? geoOutline(sh) : polarOutline(sh);
+      g.add(surfaceLine(ring, k === 'A' ? 0xffffff : 0xffd23d, { opacity: list.length > 1 && k !== focus ? 0.45 : 0.95 }));
+      // its letter at the middle of the outline
+      const v = [0, 0, 0];
+      for (const q of ring) { const la = q.latDeg * Math.PI / 180, lo = q.lonDeg * Math.PI / 180; v[0] += Math.cos(la) * Math.cos(lo); v[1] += Math.cos(la) * Math.sin(lo); v[2] += Math.sin(la); }
+      const m = Math.hypot(...v) || 1;
+      const el = doc.createElement('span');
+      el.className = `globe-region-tag tag-${k.toLowerCase()}${k === focus ? ' is-focus' : ''}`; el.textContent = k;
+      labels.appendChild(el);
+      regionTags.push({ el, latDeg: Math.asin(v[2] / m) * 180 / Math.PI, lonDeg: ((Math.atan2(v[1], v[0]) * 180 / Math.PI) + 360) % 360 });
       g.add(surfaceDots(sh.type === 'polygon' ? sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b })) : [], 0xffffff, 6));
     }
     view.addObject(g); geoObj = g;

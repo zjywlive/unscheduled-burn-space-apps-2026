@@ -26,7 +26,7 @@ import { hasData, readData, loadData, loadPacks } from './data-loader.js';
 import { neededPacks } from './map/tiers.js';
 import { clampView } from './map/view.js';
 import { areaKm2, bbox } from './map/shapes.js';
-import { isGeo, geoStats } from './georegion.js';
+import { isGeo, geoStats, geoOutline } from './georegion.js';
 import { landingRibbon } from './ribbon.js';
 import { h, clear } from './ui/dom.js';
 import { createShell, SLIPS } from './ui/shell.js';
@@ -52,6 +52,7 @@ import { renderCompare } from './ui/compare.js';
 import { compareRows } from './compare-rows.js';
 import { renderEvents } from './ui/events.js';
 import { renderEvidence } from './ui/evidence.js';
+import { DATA_SOURCES } from './data-sources.js';
 import { renderBrief } from './ui/brief.js';
 import { createCommands } from './commands.js';
 import { createAgent } from './agent/provider.js';
@@ -367,7 +368,7 @@ function start() {
     // a route drawn on the globe is planned at once (as pressing Plan routes): its candidates replace the drawn line
     globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
     // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
-    globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
+    globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, polarIfInside(shape)); };
     globeMap.onLandSpot = (n) => selectLanding(land.region ? n - 1 : n);
     // a route drawn on the Moon starts from the start point already set (the landing spot, plan=1)
     globeMap.draftSeed = () => (rp.points?.length === 1 ? { ...fromXY(rp.points[0][0], rp.points[0][1]) } : null);
@@ -1179,6 +1180,20 @@ function start() {
     };
   }
 
+  // A shape drawn on the globe (latitude/longitude, georegion.js) that lies wholly south of 80°S becomes a polar region in
+  // map km, so the polar grids (terrain skylines, slope, darkness) read it: a cap stays a circle (radius in map km at
+  // its centre), a box and a polygon become polygons (the box's parallels sampled, at most 24 corners; a box with
+  // both corners south of 80°S already arrives square to the polar map, globemap.js boxShape)
+  function polarIfInside(sh) {
+    if (!isGeo(sh) || !geoOutline(sh).every((q) => q.latDeg <= TERRAIN_MAX_LAT)) return sh;
+    if (sh.type === 'circle') { const [cx, cy] = toXY(sh.latDeg, sh.lonDeg); return { type: 'circle', cx, cy, rKm: sh.rKm * mapScaleAt(sh.latDeg) }; }
+    // (the coordinates form takes at most 24 corners)
+    let ring = sh.type === 'rect' ? geoOutline(sh).slice(0, -1) : sh.pts.map(([la, lo]) => ({ latDeg: la, lonDeg: lo }));
+    if (ring.length > 24) { const st = ring.length / 24; ring = Array.from({ length: 24 }, (_, i) => ring[Math.floor(i * st)]); }
+    return { type: 'polygon', points: ring.map((q) => toXY(q.latDeg, q.lonDeg).map((v) => Math.round(v * 100) / 100)) };
+  }
+  // map km per ground km of the polar stereographic map at a latitude (1 at the pole, 1.008 at 80°S)
+  const mapScaleAt = (latDeg) => 2 / (1 + Math.sin(-latDeg * Math.PI / 180));
   // Regions north of 80°S (georegion.js) are drawn on the globe in latitude and longitude and read over a smooth
   // horizon; the polar map, its heat plan and the coordinates form take only the polar regions
   function polarShapes() { return { A: isGeo(shapes.A) ? null : shapes.A, B: isGeo(shapes.B) ? null : shapes.B }; }
@@ -2006,12 +2021,11 @@ function start() {
   // ---------- phase 5: Settings (T) ----------
   settingsSheet = createSettingsSheet({
     settings,
-    sources: [
-      { label: 'Ephemeris', value: 'JPL DE441, 3 h steps, 1 Nov 2026 to 1 Jan 2029' },
-      { label: 'Terrain', value: 'LOLA south pole DEMs: 480 m, 240 m, 120 m, 40 m and 20 m tiles' },
-      { label: 'Skylines', value: '480 m DEM rays (sites); 2 km and 1 km grids (map)' },
-      { label: 'Shadowed regions', value: 'Mazarico et al. 2011, 2016 update, 120 m' },
-    ],
+    // what the page is drawn from (data-sources.js; the MCP-only rows stay in Evidence)
+    sources: DATA_SOURCES.filter((s) => s.shown !== 'tools').map((s) => ({
+      label: s.label,
+      value: s.shown === 'official' ? `${s.value}. Shown unchanged.` : s.shown === 'ours' ? `${s.value}. Calculated by this tool.` : s.value,
+    })),
     makeProvider: () => createProviderFromSettings(settings, { scripted: createMockProvider }),
     onOpenChange: (open) => {
       shell.settingsButton.setAttribute('aria-expanded', String(open));

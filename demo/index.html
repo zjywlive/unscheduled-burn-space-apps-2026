@@ -696,6 +696,13 @@ th:last-child, td:last-child { padding-right: 0; }
 .terrain-check { margin-top: 24px; }
 .terrain-check h3 { font-size: var(--fs-body); line-height: 20px; font-weight: 600; margin-bottom: 6px; }
 .terrain-table .terrain-note { font-size: var(--fs-small); line-height: 16px; }
+/* Evidence: where each picture comes from (data-sources.js) */
+.sources-table th[scope="row"] { white-space: normal; min-width: 16em; font-weight: 400; }
+.sources-table th[scope="row"] b { font-weight: 600; }
+.sources-table .src-value { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.sources-table td { font-size: var(--fs-small); line-height: 16px; }
+.sources-table .src-shown { white-space: nowrap; }
+.sources-table tr:is([data-shown="official"], [data-shown="ours"]) .src-shown { color: var(--text); }
 
 /* styles/phase10-flow.css */
 /* ---------- mission flow: the steps and the Map as the 3D Moon (mission-flow.js, ui/globemap.js) ---------- */
@@ -788,6 +795,16 @@ button.globe-label { pointer-events: auto; cursor: pointer; }
 .ld-target { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
 .ld-target .ld-note { flex: 1; margin: 0; }
 .ld-start { flex: none; }
+
+/* the letter of each region on the globe (A white, B yellow, as their outlines); the focused one solid */
+.globe-region-tag {
+  position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 6px;
+  border: 1.5px solid #fff; background: rgba(20, 22, 26, 0.8); color: #fff; font: 700 12px/19px Inter, system-ui, sans-serif;
+  text-align: center; pointer-events: none;
+}
+.globe-region-tag.tag-b { border-color: #ffd23d; color: #ffd23d; }
+.globe-region-tag.is-focus { background: #fff; color: #000; }
+.globe-region-tag.tag-b.is-focus { background: #ffd23d; color: #000; }
 
 /* styles/phase3-agent.css */
 /* Phase 3: the Ask panel, the first-visit tour prompt, and driver.js pressed into the project's tokens.
@@ -1840,6 +1857,9 @@ button.relay-win:hover .relay-win-time { text-decoration: underline; text-underl
 .lsn-set-label { display: flex; flex-direction: column; min-width: 0; }
 .lsn-set-hint { font-size: var(--fs-label, 12px); line-height: 16px; color: var(--faint); }
 .lsn-set-value { text-align: right; color: var(--text); }
+/* Data and reset: the source rows are sentences, so a fixed label column and left-aligned text */
+.lsn-set-sec[data-section="data"] .lsn-set-field-top .lsn-set-label { flex: none; width: 8.5em; }
+.lsn-set-sec[data-section="data"] .lsn-set-field-top .lsn-set-value { flex: 1 1 0; min-width: 0; text-align: left; }
 .lsn-set-ctl { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .lsn-set-note { font-size: var(--fs-label, 12px); line-height: 17px; color: var(--muted); max-width: 46ch; }
 .lsn-set-note + .lsn-set-note { margin-top: 6px; }
@@ -2240,6 +2260,7 @@ html[data-agent-open="true"] .is-bigmap :is(.point-panel, .right-reopen) { displ
   font: 400 var(--fs-label, 12px) / 16px var(--font, system-ui, sans-serif); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
 }
 .skydial-tip b { font-weight: 600; font-size: var(--fs-value, 13px); }
+.skydial-tip .skydial-src { color: var(--faint, #8e8e93); font-size: 11px; line-height: 14px; }
 .skydial-tip[hidden] { display: none; }
 
 /* the site detail sheet: right-hand frosted glass, more solid than the small controls so hairline charts
@@ -2641,6 +2662,7 @@ html[data-reduce-motion="true"] :is(.story-card, .app[data-story="on"] *) { tran
 .sun-rows dd { margin: 0; color: var(--text); text-align: right; white-space: nowrap; }
 .sun-note { display: block; color: var(--muted); font-size: 10px; line-height: 12px; }
 .sun-why { margin: 8px 0 0; color: var(--muted); font-size: 10.5px; line-height: 14px; }
+.sun-src { margin: 6px 0 0; color: var(--faint, var(--muted)); font-size: 10.5px; line-height: 14px; }
 
 /* the Sun and Earth directions at the view centre */
 .map-sky { position: absolute; z-index: 3; width: 260px; height: 260px; overflow: visible; pointer-events: none; }
@@ -6288,6 +6310,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     taken = layerOn('labels') ? placed.slice() : [];
     placeGraticule();
     placeLandSpots();
+    placeRegionTags();
   }
 
   // ---- input: globe points → the polar map's own events ----
@@ -6345,11 +6368,10 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
       if (moved || !h) return;
       const f = idle ? focusAt(e) : null;
       if (f) { api.onFocus?.(f); return; }
-      // north of 80°S (or once started there) the shape is clicked out on the globe in latitude and longitude
-      if (rdraft || h.latDeg > POLAR_LAT) { addRegionPoint(d.tool, { latDeg: h.latDeg, lonDeg: h.lonDeg }, e); return; }
-      const at = frameClient(h.latDeg, h.lonDeg);
-      send('pointerdown', at); send('pointerup', at);
-      schedule(30);
+      // rectangle, circle and polygon are clicked out on the globe itself, wherever they are (one way of drawing, one
+      // preview, a shape that crosses 80°S stays one shape); main.js turns one that lies south of 80°S into a polar
+      // region, read from the polar grids
+      addRegionPoint(d.tool, { latDeg: h.latDeg, lonDeg: h.lonDeg }, e);
       return;
     }
     if (moved) return;
@@ -6364,9 +6386,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   canvas.addEventListener('dblclick', (e) => {
     if ((getState().tool ?? 'select') === 'select') return;   // the globe zooms in itself
     if (getState().tool === 'route') { finishDraft(); return; }
-    if (rdraft) { finishRegion(); return; }
-    const h = hit(e);
-    if (h && h.latDeg <= POLAR_LAT) { send('dblclick', frameClient(h.latDeg, h.lonDeg), { detail: 2 }); schedule(40); }
+    if (rdraft) finishRegion();   // (rectangle, circle and polygon are the globe's own drawing: nothing goes to the polar map)
   });
   canvas.addEventListener('pointerleave', () => { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); });
 
@@ -6448,18 +6468,29 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
   }, true);   // capture: before a focused field's own Enter
 
-  // ---- rectangle, circle and polygon north of 80°S, on the globe itself (georegion.js): a box from two corners, a
-  // cap from its centre and a point on its edge, a polygon from its corners (click the first, double-click or Enter
-  // to close). The page reads them over a smooth horizon; inside 80°S the polar map draws and reads them as before ----
-  let rdraft = null, rdraftObj = null, geoObj = null, geoKey = '';
+  // ---- rectangle, circle and polygon, on the globe itself (georegion.js): a box from two corners, a cap from its centre
+  // and a point on its edge, a polygon from its corners (click the first, double-click or Enter to close). main.js
+  // keeps a shape that lies south of 80°S as a polar region (the polar grids read it); elsewhere the page reads it
+  // over a smooth horizon ----
+  let rdraft = null, rdraftObj = null, geoObj = null, geoKey = '', regionTags = [];
   const REGION_SAY = {
     rect: 'Rectangle: click the opposite corner · Esc cancels',
     circle: 'Circle: click a point on the edge · Esc cancels',
     polygon: 'Polygon: click the next corner · click the first one, double-click or Enter to close · Backspace removes the last · Esc cancels',
   };
+  // a box with both corners south of 80°S is square to the polar map (map km), as the polar regions always were;
+  // elsewhere it runs along latitude and longitude
+  function boxShape(a, b) {
+    if (a.latDeg <= POLAR_LAT && b.latDeg <= POLAR_LAT) {
+      const [x0, y0] = toXY(a.latDeg, a.lonDeg), [x1, y1] = toXY(b.latDeg, b.lonDeg);
+      const r2 = (v) => Math.round(v * 100) / 100;
+      return x0 !== x1 && y0 !== y1 ? { type: 'rect', x0: r2(Math.min(x0, x1)), y0: r2(Math.min(y0, y1)), x1: r2(Math.max(x0, x1)), y1: r2(Math.max(y0, y1)) } : null;
+    }
+    return geoRect(a, b);
+  }
   function previewShape(d) {
     if (!d.cursor || !d.pts.length) return null;
-    if (d.tool === 'rect') return geoRect(d.pts[0], d.cursor);
+    if (d.tool === 'rect') return boxShape(d.pts[0], d.cursor);
     if (d.tool === 'circle') return geoCircle(d.pts[0], d.cursor);
     return null;
   }
@@ -6467,7 +6498,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     clearObj(rdraftObj); rdraftObj = null;
     if (!rdraft) return;
     const T = view.THREE, g = new T.Group(), shape = previewShape(rdraft);
-    if (shape) g.add(surfaceLine(geoOutline(shape), 0xffffff, { dashed: true }));
+    if (shape) g.add(surfaceLine(isGeo(shape) ? geoOutline(shape) : polarOutline(shape), 0xffffff, { dashed: true }));
     else if (rdraft.tool === 'polygon') {
       const lls = rdraft.cursor ? [...rdraft.pts, rdraft.cursor] : rdraft.pts;
       if (lls.length >= 2) g.add(surfaceLine(lls, 0xffffff, { dashed: true }));
@@ -6476,11 +6507,12 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     view.addObject(g); rdraftObj = g;
   }
   function addRegionPoint(tool, p, e) {
+    const slot = getState().slot ?? 'A';
     if (!rdraft) rdraft = { tool, pts: [], cursor: null };
-    say(REGION_SAY[tool] ?? '');
+    say(`Region ${slot}${getState().regions?.[slot] ? ` (replaces the region ${slot} there)` : ''} · ${REGION_SAY[tool] ?? ''}`);
     if (tool === 'rect' || tool === 'circle') {
       if (!rdraft.pts.length) { rdraft.pts.push(p); drawRegionDraft(); return; }
-      const shape = tool === 'rect' ? geoRect(rdraft.pts[0], p) : geoCircle(rdraft.pts[0], p);
+      const shape = tool === 'rect' ? boxShape(rdraft.pts[0], p) : geoCircle(rdraft.pts[0], p);
       rdraft = null; drawRegionDraft(); say('');
       if (shape) api.onRegionDrawn?.(shape); else say('Too small: click two points further apart.');
       return;
@@ -6580,6 +6612,9 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     placeLandSpots();
     schedule(30);
   }
+  function placeRegionTags() {
+    for (const t of regionTags) { const p = view.project(t.latDeg, t.lonDeg); t.el.hidden = !p; if (p) t.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`; }
+  }
   function placeLandSpots() {
     for (const s of landSpots) {
       const p = view.project(s.latDeg, s.lonDeg);
@@ -6628,7 +6663,9 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   function refreshGeoRegions() {
     if (!view) return;
     const regs = getState().regions ?? {};
-    const list = ['A', 'B'].filter((k) => isGeo(regs[k])).map((k) => [k, regs[k]]);
+    // every region, polar (map km) or latitude/longitude, drawn on the globe with its letter (the polar map's own
+    // drawing is thin once draped)
+    const list = ['A', 'B'].filter((k) => regs[k]).map((k) => [k, regs[k]]);
     const focus = getState().slot ?? 'A';
     // the region the panel works on (main.js: the Regions panel, or Where to land in a region) is filled
     const hi = api.regionFocus?.() ?? null, hiShape = hi ? regs[hi] : null;
@@ -6636,17 +6673,27 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     if (key === geoKey) return;
     geoKey = key;
     clearObj(geoObj); geoObj = null;
+    for (const t of regionTags) t.el.remove();
+    regionTags = [];
     if (!list.length && !hiShape) return;
     const T = view.THREE, g = new T.Group();
     if (hiShape) {
       const ring = isGeo(hiShape) ? geoOutline(hiShape) : polarOutline(hiShape), col = hi === 'A' ? 0xffffff : 0xffd23d;
       const fill = regionFill(ring, col, 0.16);
       if (fill) g.add(fill);
-      if (!isGeo(hiShape)) g.add(surfaceLine(ring, col, { opacity: 0.95 }));   // a polar region's outline is in the drape; drawn bright here too
     }
     for (const [k, sh] of list) {
       // the focused slot (the one the panel and the form act on) bright, the other one dimmed
-      g.add(surfaceLine(geoOutline(sh), k === 'A' ? 0xffffff : 0xffd23d, { opacity: list.length > 1 && k !== focus ? 0.45 : 0.95 }));
+      const ring = isGeo(sh) ? geoOutline(sh) : polarOutline(sh);
+      g.add(surfaceLine(ring, k === 'A' ? 0xffffff : 0xffd23d, { opacity: list.length > 1 && k !== focus ? 0.45 : 0.95 }));
+      // its letter at the middle of the outline
+      const v = [0, 0, 0];
+      for (const q of ring) { const la = q.latDeg * Math.PI / 180, lo = q.lonDeg * Math.PI / 180; v[0] += Math.cos(la) * Math.cos(lo); v[1] += Math.cos(la) * Math.sin(lo); v[2] += Math.sin(la); }
+      const m = Math.hypot(...v) || 1;
+      const el = doc.createElement('span');
+      el.className = `globe-region-tag tag-${k.toLowerCase()}${k === focus ? ' is-focus' : ''}`; el.textContent = k;
+      labels.appendChild(el);
+      regionTags.push({ el, latDeg: Math.asin(v[2] / m) * 180 / Math.PI, lonDeg: ((Math.atan2(v[1], v[0]) * 180 / Math.PI) + 360) % 360 });
       g.add(surfaceDots(sh.type === 'polygon' ? sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b })) : [], 0xffffff, 6));
     }
     view.addObject(g); geoObj = g;
@@ -18278,7 +18325,8 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
     h('div', { class: 'sun-head' }, h('h3', { class: 'sun-title' }, 'Sun & Earth'), sunClose),
     sunWhere,
     h('div', { class: 'sun-body' }, sunDraw.el, sunRows),
-    sunWhy);
+    sunWhy,
+    h('p', { class: 'sun-src' }, 'Positions: JPL Horizons (DE441). Skyline: NASA LOLA terrain.'));
   const terrainEl = h('div', { class: 'terrain-dock' }, sunPanel, terrainChip);
   function setTerrainPref(o) {
     Object.assign(tp, o);
@@ -18589,13 +18637,17 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
     route.update(params.routeCard ?? null);
   }
 
-  // fix H (legend line): the heat is a smoothed picture of the cells; say so, with the grid in use
   const smoothNote = h('span', { class: 'legend-smooth', hidden: true });
+  // fix H (legend line) and where the colours come from (data-sources.js): the heat is a smoothed picture of
+  // our own calculation, not a NASA product; one line no longer than before, so the dock keeps its size.
   function syncSmoothNote() {
-    // astra G: the heat is smoothed at every zoom now, 1× included, so the note shows whenever smoothing is on
+    // astra G: the heat is smoothed at every zoom now, 1× included, so the note says so whenever smoothing is on
     const on = last.smoothOn !== false;
-    smoothNote.hidden = !on;
-    if (on) smoothNote.textContent = `Smoothed display of ${last.tierLabel === '1 km' ? '1 km' : '2 km'} cells. Hover for the cell value.`;
+    const tier = last.tierLabel === '1 km' ? '1 km' : '2 km';
+    const src = last.mode === 'score' ? 'LOLA, Horizons + NASA PSR map' : 'LOLA + JPL Horizons';
+    smoothNote.hidden = false;
+    smoothNote.textContent = `${on ? 'Smoothed ' : ''}${tier} cells computed from ${src}`;
+    smoothNote.title = 'Calculated by this tool from NASA LOLA terrain and JPL Horizons, not a NASA product. Hover the map for a cell’s value; sources and checks are in Evidence.';
   }
 
   // phase 5: the inspector follows the selected object. In the big layout only that object's sections show:
@@ -20523,9 +20575,65 @@ function renderEvents(el, summary, { stayDays }) {
 
 return { eventRows, renderEvents };
 })();
+__m['data-sources.js'] = (() => {
+// Where every picture and number in the app comes from: one list for the Settings sheet's "Data and reset"
+// rows and the Evidence sheet's sources table, so the two never disagree. The README's resource table is the
+// full citation list (versions, URLs, licences); this is what a viewer of the page needs.
+//
+// shown: 'official' = a NASA product drawn as published, unchanged
+//        'input'    = NASA data this tool calculates with
+//        'ours'     = calculated by this tool from the inputs
+//        'tools'    = used only by the MCP tools, not drawn in the page
+
+const SHOWN_LABEL = Object.freeze({
+  official: 'NASA product, shown unchanged',
+  input: 'NASA data, used in our calculations',
+  ours: 'Calculated by this tool',
+  tools: 'MCP tools only, not drawn on the map',
+});
+
+const DATA_SOURCES = Object.freeze([
+  { label: 'Sun and Earth', value: 'JPL Horizons API, DE441, 3 h steps, 1 Nov 2026 to 1 Jan 2029',
+    shown: 'input', where: 'Sky dial, Sun & Earth panel, rise and set times, time left before sunset or Earthset' },
+  { label: 'Terrain, whole Moon', value: 'NASA LRO LOLA global elevation (PDS): 7.6 km, 1.9 km and 474 m',
+    shown: 'input', where: 'The 3D Moon, shading, contours, skylines north of 80°S' },
+  { label: 'Terrain, south pole', value: 'LOLA polar elevation (PDS): 480, 240, 120, 40 and 20 m; 5–20 m patches at the landing sites',
+    shown: 'input', where: 'Polar map, slope colours, route profile, rover tilt, descent view' },
+  { label: 'Terrain, other patches', value: 'SLDEM2015 (LOLA with Kaguya Terrain Camera), 59 m patches',
+    shown: 'input', where: 'Where to land, lander terrain away from the poles (badge “SLDEM2015 patch”)' },
+  { label: 'Skylines', value: 'Terrain horizon in 72 directions from the LOLA grids: 480 m rays at a point, 2 km and 1 km grids for the map',
+    shown: 'ours', where: 'The terrain edge in the sky dial; every “above the skyline” test' },
+  { label: 'Sunlight and Earth view', value: 'Horizons positions tested against our skylines, hour by hour over the stay',
+    shown: 'ours', where: 'Heat modes Sunlit, Earth in view, Both in view, Change, Suitability; landing windows, energy, comms' },
+  { label: 'Shadowed regions', value: 'NASA permanently shadowed regions map, Mazarico et al. 2011, 2016 update, 120 m',
+    shown: 'official', where: 'Layers → Permanently shadowed regions; the point card' },
+  { label: 'Long-term light', value: 'NASA 18.6-year Sun and Earth visibility averages, Mazarico et al. 2011, 2016 update',
+    shown: 'official', where: 'The point card, next to our hours for this stay' },
+  { label: 'Lunar gravity', value: 'GRAIL GRGM900C (Lemoine et al. 2014): J2 and C22',
+    shown: 'input', where: 'Lander trajectory in Execute' },
+  { label: 'Feature names', value: 'IAU/USGS Gazetteer of Planetary Nomenclature',
+    shown: 'input', where: 'Names on the lander map; the crater floors checked below' },
+  { label: 'Possible ice', value: 'Diviner ice-stability depth and maximum temperature, Schorghofer & Williams 2020, 240 m',
+    shown: 'tools', where: 'Site search in the MCP server; thermal modelling, not a detection' },
+]);
+
+return { SHOWN_LABEL, DATA_SOURCES };
+})();
 __m['ui/evidence.js'] = (() => {
 // The Evidence view (spec §9.5, phase 3 §7 item 8): five questions a judge asks, the validation tables, and the limits.
 const { h, clear } = __m['ui/dom.js'];
+const { DATA_SOURCES, SHOWN_LABEL } = __m['data-sources.js'];
+
+// Every dataset, how the page shows it (a NASA product as published, NASA data we calculate with, or our own
+// calculation) and where it appears.
+function sourcesTable() {
+  return h('div', { class: 'table-scroll' }, h('table', { class: 'doc-table sources-table' },
+    h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Data'), h('th', { scope: 'col' }, 'How it is shown'), h('th', { scope: 'col' }, 'Where in the app'))),
+    h('tbody', null, DATA_SOURCES.map((s) => h('tr', { 'data-shown': s.shown },
+      h('th', { scope: 'row' }, h('b', null, s.label), h('br'), h('span', { class: 'src-value' }, s.value)),
+      h('td', { class: 'src-shown' }, SHOWN_LABEL[s.shown]),
+      h('td', null, s.where))))));
+}
 
 const MINUS = '−';
 const deg3 = (v) => `${v < 0 ? MINUS : ''}${Math.abs(v).toFixed(3)}°`;
@@ -20629,6 +20737,9 @@ function renderEvidence(el, { validation, meta, sites }) {
       h('p', null, "A site, a landing time and a stay length go in. The page interpolates JPL’s Moon-fixed directions to the Sun and the Earth, converts them to azimuth and elevation at the site, compares them with the terrain skyline in that direction, and finds every rise and set. Out come the hours of sunlight, the hours with Earth in view, the overlap, and the same figures for the alternative.")),
     qa('Which step depends on NASA data?',
       h('p', null, `Every curve. The sub-solar and sub-Earth points come from JPL Horizons (ephemeris ${meta.ephemeris}) at 3-hour steps from 1 Nov 2026 to 1 Jan 2029. Without that file the page can draw nothing. The skyline at each point comes from NASA’s LOLA topography (LDEM_75S_240M). Zoomed-in shading also uses LDEM_75S_120M at 120 m per pixel, LDEM_80S_40M at 40 m around the named sites, and LDEM_875S_20M at 20 m around the two sites nearest the pole. Slope comes from the 240 m grid. Persistent shadow comes from NASA’s official map of permanently shadowed regions (LPSR_75S_120M, Mazarico et al. 2011, 2016 update).`)), // taste-skill-ignore: persistent shadow is the terrain product (sunless cells), not a CSS shadow
+    qa('Where does each picture come from?',
+      h('p', null, 'The page shows three kinds of thing: NASA products drawn exactly as published, NASA data this tool calculates with, and our own calculations from that data. The colours on the heat map are our calculation; the permanently shadowed regions and the 18.6-year averages are NASA’s. The checks below compare our calculations with NASA’s own products. Full citations, versions and links are in the README.'),
+      sourcesTable()),
     qa('What check supports the main claim?',
       h('p', null, `The same angles were requested from Horizons a second way, with the observer placed on the lunar surface at four sites. Across ${n} comparisons the largest elevation difference is ${x}° and the largest azimuth difference is ${y}°.`),
       h('div', { class: 'table-scroll' }, h('table', { class: 'doc-table per-site' },
@@ -23871,7 +23982,8 @@ function createSkyDial({ geom = DIAL, showCenter = true } = {}) {
     tip.textContent = '';
     tip.append(
       h('b', null, `${NAMES[body]}${st.above ? '' : ', behind terrain'}`),
-      h('span', null, describeBody(pos, current.skyline)));
+      h('span', null, describeBody(pos, current.skyline)),
+      h('span', { class: 'skydial-src' }, 'JPL Horizons position, NASA LOLA skyline'));
     tip.hidden = false;
     // outside the ring, in the body's direction, so the readout never covers the dial
     const b = bodies[body];
@@ -26904,7 +27016,7 @@ const { hasData, readData, loadData, loadPacks } = __m['data-loader.js'];
 const { neededPacks } = __m['map/tiers.js'];
 const { clampView } = __m['map/view.js'];
 const { areaKm2, bbox } = __m['map/shapes.js'];
-const { isGeo, geoStats } = __m['georegion.js'];
+const { isGeo, geoStats, geoOutline } = __m['georegion.js'];
 const { landingRibbon } = __m['ribbon.js'];
 const { h, clear } = __m['ui/dom.js'];
 const { createShell, SLIPS } = __m['ui/shell.js'];
@@ -26930,6 +27042,7 @@ const { renderCompare } = __m['ui/compare.js'];
 const { compareRows } = __m['compare-rows.js'];
 const { renderEvents } = __m['ui/events.js'];
 const { renderEvidence } = __m['ui/evidence.js'];
+const { DATA_SOURCES } = __m['data-sources.js'];
 const { renderBrief } = __m['ui/brief.js'];
 const { createCommands } = __m['commands.js'];
 const { createAgent } = __m['agent/provider.js'];
@@ -27245,7 +27358,7 @@ function start() {
     // a route drawn on the globe is planned at once (as pressing Plan routes): its candidates replace the drawn line
     globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
     // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
-    globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
+    globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, polarIfInside(shape)); };
     globeMap.onLandSpot = (n) => selectLanding(land.region ? n - 1 : n);
     // a route drawn on the Moon starts from the start point already set (the landing spot, plan=1)
     globeMap.draftSeed = () => (rp.points?.length === 1 ? { ...fromXY(rp.points[0][0], rp.points[0][1]) } : null);
@@ -28057,6 +28170,20 @@ function start() {
     };
   }
 
+  // A shape drawn on the globe (latitude/longitude, georegion.js) that lies wholly south of 80°S becomes a polar region in
+  // map km, so the polar grids (terrain skylines, slope, darkness) read it: a cap stays a circle (radius in map km at
+  // its centre), a box and a polygon become polygons (the box's parallels sampled, at most 24 corners; a box with
+  // both corners south of 80°S already arrives square to the polar map, globemap.js boxShape)
+  function polarIfInside(sh) {
+    if (!isGeo(sh) || !geoOutline(sh).every((q) => q.latDeg <= TERRAIN_MAX_LAT)) return sh;
+    if (sh.type === 'circle') { const [cx, cy] = toXY(sh.latDeg, sh.lonDeg); return { type: 'circle', cx, cy, rKm: sh.rKm * mapScaleAt(sh.latDeg) }; }
+    // (the coordinates form takes at most 24 corners)
+    let ring = sh.type === 'rect' ? geoOutline(sh).slice(0, -1) : sh.pts.map(([la, lo]) => ({ latDeg: la, lonDeg: lo }));
+    if (ring.length > 24) { const st = ring.length / 24; ring = Array.from({ length: 24 }, (_, i) => ring[Math.floor(i * st)]); }
+    return { type: 'polygon', points: ring.map((q) => toXY(q.latDeg, q.lonDeg).map((v) => Math.round(v * 100) / 100)) };
+  }
+  // map km per ground km of the polar stereographic map at a latitude (1 at the pole, 1.008 at 80°S)
+  const mapScaleAt = (latDeg) => 2 / (1 + Math.sin(-latDeg * Math.PI / 180));
   // Regions north of 80°S (georegion.js) are drawn on the globe in latitude and longitude and read over a smooth
   // horizon; the polar map, its heat plan and the coordinates form take only the polar regions
   function polarShapes() { return { A: isGeo(shapes.A) ? null : shapes.A, B: isGeo(shapes.B) ? null : shapes.B }; }
@@ -28884,12 +29011,11 @@ function start() {
   // ---------- phase 5: Settings (T) ----------
   settingsSheet = createSettingsSheet({
     settings,
-    sources: [
-      { label: 'Ephemeris', value: 'JPL DE441, 3 h steps, 1 Nov 2026 to 1 Jan 2029' },
-      { label: 'Terrain', value: 'LOLA south pole DEMs: 480 m, 240 m, 120 m, 40 m and 20 m tiles' },
-      { label: 'Skylines', value: '480 m DEM rays (sites); 2 km and 1 km grids (map)' },
-      { label: 'Shadowed regions', value: 'Mazarico et al. 2011, 2016 update, 120 m' },
-    ],
+    // what the page is drawn from (data-sources.js; the MCP-only rows stay in Evidence)
+    sources: DATA_SOURCES.filter((s) => s.shown !== 'tools').map((s) => ({
+      label: s.label,
+      value: s.shown === 'official' ? `${s.value}. Shown unchanged.` : s.shown === 'ours' ? `${s.value}. Calculated by this tool.` : s.value,
+    })),
     makeProvider: () => createProviderFromSettings(settings, { scripted: createMockProvider }),
     onOpenChange: (open) => {
       shell.settingsButton.setAttribute('aria-expanded', String(open));
