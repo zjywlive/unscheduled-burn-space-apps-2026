@@ -46,8 +46,8 @@ carries each one. Code references are to `demo/src/`.
 | Site markers and labels | sites | Screen labels for every listed site (click to pick it), decluttered after the selected site; snapping to sites in clicks and drawing is unchanged; Layers → Site and feature names |
 | Selected and alternative crosshairs | state | Draped |
 | Best cells 1–5 | heat ranking | Draped; clickable through the replayed click |
-| Regions A and B (rect, circle, polygon), region best | user shapes | Drawn on the 3D surface with the same tools; draped; region card as before |
-| Hand route, route candidates, slope colours, one-way, labels | route plan | Drawn with the Route tool on the surface; draped |
+| Regions A and B (rect, circle, polygon), region best | user shapes | Drawn on the 3D surface with the same tools by clicks (rect and circle: two clicks; polygon: a click per corner), so a drag always pans; draped; region card as before |
+| Hand route, route candidates, slope colours, one-way, labels | route plan | Drawn with the Route tool on the surface (click per point, Enter or double-click to finish, Backspace, Esc; a drag pans); drawn by the globe itself, not draped: the hand route as a white ribbon, candidates as dashed lines, the chosen route as a ribbon, always on top of the terrain and about 5 px wide at every zoom |
 | Traps, havens, parking stops, empty battery, lander / landing site, waypoints, self-driving trees and trajectory, station coverage | route plan, drive, comms | Draped |
 | Sun and Earth arrows, shadow line at the view centre | ephemeris | Left out (they belong to the polar map's view centre); the sky dial shows the directions at the site |
 | Snap ring, keyboard crosshair, draft shape | drawing state | Draped (refreshed every 30 ms while drawing) |

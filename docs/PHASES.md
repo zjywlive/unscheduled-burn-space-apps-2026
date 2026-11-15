@@ -322,6 +322,13 @@ Landing → Surface operations.
   planner; Finalise → Freeze
   → Execute (phase strip, landing, surface operations with the frozen route); the phone layouts of all three steps.
 - Not done: the user guide (`docs/GUIDE.md`, `docs/guide/`) still shows the old three steps and needs a re-shoot; the
-  rover planner itself still needs the polar data (south of 80°S); the launch ascent is not modelled (the timeline
+  launch ascent is not modelled (the timeline
   starts at parking-orbit insertion).
 
+- 01:30–03:00 GMT, after the user's review of the 3D Map: the graticule and labels cover the whole Moon (Layers
+  toggles; degree labels thinned near the pole); the Route tool plans anywhere on the Moon (`localframe.js`: the
+  planner runs on the global LOLA 474 m terrain in a frame turned so the route's centre is at the south pole;
+  checked with a 41.7 km route at Apollo 11 and its 3D playback); every route is drawn by the globe itself (hand
+  route white, candidates dashed, chosen route as a ribbon) on top of the terrain at about 5 px at every zoom
+  (checked at 60 km tilted, 500 km and 3000 km); the drawing tools act on clicks so a drag always pans (checked in
+  route mode: dragging moves the camera and adds no point). Full suite 747 tests: 731 pass, 16 skipped, 0 fail.
