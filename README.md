@@ -46,7 +46,6 @@
 - [⚡ Quick start](#-quick-start)
 - [🗂️ Repository layout](#️-repository-layout)
 - [👩‍🚀 Team](#-team)
-- [📜 Project history](#-project-history)
 - [🛰️ NASA data and other resources](#️-nasa-data-and-other-resources)
 - [🤖 Use of AI tools](#-use-of-ai-tools)
 - [📄 License](#-license)
@@ -353,13 +352,6 @@ node tools/build-global.mjs --g2
 </table>
 </div>
 
-## 📜 Project history
-
-- **14 November 2026:** we raised this with the judges at the Bristol Local Event, who agreed we could
-  build on that MVP as long as the hackathon work itself happens during the event.
-- **From 14 November 2026, 09:00 local time:** all hackathon work. It is in this repository's commit
-  history, starting with the import of the MVP.
-
 <div align="right"><a href="#readme-top"><sub>↑ back to top</sub></a></div>
 
 <img src="docs/readme/divider.svg" width="100%" alt="">
@@ -412,7 +404,7 @@ identifiers are used or generated.
 | Code, tests, data scripts and documentation written during the event (`demo/src/`, `tools/`, `tests/`, `docs/`) | Claude (Anthropic) through Claude Code | The team chose the challenge, set the priorities and the order of the phases, and reviewed each result; Claude wrote most of the code, tests and documents and checked the pages in headless Chrome. Commits it wrote carry a `Co-Authored-By: Claude` line. |
 | The lander track (`demo/src/lander/`, `demo/lander.html`, `docs/LANDER.md`, `tests/lander-*`) | Claude (Anthropic) through Claude Code, in a separate session | Same way of working: a brief from the team, code and tests by Claude, results reviewed. |
 | MCP v2 (15 Nov): search, slip and landing-window tools, the mission bridge and the Diviner ice packs (`demo/src/search.js`, `demo/src/tools-v2/`, `demo/src/mission-io.js`, `demo/src/ice.js`, `tools/build-ice.mjs`, their tests; design and briefs in `docs/mcp-v2/`) | Claude (Anthropic) through Claude Code; an OpenAI model (gpt-6-astra) through opencode | Claude wrote the design, the shared modules (`criteria.js`, `point-eval.js`, the MCP prompts and resources) and a brief per package; the OpenAI model implemented the four packages and their tests from those briefs; Claude reviewed, fixed and integrated them and ran the tests and a real MCP client end to end. |
-| The pre-event visualisation MVP (12–13 Nov, see Project history) | Claude (Anthropic) through Claude Code; an OpenAI model through opencode | Claude wrote the MVP; the OpenAI model did two independent code reviews. |
+| The pre-event visualisation MVP (12–13 Nov) | Claude (Anthropic) through Claude Code; an OpenAI model through opencode | Claude wrote the MVP; the OpenAI model did two independent code reviews. |
 | Research before the event (challenge analysis, past winners, a participant guide) | ChatGPT (OpenAI) | Background reading and summaries only; none of it is in the code. |
 | The navigator's "Ask" assistant (`demo/src/agent/`) | Optional: an Anthropic or OpenAI-compatible model with the user's own API key | Answers questions with the page's own tools. By default it runs a scripted offline demo and calls no model. |
 | The overview page and the Execute page's launch, stage-separation, explanation and Earth-link additions (15 Nov evening: `demo/overview.html`, `demo/src/lander/explain.js`, `link.js`, `view-earth.js`, `model.js`) | Claude (Anthropic) through Claude Code | Written by Claude from the team's list of judging feedback; checked by the tests and in the browser. |
