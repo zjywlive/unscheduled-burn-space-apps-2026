@@ -8,16 +8,20 @@ in this guide is the real software, taken on 14 November 2026 at 1440 × 900.
 
 ![The navigator](img/guide/nav-overview.png)
 
+New here? Open the [overview page](../demo/overview.html) first (`demo/overview.html`): why the tool exists, the
+process, how each NASA dataset is used, and small interactive models of the algorithms and contingency rules.
+The 30-second video is linked from the [README](../README.md).
+
 ## One mission, three steps
 
-Every page has the same stage bar. The site and landing time you choose travel with you, and the touchdown point
-becomes the rover's start.
+Every page has the same stage bar: plan everything, freeze it, then fly it. *(Updated 15 Nov 2026; the screenshots
+below are from 14 Nov, when the steps were still named Landing, Rover and 3D.)*
 
 | Step | Page | You decide | Chapter |
 |---|---|---|---|
-| **1 Landing** | `lander.html` | Where and when to land: the trajectory, fuel, descent and landing checks, contingencies, and a planner that finds landable ground | [Lander](guide/lander.md) |
-| **2 Rover** | `index.html` | Is the site good for the whole stay, and how robust to a slip? Then the drive: routes, slope limits, battery, radio, safe havens | [Navigator: sites](guide/navigator.md) · [Navigator: routes](guide/navigator-route.md) |
-| **3 3D** | `globe.html` | What the terrain and the drive look like: the whole Moon in 3D, the rover at real size along the route | [3D globe](guide/globe.md) |
+| **Plan · 1 Map** | `index.html` (the 3D Moon) | The site anywhere on the Moon, the landing date and its slip, the landing spot (*Where to land*), the rover route with its slope limits, battery, radio and safe havens | [Navigator: sites](guide/navigator.md) · [Navigator: routes](guide/navigator-route.md) · [3D globe](guide/globe.md) |
+| **Plan · 2 Finalise** | `finalise.html` | Go / no-go checks, the last change to the assumed vehicle, then freeze the configuration | [Lander](guide/lander.md) |
+| **Fly · 3 Execute** | `lander.html` | Nothing: it flies the frozen plan from launch to surface operations, explains each phase (*What's happening*), shows the Earth link, and offers the contingency branches | [Lander](guide/lander.md) |
 
 ![The same plan across the three pages](img/guide/lander-overview.png)
 

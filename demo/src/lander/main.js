@@ -17,7 +17,9 @@ import { three, bindControls, createLabels, cameraStep, cameraKey } from './view
 import { buildEarthScene } from './view-earth.js';
 import { buildMoonScene } from './view-moon.js';
 import { buildSurfaceScene } from './view-surface.js';
-import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm } from './ui.js';
+import { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm, renderExplain, renderLink, linkLine } from './ui.js';
+import { explainFor, nextEvent } from './explain.js';
+import { linkState, radioNote, sparkPath } from './link.js';
 import { readMission, stageUrl, stageBar, EXEC_PHASES, execPhaseOf } from '../mission-flow.js';
 import { readConfig, changesSince, writeFlown, routeSummary } from '../mission-config.js';
 import { attitudeState } from './model.js';
@@ -450,6 +452,14 @@ export function boot() {
     $('#sf-info').textContent = sum
       ? `${sum.label} route, ${sum.lengthKm.toFixed(1)} km · departs ${t(sum.departMs)} · ${sum.arriveMs ? `arrives ${t(sum.arriveMs)}` : 'no arrival simulated'}${off !== null ? ` · touchdown ${off} m from the route start` : ''}`
       : S.landed ? `No rover route in ${rehearsal ? 'a rehearsal' : 'this configuration'}: the lander stays at ${S.site.name}.` : 'No touchdown in the contingency flown: nothing on the surface.';
+    // the radio link at touchdown, from the landed state (Earth over the site's terrain skyline; radio assumed)
+    const stL = S.plan?.stateAt(S.plan.times.landingMs + 1000);
+    const sfLink = $('#sf-link');
+    if (sfLink && stL?.pos && stL.earth && S.landed) {
+      const ex = explainFor({ surfaceOps: true });
+      sfLink.textContent = linkLine(linkState({ pos: stL.pos, earth: stL.earth, inView: stL.earthInView }));
+      sfLink.title = `${ex.what} ${ex.why} Link at touchdown: Earth ${stL.earthInView ? 'above' : 'below'} the site's terrain skyline. ${radioNote()}`;
+    } else if (sfLink) sfLink.textContent = '';
     const at = S.landed ?? S.site;
     const src = `globe.html?v=flow2#lat=${at.latDeg.toFixed(4)}&lon=${at.lonDeg.toFixed(4)}&dist=12&tilt=50&heading=0&cfg=1${rehearsal ? '&rehearsal=1' : ''}`;
     if (!S.surface.frame) {
@@ -532,11 +542,45 @@ export function boot() {
   if (hasData('dem_480m')) start();
   else { status('Loading terrain…'); loading.set(0.15, 'Loading the 480 m terrain map…'); loadData('dem_480m').then(start, (e) => { lift(); status(`dem_480m failed to load: ${e.message}`); }); }
 
-  let last = performance.now(), hudAt = 0, lastPhase = null;
+  // the two info cards: closed and opened only by their own labelled handle; the choice is kept for the browser
+  const CARDS_KEY = 'lsn-lander-cards';
+  let cardsShut = {};
+  try { cardsShut = JSON.parse(localStorage.getItem(CARDS_KEY) ?? 'null') ?? (window.innerWidth < 760 ? { 'ic-explain': true, 'ic-link': true } : {}); } catch { /* storage blocked: both open */ }
+  document.querySelectorAll('#info .ic-card').forEach((card) => {
+    const h = card.querySelector('.ic-h');
+    const set = (shut) => { card.classList.toggle('shut', shut); h.setAttribute('aria-expanded', shut ? 'false' : 'true'); };
+    set(!!cardsShut[card.id]);
+    h.addEventListener('click', () => {
+      const shut = !card.classList.contains('shut');
+      set(shut);
+      cardsShut[card.id] = shut;
+      try { localStorage.setItem(CARDS_KEY, JSON.stringify(cardsShut)); } catch { /* not kept */ }
+    });
+  });
+  // received level as shown, about ten samples a second; a jump on the timeline starts a new trace
+  const linkHist = [];
+  let linkF = null;
+  const RADIO_NOTE = radioNote();
+  function renderInfo(st) {
+    renderExplain($('#ic-explain-b'), explainFor(st), nextEvent(S.plan.events, st.tMs));
+    if (!st.pos || !st.earth) return;
+    const link = linkState({ pos: st.pos, earth: st.earth, inView: st.earthInView });
+    if (linkF === null || Math.abs(S.f - linkF) > 0.02 || S.f < linkF) linkHist.length = 0;
+    if (S.f !== linkF || !linkHist.length) { linkHist.push(link.rxDbm); if (linkHist.length > 90) linkHist.shift(); }
+    linkF = S.f;
+    renderLink($('#ic-link-b'), link, linkHist, { note: `${RADIO_NOTE} Line of sight: ${st.scene === 'surface' ? 'the Earth against the site\'s terrain skyline' : 'the straight line to the Earth against the Moon\'s sphere'}. Range is to the nearest point of the Earth's surface.`, losBy: st.scene === 'surface' ? 'the terrain' : 'the Moon', sparkPath });
+  }
+
+  // frame time: display timestamps wobble by a few ms around the refresh interval, which shows as uneven motion when
+  // the playback step follows them exactly. The step is eased towards the measured interval; a real hitch
+  // (over 50 ms) is taken as it is, capped at 0.1 s.
+  let last = performance.now(), hudAt = 0, lastPhase = null, dtS = 1 / 60, cursorF = -1, cursorTl = null;
   function frame(now) {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const raw = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
+    dtS = raw > 0.05 || raw === 0 ? raw || dtS : dtS + (raw - dtS) * 0.15;
+    const dt = dtS;
     if (!S.plan || document.body.classList.contains('surface-on')) return;   // surface operations cover the view: no 3D frames
     if (S.playing) {
       S.f = playbackStep(S.f, dt, S.speed, S.timeline, PLAYBACK_S);
@@ -556,12 +600,13 @@ export function boot() {
     if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);
     renderKey(now);
-    S.timeline.setT(t);
+    if (S.f !== cursorF || S.timeline !== cursorTl) { cursorF = S.f; cursorTl = S.timeline; S.timeline.setT(t); }
     if (now - hudAt > 90) {
       hudAt = now;
       if (st.scene === 'surface') st.ground = S.scenes.surface.groundAt(st);
       pressed($('#ab-look'), closeupOn());
       renderHud($('#hud'), st, S.power.at(t), S.plan);
+      renderInfo(st);
     }
   }
 }

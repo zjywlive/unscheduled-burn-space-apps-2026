@@ -3,7 +3,10 @@
 Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 
 - **Challenge:** [Lunar Landing Site Navigator](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/)
+- **Overview (start here):** [`demo/overview.html`](demo/overview.html): why the tool exists, the process flow, how NASA data
+  becomes a plan, and small interactive models of the algorithms and the contingency rules
 - **Demo:** _TBD_
+- **Video (30 s):** _TBD (YouTube link)_
 - **Project page:** _TBD_
 - **User guide:** [docs/GUIDE.md](docs/GUIDE.md), with screenshots and worked use cases for every page; how NASA
   plans a lunar landing, mapped to the tool: [docs/NASA-MISSION-PLANNING.md](docs/NASA-MISSION-PLANNING.md)
@@ -26,8 +29,8 @@ Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 | `tests/` | Node test suite: `node --test 'tests/*.test.mjs'` |
 | `mcp/` | MCP server exposing the compute tools, site search, slip checks, the mission bridge, prompts and resources (`mcp/README.md`) |
 
-To run the app locally: `python3 -m http.server 8731 --directory demo`, then open http://localhost:8731/
-(south-pole navigator) or http://localhost:8731/globe.html (3D global terrain).
+To run the app locally: `python3 -m http.server 8731 --directory demo`, then open http://localhost:8731/overview.html
+(the overview), http://localhost:8731/ (south-pole navigator) or http://localhost:8731/globe.html (3D global terrain).
 
 ## Team
 
@@ -87,10 +90,18 @@ browser and downloads as JSON, GeoJSON or CSV; saved missions load back into the
 same direction-dependent slope limits, moves a waypoint it cannot reach, and aborts after a few tries; its trees,
 candidate paths and chosen trajectory show on the map and in 3D.
 
+**Overview (`demo/overview.html`).** One page for a first-time visitor: why a polar landing site is a date as much as a
+place, the three-step process, a table from each NASA dataset to the planning question it answers, three interactive
+models of the algorithms on toy terrain (the skyline test, the two-stage Where to land screen, the A* route search under
+slope limits), and the contingency rules (the Execute page's own decision table, and the rover's safe havens).
+
 **Execution (`demo/lander.html`).** The frozen configuration flown by a generic robotic lander from Earth parking
 orbit through lunar orbit to a powered descent at the site: Δv and propellant budget, J2/C22 and third-body
 dynamics, power and attitude, landing checks against the terrain, contingency branches (abort to orbit, divert,
-wave-off, hold), then the rover drive on the 3D globe. A link with `?site=…&t=…` flies a labelled rehearsal
+wave-off, hold), then the rover drive on the 3D globe. The Earth scene marks an illustrative launch site and ascent and
+animates the upper-stage separation; a *What's happening* card explains each phase in plain words, and an *Earth link*
+card shows line of sight, range, signal delay, path loss and link margin as the flight goes (the radio is an assumption,
+labelled so). A link with `?site=…&t=…` flies a labelled rehearsal
 instead. **Where to land (`demo/planner.html`)**, the Map's region level, scores a landing ellipse and finds better
 spots near any point on the Moon. See `docs/LANDER.md`.
 
@@ -138,7 +149,9 @@ identifiers are used or generated.
 | The pre-event visualisation MVP (12–13 Nov, see Project history) | Claude (Anthropic) through Claude Code; an OpenAI model through opencode | Claude wrote the MVP; the OpenAI model did two independent code reviews. |
 | Research before the event (challenge analysis, past winners, a participant guide) | ChatGPT (OpenAI) | Background reading and summaries only; none of it is in the code. |
 | The navigator's "Ask" assistant (`demo/src/agent/`) | Optional: an Anthropic or OpenAI-compatible model with the user's own API key | Answers questions with the page's own tools. By default it runs a scripted offline demo and calls no model. |
-| Images and video | None | No AI-generated images or video. Every picture is rendered from NASA data by the code. |
+| The overview page and the Execute page's launch, stage-separation, explanation and Earth-link additions (15 Nov evening: `demo/overview.html`, `demo/src/lander/explain.js`, `link.js`, `view-earth.js`, `model.js`) | Claude (Anthropic) through Claude Code | Written by Claude from the team's list of judging feedback; checked by the tests and in the browser. |
+| The 30-second demo video | Claude (Anthropic) through Claude Code | Edited by code from real captures of the app; the soundtrack is synthesised by a script. The video carries a visible "created by AI (Claude Code)" mark. |
+| Images | None | No AI-generated images. Every picture in the app is rendered from NASA data by the code. |
 
 ## Running it locally
 

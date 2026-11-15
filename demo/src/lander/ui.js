@@ -64,6 +64,43 @@ export function createTimeline(root, plan, { onSeek, onBranch }) {
 
 // ---------- HUD ----------
 
+// write innerHTML only when it changed (the HUD and the cards are refreshed about ten times a second)
+const lastHtml = new WeakMap();
+function setHtml(el, html) {
+  if (lastHtml.get(el) === html) return;
+  lastHtml.set(el, html);
+  el.innerHTML = html;
+}
+
+// "What's happening" card (explain.js): the part of the flight in plain words, and the next event of the plan
+export function renderExplain(el, ex, next) {
+  setHtml(el, `<div class="ic-title">${esc(ex.title)}</div><p class="ic-what">${esc(ex.what)}</p>${ex.why ? `<p class="ic-why">${esc(ex.why)}</p>` : ''}${next ? `<div class="ic-next">Next: <b>${esc(next.name)}</b> in ${fmtDur(next.inS)}</div>` : ''}`);
+}
+
+// "Earth link" card (link.js): line of sight, range, light time, path loss, received level and its recent history
+const QUALITY = { strong: 'Strong', ok: 'Good', weak: 'Weak', none: 'No link' };
+export function linkLine(link) {
+  if (!link) return '';
+  const range = `${n0(link.rangeKm)} km`;
+  return link.inView ? `Earth link: ${n1(link.rxDbm, 0)} dBm, margin ${n1(link.marginDb, 0)} dB · ${range} · ${n1(link.lightTimeS, 2)} s` : `Earth link: no line of sight · ${range}`;
+}
+export function renderLink(el, link, history, { note = '', losBy = 'the Moon', sparkPath, lo = -130, hi = -20 } = {}) {
+  const bars = 8, on = link.inView ? Math.max(link.marginDb >= 0 ? 1 : 0, Math.round(Math.min(1, Math.max(0, link.marginDb / 40)) * bars)) : 0;
+  const need = 26 - Math.max(0, Math.min(1, (link.needDbm - lo) / (hi - lo))) * 26;
+  setHtml(el, `
+    <div class="lk-top"><span class="lk-los ${link.inView ? 'on' : 'off'}">${link.inView ? 'Earth in sight' : `Blocked by ${esc(losBy)}`}</span><span class="lk-q">${QUALITY[link.quality]}</span></div>
+    <div class="lk-bar${link.quality === 'weak' ? ' weak' : ''}" role="img" aria-label="Link strength ${on} of ${bars}">${Array.from({ length: bars }, (_, i) => `<i${i < on ? ' class="on"' : ''}></i>`).join('')}</div>
+    <dl class="lk-dl">
+      <dt>Range to Earth</dt><dd>${n0(link.rangeKm)} km</dd>
+      <dt>Signal delay, one way</dt><dd>${link.lightTimeS < 0.1 ? `${n1(link.lightTimeS * 1000, 1)} ms` : `${n1(link.lightTimeS, 2)} s`}</dd>
+      <dt>Path loss</dt><dd>${n1(link.fsplDb, 1)} dB</dd>
+      <dt>Received</dt><dd>${link.inView ? `${n1(link.rxDbm, 1)} dBm` : '—'}</dd>
+      <dt>Margin</dt><dd>${link.inView ? `${link.marginDb >= 0 ? '+' : '−'}${n1(Math.abs(link.marginDb), 1)} dB` : '—'}</dd>
+    </dl>
+    <svg class="lk-spark" viewBox="0 0 200 26" preserveAspectRatio="none" role="img" aria-label="Received signal level over the last moments shown; gaps are times with no line of sight"><line x1="0" x2="200" y1="${need.toFixed(1)}" y2="${need.toFixed(1)}"/><path d="${sparkPath ? sparkPath(history, 200, 26, lo, hi) : ''}"/></svg>
+    <div class="lk-cap" title="${esc(note)}">Received level (dashed: needed). Radio <b>assumed</b>: S-band, 5 W, 34 m dish; geometry real.</div>`);
+}
+
 export function renderHud(el, st, pw, plan) {
   const v = plan.vehicle;
   const thr = st.throttle > 0 ? `${Math.round(st.throttle * 100)} %` : 'off';
@@ -73,7 +110,7 @@ export function renderHud(el, st, pw, plan) {
   const desc = st.descent && st.scene === 'surface' && st.phase !== 'landed'
     ? `<div class="row2"><span>Vertical <b>${n1(st.descent.vSpeedMs, 1)} m/s</b></span><span>Horizontal <b>${n1(st.descent.hSpeedMs, 1)} m/s</b></span></div>` : '';
   const soc = pw ? Math.round(pw.soc * 100) : null;
-  el.innerHTML = `
+  const html = `
     <div class="ph">${esc(st.phaseName)}</div>
     <div class="clock"><span>${fmtMet(st.tMs, plan.times.launchMs)}</span><span>${fmtUtc(st.tMs)}</span></div>
     <dl>
@@ -91,6 +128,7 @@ export function renderHud(el, st, pw, plan) {
       <div class="bar"><i style="width:${soc ?? 0}%"></i><em style="left:${v.batteryMinSoc * 100}%"></em></div>
     </div>
     <div class="vis"><span class="${st.sunlit ? 'sun on' : 'sun'}">${st.sunlit ? 'Sunlit' : 'In shadow'}</span><span class="${st.earthInView ? 'earth on' : 'earth'}">${st.earthInView ? 'Earth in view' : 'Earth hidden'}</span>${st.tliStageAttached ? '<span>Upper stage attached</span>' : ''}</div>`;
+  setHtml(el, html);
 }
 
 // ---------- panels ----------

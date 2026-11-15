@@ -354,6 +354,43 @@
     .wide { display: none; }
     .narrow { display: inline; }
   }
+  /* What's happening + Earth link: two small cards right of the camera buttons, above the timeline */
+  .info { position: fixed; left: 172px; bottom: 104px; z-index: 2; display: flex; align-items: flex-end; gap: 8px; pointer-events: none; }
+  .info .ic-card { position: static; pointer-events: auto; padding: 0; font-size: 12px; overflow: hidden; }
+  .info .ic-explain { width: 300px; }
+  .info .ic-link { width: 236px; font-variant-numeric: tabular-nums; }
+  .ic-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 30px; padding: 0 10px 0 12px; border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .ic-h:hover { color: var(--text); }
+  .ic-h .chev { transition: transform 160ms ease; }
+  .ic-card.shut .ic-h .chev { transform: rotate(180deg); }
+  .ic-card.shut .ic-b { display: none; }
+  .ic-card.shut { width: auto; }
+  .ic-b { padding: 0 12px 10px; }
+  .ic-title { font-size: 14px; font-weight: 600; line-height: 1.25; margin-bottom: 4px; }
+  .ic-what { color: var(--text); line-height: 1.4; margin: 0; }
+  .ic-why { color: var(--muted); line-height: 1.4; margin: 4px 0 0; }
+  .ic-next { color: var(--faint); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ic-next b { color: var(--muted); font-weight: 500; }
+  .lk-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .lk-los { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--faint); white-space: nowrap; }
+  .lk-los.on { color: var(--earth); border-color: rgba(76, 179, 240, 0.5); }
+  .lk-los.off { color: #ff8a8a; border-color: rgba(255, 90, 95, 0.5); }
+  .lk-q { color: var(--muted); }
+  .lk-bar { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; height: 8px; margin-bottom: 6px; }
+  .lk-bar i { border-radius: 2px; background: var(--raised); }
+  .lk-bar i.on { background: var(--earth); }
+  .lk-bar.weak i.on { background: var(--sun); }
+  .lk-dl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; margin: 0; }
+  .lk-dl dt { color: var(--muted); }
+  .lk-dl dd { margin: 0; font-weight: 500; text-align: right; }
+  .lk-spark { display: block; width: 100%; height: 26px; margin-top: 6px; }
+  .lk-spark path { fill: none; stroke: var(--earth); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .lk-spark line { stroke: var(--line); stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+  .lk-cap { color: var(--faint); font-size: 10.5px; line-height: 1.3; margin-top: 4px; }
+  .lk-cap b { color: var(--muted); font-weight: 500; }
+  body.surface-on .info { visibility: hidden; }
+  .sf-bar #sf-link { color: var(--muted); font-size: 12px; white-space: nowrap; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; }
+  .sf-bar #sf-link:empty { display: none; }
   @media (max-width: 1100px) {
     .btn .btn-l { display: none; }
     .btn .ic { margin-right: 0; }
@@ -363,6 +400,8 @@
     #side-toggle { right: 364px; }
     .side:not(.closed) ~ .next { left: calc((100% - 356px) / 2); }
     .side:not(.closed) ~ .terrkey { right: 372px; }
+    .info .ic-explain { width: 260px; }
+    .info .ic-link { width: 216px; }
   }
   @media (max-width: 760px) {
     /* planner on a phone: the map on top, the scores below */
@@ -418,6 +457,9 @@
     .cam.zoom { margin-left: 0; }
     .cam[data-cam="zoom-out"] { order: 0; } .cam.follow { order: 1; } .cam[data-cam="zoom-in"] { order: 2; } .cam.look { order: 3; }
     .hud dl { font-size: 12px; }
+    .info { left: 16px; right: 16px; bottom: auto; top: calc(var(--top) + 44px); flex-wrap: wrap; align-items: flex-start; }
+    .info .ic-card:not(.shut) { width: 100%; }
+    .sf-bar #sf-link { display: none; }
     .timeline { height: 68px; padding: 0 10px; }
     .seg-ph span { display: none; }
   }
@@ -475,7 +517,7 @@
 </footer>
 <div id="status" class="status" hidden></div>
 <section id="surface" class="surface" hidden aria-label="Surface operations">
-  <div class="sf-bar glass"><b>Surface operations</b><span id="sf-info"></span><button id="sf-close" class="btn" type="button">Back to the landing</button></div>
+  <div class="sf-bar glass"><b>Surface operations</b><span id="sf-info"></span><span id="sf-link"></span><button id="sf-close" class="btn" type="button">Back to the landing</button></div>
 </section>
 <section id="noconfig" class="noconfig" hidden aria-label="No finalised mission">
   <div class="nc-card glass">
@@ -495,6 +537,16 @@
 <div id="terrkey" class="glass terrkey" hidden>
   <div class="tk-row"><div class="seg tk-modes" role="group" aria-label="Terrain colour"><button data-tmode="plain" class="on">Plain</button><button data-tmode="height">Height</button><button data-tmode="slope">Slope</button></div><label class="tk-check"><input type="checkbox" id="tk-contours" checked> Contours</label></div>
   <div id="tk-body"></div>
+</div>
+<div id="info" class="info">
+  <section id="ic-explain" class="glass ic-card ic-explain" aria-label="What is happening">
+    <button type="button" class="ic-h" aria-expanded="true" aria-controls="ic-explain-b" title="Show or hide the explanation of this part of the flight"><span>What’s happening</span><svg class="chev" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+    <div id="ic-explain-b" class="ic-b" aria-live="polite"></div>
+  </section>
+  <section id="ic-link" class="glass ic-card ic-link" aria-label="Radio link to Earth">
+    <button type="button" class="ic-h" aria-expanded="true" aria-controls="ic-link-b" title="Show or hide the radio link to Earth"><span>Earth link</span><svg class="chev" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+    <div id="ic-link-b" class="ic-b"></div>
+  </section>
 </div>
 <div id="camctl" class="camctl" role="group" aria-label="Camera">
   <button type="button" class="cam" data-cam="rotate-left" title="Rotate left (Q)" aria-label="Rotate left (Q)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.6 8.6A4.5 4.5 0 1 0 5 4.6M3 2.6v3h3"/></svg></button><button type="button" class="cam" data-cam="pan-up" title="Pan up (W)" aria-label="Pan up (W)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button><button type="button" class="cam" data-cam="rotate-right" title="Rotate right (E)" aria-label="Rotate right (E)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M12.4 8.6A4.5 4.5 0 1 1 11 4.6M13 2.6v3h-3"/></svg></button><button type="button" class="cam zoom" data-cam="zoom-in" title="Zoom in (+)" aria-label="Zoom in (+)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
@@ -4002,25 +4054,59 @@ function buildLanderModel() {
   dish.add(mesh(new T.SphereGeometry(0.05, 10, 8), dark, 0, 0.37, 0));
   root.add(dish);
 
-  // trans-lunar injection stage under the lander until it separates (generic cryogenic upper stage)
+  // trans-lunar injection stage under the lander until it separates (generic cryogenic upper stage). Its own
+  // materials, so it can fade out as it drifts away after separation without touching the lander's.
   const stage = new T.Group();
-  stage.add(mesh(new T.CylinderGeometry(1.0, 1.5, 0.6, 24), grey, 0, -0.3, 0));
-  stage.add(mesh(new T.CylinderGeometry(1.5, 1.5, 6.0, 32), white, 0, -3.6, 0));
-  stage.add(mesh(new T.CylinderGeometry(0.3, 0.9, 1.4, 24, 1, true), dark, 0, -7.3, 0));
+  const sGrey = grey.clone(), sWhite = white.clone(), sDark = dark.clone();
+  const stageMats = [sGrey, sWhite, sDark];
+  stage.add(mesh(new T.CylinderGeometry(1.0, 1.5, 0.6, 24), sGrey, 0, -0.3, 0));
+  stage.add(mesh(new T.CylinderGeometry(1.5, 1.5, 6.0, 32), sWhite, 0, -3.6, 0));
+  stage.add(mesh(new T.CylinderGeometry(0.3, 0.9, 1.4, 24, 1, true), sDark, 0, -7.3, 0));
   const stagePlume = new T.Mesh(new T.ConeGeometry(1.0, 1, 24, 1, true), plumeMat.clone());
   stagePlume.rotation.x = Math.PI;
   stage.add(stagePlume);
   stage.visible = false;
   root.add(stage);
+  // separation puff: a short-lived ring of gas at the interface (illustrative)
+  const puff = new T.Mesh(new T.SphereGeometry(1, 20, 12), new T.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false }));
+  puff.position.set(0, -0.3, 0);
+  puff.visible = false;
+  root.add(puff);
 
-  root.traverse((o) => { if (o.isMesh && o !== plume && o !== stagePlume) { o.castShadow = true; o.receiveShadow = true; } });
+  root.traverse((o) => { if (o.isMesh && o !== plume && o !== stagePlume && o !== puff) { o.castShadow = true; o.receiveShadow = true; } });
   const up = new T.Vector3(0, 1, 0), tmp = new T.Vector3();
+
+  // Stage separation, drawn (illustrative: the mission model only has the separation time). When the stage goes
+  // from attached to separated it stays visible for SEP_S seconds of wall-clock time: it eases away along −Y with a
+  // slow tumble and fades, with a brief puff at the interface. A model first drawn after separation shows no stage.
+  const SEP_S = 9, SEP_DRIFT_M = 15, SEP_TAU_S = 3.5;
+  const nowS = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  let wasAttached = null, sepT0 = null;
+  const stageRest = () => { stage.position.set(0, 0, 0); stage.rotation.set(0, 0, 0); for (const m of stageMats) { m.transparent = false; m.opacity = 1; } puff.visible = false; };
+  function stageStep(attached) {
+    if (attached) { if (sepT0 !== null || !stage.visible) stageRest(); sepT0 = null; stage.visible = true; }
+    else if (wasAttached === true) sepT0 = nowS();
+    wasAttached = attached;
+    if (attached) return;
+    if (sepT0 === null) { stage.visible = false; puff.visible = false; return; }
+    const ts = nowS() - sepT0;
+    if (ts >= SEP_S) { sepT0 = null; stage.visible = false; stageRest(); return; }
+    const e = 1 - Math.exp(-ts / SEP_TAU_S);                 // eased drift, no jump at t = 0
+    stage.visible = true;
+    stage.position.set(0.9 * e, -SEP_DRIFT_M * e, 0);
+    stage.rotation.set(0.5 * e, 0, 0.22 * e);
+    const fade = Math.min(1, Math.max(0, (SEP_S - ts) / 3));  // last 3 s fade to nothing
+    for (const m of stageMats) { m.transparent = fade < 1; m.opacity = fade; }
+    const pf = ts / 1.6;
+    puff.visible = pf < 1;
+    if (puff.visible) { puff.scale.set(1.2 + 3.5 * pf, 0.25 + 0.5 * pf, 1.2 + 3.5 * pf); puff.material.opacity = 0.5 * (1 - pf) * Math.min(1, ts / 0.08); }
+  }
 
   // articulation: array drive, dish on the Earth, plumes; sunBody/earthBody are body-frame unit vectors
   function articulate({ sunBody = null, earthBody = null, throttle = 0, stageAttached = false, stageFiring = false } = {}) {
     if (sunBody) arrayDrive.rotation.y = arrayAngle(sunBody);
     if (earthBody) dish.quaternion.setFromUnitVectors(up, tmp.set(...earthBody).normalize());
-    stage.visible = stageAttached;
+    stageStep(stageAttached);
     const th = stageFiring ? 0 : Math.max(0, Math.min(1, throttle));
     plume.visible = th > 0.01;
     plume.scale.set(1, 2 + th * 9, 1);
@@ -4042,10 +4128,10 @@ function buildLanderModel() {
       { id: 'tanks', label: 'Propellant tank', pos: tanks[0].position.clone().add(new T.Vector3(0.38, 0, 0)) },
       { id: 'rcs', label: 'RCS thrusters', pos: rcs[2].position.clone() },
     ];
-    if (stage.visible) out.push({ id: 'stage', label: 'Trans-lunar stage', pos: new T.Vector3(1.5, -3.6, 0) });
+    if (stage.visible && wasAttached) out.push({ id: 'stage', label: 'Trans-lunar stage', pos: new T.Vector3(1.5, -3.6, 0) });
     return out;
   }
-  return { group: root, plume, articulate, parts };
+  return { group: root, plume, articulate, parts, stage };
 }
 
 return { attitudeMode, LANDER_DIMS, bodyAxes, toBody, fromBody, arrayAngle, arrayIncidence, attitudeState, drawScale, sizeNote, buildLanderModel };
@@ -4058,6 +4144,12 @@ const { R_EARTH, R_MOON } = __m['constants.js'];
 const { buildLanderModel, drawScale, sizeNote } = __m['model.js'];
 
 const K = 1 / 1000;
+// The mission model starts in the parking orbit; the climb to it is not simulated. For the first ASCENT_S seconds
+// after the timeline's start the scene draws an illustrative ascent instead: a pitch-over arc in the orbit plane
+// from a ground point ASCENT_RANGE_RAD up-range to the craft's orbit position at the end of that time (so the
+// drawn craft joins its simulated orbit with no jump). The ground point is not a real launch site: the Earth here
+// is a plain sphere with no geography or rotation.
+const ASCENT_S = 540, ASCENT_RANGE_RAD = (18 * Math.PI) / 180, ASCENT_N = 72;
 
 function buildEarthScene(plan, labels) {
   const T = three();
@@ -4070,6 +4162,14 @@ function buildEarthScene(plan, labels) {
 
   const earth = new T.Mesh(new T.SphereGeometry(R_EARTH * K, 64, 32), new T.MeshStandardMaterial({ color: 0x3a6fb0, roughness: 0.8, metalness: 0, emissive: 0x0a1830 }));
   scene.add(earth);
+  // thin atmosphere: a rim glow on a slightly larger back-face shell, brighter toward the Sun
+  const atmo = new T.Mesh(new T.SphereGeometry(R_EARTH * K * 1.045, 64, 32), new T.ShaderMaterial({
+    uniforms: { uSun: { value: new T.Vector3(1, 0, 0) } },
+    vertexShader: 'varying vec3 vN; varying vec3 vW; void main(){ vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: 'uniform vec3 uSun; varying vec3 vN; varying vec3 vW; void main(){ vec3 v = normalize(cameraPosition - vW); float rim = pow(clamp(1.0 + dot(v, vN), 0.0, 1.0), 2.2); float lit = 0.25 + 0.75 * smoothstep(-0.35, 0.5, dot(normalize(vN), uSun)); gl_FragColor = vec4(vec3(0.35, 0.62, 1.0) * rim * lit, rim * lit); }',
+    side: T.BackSide, transparent: true, blending: T.AdditiveBlending, depthWrite: false,
+  }));
+  scene.add(atmo);
   const moon = new T.Mesh(new T.SphereGeometry(R_MOON * K, 48, 24), new T.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 1 }));
   scene.add(moon);
 
@@ -4095,6 +4195,32 @@ function buildEarthScene(plan, labels) {
   const dot = (p, c, r) => { const m = new T.Mesh(new T.SphereGeometry(r, 12, 8), new T.MeshBasicMaterial({ color: c })); m.position.copy(p); scene.add(m); return m; };
   dot(geo(t.tliMs), 0xffcf6b, 0.35);
 
+  // illustrative ascent (see the note at the top): ground point, arc, exhaust trail
+  const ascEndMs = t.launchMs + ASCENT_S * 1000;
+  const pEnd = geo(ascEndMs), eEnd = pEnd.clone().normalize();
+  const orbitN = pEnd.clone().cross(geo(ascEndMs + 60e3)).normalize();
+  const rE = R_EARTH * K, hOrbit = pEnd.length() - rE;
+  const ascentAt = (f) => {
+    const c = Math.min(1, Math.max(0, f));
+    return eEnd.clone().applyAxisAngle(orbitN, -ASCENT_RANGE_RAD * (1 - c * c)).multiplyScalar(rE + hOrbit * (1 - (1 - c) * (1 - c)));
+  };
+  const sitePos = ascentAt(0);
+  const ascPts = [];
+  for (let i = 0; i <= ASCENT_N; i++) ascPts.push(ascentAt(i / ASCENT_N));
+  const ascLine = makeLine(ascPts, { color: 0xffb45a, opacity: 0.35 });
+  const ascTrail = makeLine(ascPts, { color: 0xffd9a0, opacity: 0.99 });
+  scene.add(ascLine, ascTrail);
+  const siteDot = new T.Mesh(new T.SphereGeometry(0.06, 16, 10), new T.MeshBasicMaterial({ color: 0xffb45a }));
+  siteDot.position.copy(sitePos);
+  const siteRing = new T.Mesh(new T.RingGeometry(0.09, 0.115, 32), new T.MeshBasicMaterial({ color: 0xffb45a, transparent: true, opacity: 0.8, side: T.DoubleSide, depthWrite: false }));
+  siteRing.position.copy(sitePos.clone().multiplyScalar(1.002));
+  siteRing.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), sitePos.clone().normalize());
+  scene.add(siteDot, siteRing);
+  const earthOcc = { centre: () => earth.position, radius: rE };
+  const yAxis = new T.Vector3(0, 1, 0), qAsc = new T.Quaternion();
+  let ascLeftAt = -1e9;
+  const wallS = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+
   // the lander model (metres) in this 1000 km scene: always enlarged here, with the factor in its label
   const lander = buildLanderModel();
   const craft = lander.group;
@@ -4106,30 +4232,55 @@ function buildEarthScene(plan, labels) {
   labels.add('Moon', 'body', () => moon.position);
   const craftLbl = labels.add('Lander', 'craft', () => craft.position);
   labels.add('TLI', 'event', () => geo(t.tliMs));
+  const siteLbl = labels.add('Launch site (illustrative)', 'event', () => sitePos, earthOcc);
+  const ascLbl = labels.add('Ascent to parking orbit (illustrative, not simulated)', 'event', () => ascentAt(0.62), earthOcc);
 
   function update(st, { dt = 1 / 60, att = null } = {}) {
     const m = moonAt(st.tMs) ?? moon.position;
     moon.position.copy(m);
-    const p = st.pos && st.earth ? v3(sub(st.pos, st.earth), K) : craft.position;
+    const ascF = (st.tMs - t.launchMs) / (ASCENT_S * 1000);
+    const ascending = st.phase === 'leo' && ascF < 1;
+    const p = ascending ? ascentAt(ascF) : st.pos && st.earth ? v3(sub(st.pos, st.earth), K) : craft.position;
+    const inLeo = st.phase === 'leo' || st.phase === 'tli';
+    ascLine.visible = ascTrail.visible = siteDot.visible = siteRing.visible = inLeo;
+    ascTrail.geometry.setDrawRange(0, Math.max(2, Math.round(Math.min(1, Math.max(0, ascF)) * ASCENT_N) + 1));
+    ascLbl.visible = ascending;
+    siteLbl.visible = inLeo;
+    atmo.material.uniforms.uSun.value.set(st.sunDir[0], st.sunDir[2], -st.sunDir[1]).normalize();
     craft.position.copy(p);
     sun.position.copy(v3(st.sunDir, 1000));
     const ds = drawScale(camera.position.distanceTo(p), 1e-6, 0.04);
     craft.scale.setScalar(ds.s);
-    const lbl = `${st.tliStageAttached ? 'Lander + upper stage' : 'Lander'} · ${sizeNote(ds.times)}`;
+    const lbl = `${st.tliStageAttached ? 'Lander + upper stage' : 'Lander'}${ascending ? ' (ascent, illustrative)' : ''} · ${sizeNote(ds.times)}`;
     if (craftLbl.el.textContent !== lbl) craftLbl.el.textContent = lbl;
     if (att) {
       basis.makeBasis(v3(att.axes.x), v3(att.axes.y), v3(att.axes.z));
       qTarget.setFromRotationMatrix(basis);
+      if (ascending) {
+        // nose along the climb: vertical at lift-off, along the orbit at insertion
+        const tan = ascentAt(ascF + 0.01).sub(ascentAt(ascF - 0.01));
+        if (ascF < 0.01) tan.copy(sitePos);
+        qTarget.copy(qAsc.setFromUnitVectors(yAxis, tan.normalize()));
+      }
       if (!attInit) { craft.quaternion.copy(qTarget); attInit = true; } else craft.quaternion.slerp(qTarget, 1 - Math.exp(-dt / 0.35));
-      lander.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: att.stage, stageFiring: att.stageFiring });
+      lander.articulate({ sunBody: att.sunBody, earthBody: att.earthBody, throttle: att.throttle, stageAttached: att.stage, stageFiring: att.stageFiring || ascending });
     }
     // automatic framing by phase: the parking orbit close in, the coast between the bodies, the approach on the Moon
     const dE = norm(sub(st.pos, st.earth)) * K;
     let target, radius, key;
+    if (ascending) {
+      // close on the climb, from the side and a little above the ground track
+      const out = p.clone().normalize();
+      const view = out.clone().multiplyScalar(0.55).addScaledVector(orbitN, 1).addScaledVector(eEnd.clone().cross(orbitN), 0.25);
+      ascLeftAt = wallS();
+      controls.followView(p, 2.6 + 2.2 * Math.max(0, ascF), view, { tau: 0.5, dt, key: 'ascent' });
+      return;
+    }
+    const tau = 0.1 + 1.1 * Math.max(0, 1 - (wallS() - ascLeftAt) / 4);   // ease out of the ascent framing
     if (st.phase === 'leo' || st.phase === 'tli') { target = new T.Vector3(0, 0, 0); radius = 40; key = 'earth'; }
     else if (dE < 60) { target = p.clone().multiplyScalar(0.5); radius = 60 + dE * 2.2; key = 'departure'; }
     else { target = m.clone().multiplyScalar(0.5); radius = 820; key = 'cruise'; }
-    controls.follow(target, radius, { tau: 0.1, dt, key });
+    controls.follow(target, radius, { tau, dt, key });
   }
   return { scene, camera, controls, update, name: 'earth' };
 }
@@ -4815,6 +4966,43 @@ function createTimeline(root, plan, { onSeek, onBranch }) {
 
 // ---------- HUD ----------
 
+// write innerHTML only when it changed (the HUD and the cards are refreshed about ten times a second)
+const lastHtml = new WeakMap();
+function setHtml(el, html) {
+  if (lastHtml.get(el) === html) return;
+  lastHtml.set(el, html);
+  el.innerHTML = html;
+}
+
+// "What's happening" card (explain.js): the part of the flight in plain words, and the next event of the plan
+function renderExplain(el, ex, next) {
+  setHtml(el, `<div class="ic-title">${esc(ex.title)}</div><p class="ic-what">${esc(ex.what)}</p>${ex.why ? `<p class="ic-why">${esc(ex.why)}</p>` : ''}${next ? `<div class="ic-next">Next: <b>${esc(next.name)}</b> in ${fmtDur(next.inS)}</div>` : ''}`);
+}
+
+// "Earth link" card (link.js): line of sight, range, light time, path loss, received level and its recent history
+const QUALITY = { strong: 'Strong', ok: 'Good', weak: 'Weak', none: 'No link' };
+function linkLine(link) {
+  if (!link) return '';
+  const range = `${n0(link.rangeKm)} km`;
+  return link.inView ? `Earth link: ${n1(link.rxDbm, 0)} dBm, margin ${n1(link.marginDb, 0)} dB · ${range} · ${n1(link.lightTimeS, 2)} s` : `Earth link: no line of sight · ${range}`;
+}
+function renderLink(el, link, history, { note = '', losBy = 'the Moon', sparkPath, lo = -130, hi = -20 } = {}) {
+  const bars = 8, on = link.inView ? Math.max(link.marginDb >= 0 ? 1 : 0, Math.round(Math.min(1, Math.max(0, link.marginDb / 40)) * bars)) : 0;
+  const need = 26 - Math.max(0, Math.min(1, (link.needDbm - lo) / (hi - lo))) * 26;
+  setHtml(el, `
+    <div class="lk-top"><span class="lk-los ${link.inView ? 'on' : 'off'}">${link.inView ? 'Earth in sight' : `Blocked by ${esc(losBy)}`}</span><span class="lk-q">${QUALITY[link.quality]}</span></div>
+    <div class="lk-bar${link.quality === 'weak' ? ' weak' : ''}" role="img" aria-label="Link strength ${on} of ${bars}">${Array.from({ length: bars }, (_, i) => `<i${i < on ? ' class="on"' : ''}></i>`).join('')}</div>
+    <dl class="lk-dl">
+      <dt>Range to Earth</dt><dd>${n0(link.rangeKm)} km</dd>
+      <dt>Signal delay, one way</dt><dd>${link.lightTimeS < 0.1 ? `${n1(link.lightTimeS * 1000, 1)} ms` : `${n1(link.lightTimeS, 2)} s`}</dd>
+      <dt>Path loss</dt><dd>${n1(link.fsplDb, 1)} dB</dd>
+      <dt>Received</dt><dd>${link.inView ? `${n1(link.rxDbm, 1)} dBm` : '—'}</dd>
+      <dt>Margin</dt><dd>${link.inView ? `${link.marginDb >= 0 ? '+' : '−'}${n1(Math.abs(link.marginDb), 1)} dB` : '—'}</dd>
+    </dl>
+    <svg class="lk-spark" viewBox="0 0 200 26" preserveAspectRatio="none" role="img" aria-label="Received signal level over the last moments shown; gaps are times with no line of sight"><line x1="0" x2="200" y1="${need.toFixed(1)}" y2="${need.toFixed(1)}"/><path d="${sparkPath ? sparkPath(history, 200, 26, lo, hi) : ''}"/></svg>
+    <div class="lk-cap" title="${esc(note)}">Received level (dashed: needed). Radio <b>assumed</b>: S-band, 5 W, 34 m dish; geometry real.</div>`);
+}
+
 function renderHud(el, st, pw, plan) {
   const v = plan.vehicle;
   const thr = st.throttle > 0 ? `${Math.round(st.throttle * 100)} %` : 'off';
@@ -4824,7 +5012,7 @@ function renderHud(el, st, pw, plan) {
   const desc = st.descent && st.scene === 'surface' && st.phase !== 'landed'
     ? `<div class="row2"><span>Vertical <b>${n1(st.descent.vSpeedMs, 1)} m/s</b></span><span>Horizontal <b>${n1(st.descent.hSpeedMs, 1)} m/s</b></span></div>` : '';
   const soc = pw ? Math.round(pw.soc * 100) : null;
-  el.innerHTML = `
+  const html = `
     <div class="ph">${esc(st.phaseName)}</div>
     <div class="clock"><span>${fmtMet(st.tMs, plan.times.launchMs)}</span><span>${fmtUtc(st.tMs)}</span></div>
     <dl>
@@ -4842,6 +5030,7 @@ function renderHud(el, st, pw, plan) {
       <div class="bar"><i style="width:${soc ?? 0}%"></i><em style="left:${v.batteryMinSoc * 100}%"></em></div>
     </div>
     <div class="vis"><span class="${st.sunlit ? 'sun on' : 'sun'}">${st.sunlit ? 'Sunlit' : 'In shadow'}</span><span class="${st.earthInView ? 'earth on' : 'earth'}">${st.earthInView ? 'Earth in view' : 'Earth hidden'}</span>${st.tliStageAttached ? '<span>Upper stage attached</span>' : ''}</div>`;
+  setHtml(el, html);
 }
 
 // ---------- panels ----------
@@ -4919,7 +5108,195 @@ function vehicleFromForm(el, vehicle) {
   return out;
 }
 
-return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderHud, renderPlan, renderBranches, renderLanding, FIELDS, renderVehicle, vehicleFromForm };
+return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderExplain, linkLine, renderLink, renderHud, renderPlan, renderBranches, renderLanding, FIELDS, renderVehicle, vehicleFromForm };
+})();
+__m['explain.js'] = (() => {
+// "What's happening": one or two plain-English sentences for the part of the flight being shown, and the next
+// event on the plan. Pure (no DOM): the Execute page (main.js) writes it into the card under the HUD.
+// Keys are the phase ids of mission.js PHASES, plus 'separation' (the coast while the upper stage is still
+// attached) and 'surface-ops' (the rover drive after the landing).
+
+const EXPLAIN = {
+  leo: {
+    title: 'Launch and parking orbit',
+    what: 'The rocket has put the lander and its upper stage into a low circular orbit around the Earth.',
+    why: 'Waiting here lets the team check the spacecraft and start the trip to the Moon at the exact point of the orbit that lines up with where the Moon will be.',
+  },
+  tli: {
+    title: 'Trans-lunar injection',
+    what: 'The upper stage fires for a few minutes and adds about 3 km/s, stretching the orbit until it reaches the Moon.',
+    why: 'This is the biggest push of the trip. The upper stage does it so the lander keeps its own propellant for the landing.',
+  },
+  separation: {
+    title: 'Upper stage separation',
+    what: 'The burn is over and the empty upper stage is about to be released; the lander flies on alone.',
+    why: 'Dropping the dead weight means every later manoeuvre costs far less propellant.',
+  },
+  coast: {
+    title: 'Coasting to the Moon',
+    what: 'The engine is off. The lander falls away from the Earth for about four days, slowing all the way, with small correction burns to stay on target.',
+    why: 'No thrust is needed between the two bodies: gravity does the work, and tiny corrections now save large ones later.',
+  },
+  'approach-moon': {
+    title: 'Lunar approach',
+    what: 'The Moon’s gravity is now stronger than the Earth’s, and the lander speeds up as it falls towards the Moon.',
+    why: 'The path is aimed to pass just above the surface, over the pole, so one burn can capture it into orbit.',
+  },
+  loi: {
+    title: 'Lunar orbit insertion',
+    what: 'The lander fires its engine against its direction of travel to slow down.',
+    why: 'Without this burn it would swing past the Moon and back out into space; with it, the Moon captures it into a low orbit.',
+  },
+  llo: {
+    title: 'Low lunar orbit',
+    what: 'The lander circles the Moon about 100 km up, once every two hours, while its systems are checked.',
+    why: 'It waits until the Moon’s rotation brings the landing site under the orbit and the Sun and Earth are above the site’s skyline.',
+  },
+  doi: {
+    title: 'Descent orbit insertion',
+    what: 'A short braking burn lowers the far side of the orbit to about 15 km above the surface.',
+    why: 'Starting the landing from low down means the long final burn fights gravity for less time and uses less propellant.',
+  },
+  'descent-coast': {
+    title: 'Coasting to the descent point',
+    what: 'The lander falls half an orbit down to the low point, engine off, facing backwards and ready to brake.',
+    why: 'The powered descent has to start at one precise place and time to end at the landing site.',
+  },
+  braking: {
+    title: 'Powered descent: braking',
+    what: 'The engine burns at high thrust to kill about 1.7 km/s of orbital speed while the lander drops towards the site.',
+    why: 'There is no air to slow it down, so the engine has to remove all the speed. This is where most of the propellant goes.',
+  },
+  approach: {
+    title: 'Powered descent: approach',
+    what: 'The lander pitches upright and steers towards the target, now only a few kilometres away, with the terrain in view.',
+    why: 'Upright, its sensors can see the ground, check slopes and hazards, and divert to a safer spot if needed.',
+  },
+  terminal: {
+    title: 'Terminal descent',
+    what: 'The lander comes straight down at a slow, steady speed for the last tens of metres.',
+    why: 'A vertical, gentle finish keeps the touchdown inside the legs’ limits and keeps sideways speed near zero so it does not tip.',
+  },
+  landed: {
+    title: 'Touchdown',
+    what: 'The engine is off and the lander stands on the surface at the site chosen on the Map.',
+    why: 'Now sunlight on the panels and a line of sight to the Earth decide how long it can work, which is why the site and date were chosen together.',
+  },
+  'surface-ops': {
+    title: 'Surface operations',
+    what: 'The rover drives the route planned on the Map, over real LOLA terrain, from the touchdown point.',
+    why: 'The route was checked for slope, battery and radio contact before launch, with a safe haven in reach if something goes wrong.',
+  },
+};
+
+/** The explanation for a flight state: { key, title, what, why }. Unknown phases get a neutral entry. */
+function explainFor({ phase, tliStageAttached = false, surfaceOps = false } = {}) {
+  const key = surfaceOps ? 'surface-ops' : phase === 'coast' && tliStageAttached ? 'separation' : phase;
+  const e = EXPLAIN[key];
+  return e ? { key, ...e } : { key: 'unknown', title: 'In flight', what: 'The lander is following the planned trajectory.', why: '' };
+}
+
+/** The first event of the plan strictly after tMs: { name, inS } or null. */
+function nextEvent(events, tMs) {
+  let best = null;
+  for (const e of events ?? []) if (Number.isFinite(e.tMs) && e.tMs > tMs && (!best || e.tMs < best.tMs)) best = e;
+  return best ? { id: best.id, name: best.name, inS: (best.tMs - tMs) / 1000 } : null;
+}
+
+return { EXPLAIN, explainFor, nextEvent };
+})();
+__m['link.js'] = (() => {
+// Direct-to-Earth radio link of the lander: range, light time, free-space path loss, received power and margin.
+// Pure (no DOM). The geometry is real (positions from the mission state, km, Moon-centred); the radio is ASSUMED:
+// a generic small lander's S-band downlink into a 34 m deep-space dish. Change RADIO_DEFAULTS to try another one.
+const { R_EARTH } = __m['constants.js'];
+
+const C_KMS = 299792.458;
+
+/** Assumed radio: S-band downlink, 5 W transmitter on a medium-gain antenna, 34 m ground dish, 256 kbit/s. */
+const RADIO_DEFAULTS = {
+  band: 'S-band',
+  freqMHz: 2200,
+  txPowerW: 5,          // 37 dBm
+  txGainDbi: 6,         // medium-gain antenna on the lander
+  rxGainDbi: 56,        // 34 m dish at 2.2 GHz, about 55 % efficiency
+  lossesDb: 3,          // pointing, polarisation, cables
+  systemTempK: 40,      // cooled ground receiver
+  dataRateBps: 256e3,
+  ebN0Db: 3,            // needed per bit with coding
+};
+
+const log10 = Math.log10;
+
+/** Free-space path loss in dB for a range in km and a frequency in MHz. */
+function fsplDb(rangeKm, freqMHz) {
+  if (!(rangeKm > 0) || !(freqMHz > 0)) return NaN;
+  return 20 * log10(rangeKm) + 20 * log10(freqMHz) + 32.45;
+}
+
+const eirpDbm = (r = RADIO_DEFAULTS) => 10 * log10(r.txPowerW * 1000) + r.txGainDbi;
+
+/** Received power needed for the data rate: k·T·Rb·(Eb/N0), in dBm. */
+function requiredDbm(r = RADIO_DEFAULTS) {
+  return -198.6 + 10 * log10(r.systemTempK) + 10 * log10(r.dataRateBps) + r.ebN0Db;   // k = −198.6 dBm/Hz/K
+}
+
+/** Does the straight segment a → b stay outside the sphere (centre c, radius)? Points in km. */
+function segmentClear(a, b, c, radius) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], m = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+  const t = dd > 0 ? Math.max(0, Math.min(1, (m[0] * d[0] + m[1] * d[1] + m[2] * d[2]) / dd)) : 0;
+  const x = m[0] - d[0] * t, y = m[1] - d[1] * t, z = m[2] - d[2] * t;
+  return x * x + y * y + z * z >= radius * radius;
+}
+
+/**
+ * The link for one moment. pos and earth are positions in km in the same frame (the mission state's st.pos and
+ * st.earth). inView is whether the Earth is in sight (the state's own test: the Moon's sphere in flight, the
+ * site's terrain skyline on the surface). The range is to the nearest point of the Earth's surface (a station
+ * directly under the craft: the best case), never less than 160 km.
+ */
+function linkState({ pos, earth, inView = true }, radio = RADIO_DEFAULTS) {
+  const centreKm = Math.hypot(pos[0] - earth[0], pos[1] - earth[1], pos[2] - earth[2]);
+  const rangeKm = Math.max(160, centreKm - R_EARTH);
+  const lossDb = fsplDb(rangeKm, radio.freqMHz);
+  const rxDbm = eirpDbm(radio) + radio.rxGainDbi - lossDb - radio.lossesDb;
+  const needDbm = requiredDbm(radio);
+  const marginDb = rxDbm - needDbm;
+  return {
+    inView: !!inView, rangeKm, lightTimeS: rangeKm / C_KMS, fsplDb: lossDb,
+    rxDbm: inView ? rxDbm : null, needDbm, marginDb: inView ? marginDb : null,
+    quality: !inView ? 'none' : marginDb >= 10 ? 'strong' : marginDb >= 3 ? 'ok' : marginDb >= 0 ? 'weak' : 'none',
+  };
+}
+
+/** Share of the strength bar filled: 0 at no margin (or no line of sight), 1 at 40 dB of margin or more. */
+function strength(link, fullDb = 40) {
+  if (!link || link.marginDb === null || !Number.isFinite(link.marginDb)) return 0;
+  return Math.max(0, Math.min(1, link.marginDb / fullDb));
+}
+
+/** One-line description of the assumed radio, for the card's caption. */
+function radioNote(r = RADIO_DEFAULTS) {
+  return `Assumed radio: ${r.band} ${(r.freqMHz / 1000).toFixed(1)} GHz, ${r.txPowerW} W into a ${r.txGainDbi} dBi antenna (EIRP ${eirpDbm(r).toFixed(0)} dBm), 34 m ground dish (${r.rxGainDbi} dBi), ${Math.round(r.dataRateBps / 1000)} kbit/s, ${r.lossesDb} dB other losses. Needs ${requiredDbm(r).toFixed(0)} dBm.`;
+}
+
+/** SVG path (d attribute) for a sparkline of received levels; null entries (no line of sight) break the line. */
+function sparkPath(values, w, h, lo, hi) {
+  const n = values.length;
+  if (n < 2) return '';
+  let d = '', pen = false;
+  for (let i = 0; i < n; i++) {
+    const v = values[i];
+    if (v === null || !Number.isFinite(v)) { pen = false; continue; }
+    const x = (i / (n - 1)) * w, y = h - Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * h;
+    d += `${pen ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
+    pen = true;
+  }
+  return d;
+}
+
+return { C_KMS, RADIO_DEFAULTS, fsplDb, eirpDbm, requiredDbm, segmentClear, linkState, strength, radioNote, sparkPath };
 })();
 __m['../mission-flow.js'] = (() => {
 // One mission across the pages. Everything is planned before launch, then frozen and flown:
@@ -5904,7 +6281,9 @@ const { three, bindControls, createLabels, cameraStep, cameraKey } = __m['view-c
 const { buildEarthScene } = __m['view-earth.js'];
 const { buildMoonScene } = __m['view-moon.js'];
 const { buildSurfaceScene } = __m['view-surface.js'];
-const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm } = __m['ui.js'];
+const { createTimeline, renderHud, renderPlan, renderBranches, renderLanding, renderVehicle, playbackStep, vehicleFromForm, renderExplain, renderLink, linkLine } = __m['ui.js'];
+const { explainFor, nextEvent } = __m['explain.js'];
+const { linkState, radioNote, sparkPath } = __m['link.js'];
 const { readMission, stageUrl, stageBar, EXEC_PHASES, execPhaseOf } = __m['../mission-flow.js'];
 const { readConfig, changesSince, writeFlown, routeSummary } = __m['../mission-config.js'];
 const { attitudeState } = __m['model.js'];
@@ -6337,6 +6716,14 @@ function boot() {
     $('#sf-info').textContent = sum
       ? `${sum.label} route, ${sum.lengthKm.toFixed(1)} km · departs ${t(sum.departMs)} · ${sum.arriveMs ? `arrives ${t(sum.arriveMs)}` : 'no arrival simulated'}${off !== null ? ` · touchdown ${off} m from the route start` : ''}`
       : S.landed ? `No rover route in ${rehearsal ? 'a rehearsal' : 'this configuration'}: the lander stays at ${S.site.name}.` : 'No touchdown in the contingency flown: nothing on the surface.';
+    // the radio link at touchdown, from the landed state (Earth over the site's terrain skyline; radio assumed)
+    const stL = S.plan?.stateAt(S.plan.times.landingMs + 1000);
+    const sfLink = $('#sf-link');
+    if (sfLink && stL?.pos && stL.earth && S.landed) {
+      const ex = explainFor({ surfaceOps: true });
+      sfLink.textContent = linkLine(linkState({ pos: stL.pos, earth: stL.earth, inView: stL.earthInView }));
+      sfLink.title = `${ex.what} ${ex.why} Link at touchdown: Earth ${stL.earthInView ? 'above' : 'below'} the site's terrain skyline. ${radioNote()}`;
+    } else if (sfLink) sfLink.textContent = '';
     const at = S.landed ?? S.site;
     const src = `globe.html?v=flow2#lat=${at.latDeg.toFixed(4)}&lon=${at.lonDeg.toFixed(4)}&dist=12&tilt=50&heading=0&cfg=1${rehearsal ? '&rehearsal=1' : ''}`;
     if (!S.surface.frame) {
@@ -6419,11 +6806,45 @@ function boot() {
   if (hasData('dem_480m')) start();
   else { status('Loading terrain…'); loading.set(0.15, 'Loading the 480 m terrain map…'); loadData('dem_480m').then(start, (e) => { lift(); status(`dem_480m failed to load: ${e.message}`); }); }
 
-  let last = performance.now(), hudAt = 0, lastPhase = null;
+  // the two info cards: closed and opened only by their own labelled handle; the choice is kept for the browser
+  const CARDS_KEY = 'lsn-lander-cards';
+  let cardsShut = {};
+  try { cardsShut = JSON.parse(localStorage.getItem(CARDS_KEY) ?? 'null') ?? (window.innerWidth < 760 ? { 'ic-explain': true, 'ic-link': true } : {}); } catch { /* storage blocked: both open */ }
+  document.querySelectorAll('#info .ic-card').forEach((card) => {
+    const h = card.querySelector('.ic-h');
+    const set = (shut) => { card.classList.toggle('shut', shut); h.setAttribute('aria-expanded', shut ? 'false' : 'true'); };
+    set(!!cardsShut[card.id]);
+    h.addEventListener('click', () => {
+      const shut = !card.classList.contains('shut');
+      set(shut);
+      cardsShut[card.id] = shut;
+      try { localStorage.setItem(CARDS_KEY, JSON.stringify(cardsShut)); } catch { /* not kept */ }
+    });
+  });
+  // received level as shown, about ten samples a second; a jump on the timeline starts a new trace
+  const linkHist = [];
+  let linkF = null;
+  const RADIO_NOTE = radioNote();
+  function renderInfo(st) {
+    renderExplain($('#ic-explain-b'), explainFor(st), nextEvent(S.plan.events, st.tMs));
+    if (!st.pos || !st.earth) return;
+    const link = linkState({ pos: st.pos, earth: st.earth, inView: st.earthInView });
+    if (linkF === null || Math.abs(S.f - linkF) > 0.02 || S.f < linkF) linkHist.length = 0;
+    if (S.f !== linkF || !linkHist.length) { linkHist.push(link.rxDbm); if (linkHist.length > 90) linkHist.shift(); }
+    linkF = S.f;
+    renderLink($('#ic-link-b'), link, linkHist, { note: `${RADIO_NOTE} Line of sight: ${st.scene === 'surface' ? 'the Earth against the site\'s terrain skyline' : 'the straight line to the Earth against the Moon\'s sphere'}. Range is to the nearest point of the Earth's surface.`, losBy: st.scene === 'surface' ? 'the terrain' : 'the Moon', sparkPath });
+  }
+
+  // frame time: display timestamps wobble by a few ms around the refresh interval, which shows as uneven motion when
+  // the playback step follows them exactly. The step is eased towards the measured interval; a real hitch
+  // (over 50 ms) is taken as it is, capped at 0.1 s.
+  let last = performance.now(), hudAt = 0, lastPhase = null, dtS = 1 / 60, cursorF = -1, cursorTl = null;
   function frame(now) {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const raw = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
+    dtS = raw > 0.05 || raw === 0 ? raw || dtS : dtS + (raw - dtS) * 0.15;
+    const dt = dtS;
     if (!S.plan || document.body.classList.contains('surface-on')) return;   // surface operations cover the view: no 3D frames
     if (S.playing) {
       S.f = playbackStep(S.f, dt, S.speed, S.timeline, PLAYBACK_S);
@@ -6443,12 +6864,13 @@ function boot() {
     if (S.liftAfterFrame) { S.liftAfterFrame = false; lift(); }
     S.labels[S.scene].update(sc.camera, window.innerWidth, window.innerHeight);
     renderKey(now);
-    S.timeline.setT(t);
+    if (S.f !== cursorF || S.timeline !== cursorTl) { cursorF = S.f; cursorTl = S.timeline; S.timeline.setT(t); }
     if (now - hudAt > 90) {
       hudAt = now;
       if (st.scene === 'surface') st.ground = S.scenes.surface.groundAt(st);
       pressed($('#ab-look'), closeupOn());
       renderHud($('#hud'), st, S.power.at(t), S.plan);
+      renderInfo(st);
     }
   }
 }

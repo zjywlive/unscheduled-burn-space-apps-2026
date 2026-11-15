@@ -167,25 +167,59 @@ export function buildLanderModel() {
   dish.add(mesh(new T.SphereGeometry(0.05, 10, 8), dark, 0, 0.37, 0));
   root.add(dish);
 
-  // trans-lunar injection stage under the lander until it separates (generic cryogenic upper stage)
+  // trans-lunar injection stage under the lander until it separates (generic cryogenic upper stage). Its own
+  // materials, so it can fade out as it drifts away after separation without touching the lander's.
   const stage = new T.Group();
-  stage.add(mesh(new T.CylinderGeometry(1.0, 1.5, 0.6, 24), grey, 0, -0.3, 0));
-  stage.add(mesh(new T.CylinderGeometry(1.5, 1.5, 6.0, 32), white, 0, -3.6, 0));
-  stage.add(mesh(new T.CylinderGeometry(0.3, 0.9, 1.4, 24, 1, true), dark, 0, -7.3, 0));
+  const sGrey = grey.clone(), sWhite = white.clone(), sDark = dark.clone();
+  const stageMats = [sGrey, sWhite, sDark];
+  stage.add(mesh(new T.CylinderGeometry(1.0, 1.5, 0.6, 24), sGrey, 0, -0.3, 0));
+  stage.add(mesh(new T.CylinderGeometry(1.5, 1.5, 6.0, 32), sWhite, 0, -3.6, 0));
+  stage.add(mesh(new T.CylinderGeometry(0.3, 0.9, 1.4, 24, 1, true), sDark, 0, -7.3, 0));
   const stagePlume = new T.Mesh(new T.ConeGeometry(1.0, 1, 24, 1, true), plumeMat.clone());
   stagePlume.rotation.x = Math.PI;
   stage.add(stagePlume);
   stage.visible = false;
   root.add(stage);
+  // separation puff: a short-lived ring of gas at the interface (illustrative)
+  const puff = new T.Mesh(new T.SphereGeometry(1, 20, 12), new T.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false }));
+  puff.position.set(0, -0.3, 0);
+  puff.visible = false;
+  root.add(puff);
 
-  root.traverse((o) => { if (o.isMesh && o !== plume && o !== stagePlume) { o.castShadow = true; o.receiveShadow = true; } });
+  root.traverse((o) => { if (o.isMesh && o !== plume && o !== stagePlume && o !== puff) { o.castShadow = true; o.receiveShadow = true; } });
   const up = new T.Vector3(0, 1, 0), tmp = new T.Vector3();
+
+  // Stage separation, drawn (illustrative: the mission model only has the separation time). When the stage goes
+  // from attached to separated it stays visible for SEP_S seconds of wall-clock time: it eases away along −Y with a
+  // slow tumble and fades, with a brief puff at the interface. A model first drawn after separation shows no stage.
+  const SEP_S = 9, SEP_DRIFT_M = 15, SEP_TAU_S = 3.5;
+  const nowS = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  let wasAttached = null, sepT0 = null;
+  const stageRest = () => { stage.position.set(0, 0, 0); stage.rotation.set(0, 0, 0); for (const m of stageMats) { m.transparent = false; m.opacity = 1; } puff.visible = false; };
+  function stageStep(attached) {
+    if (attached) { if (sepT0 !== null || !stage.visible) stageRest(); sepT0 = null; stage.visible = true; }
+    else if (wasAttached === true) sepT0 = nowS();
+    wasAttached = attached;
+    if (attached) return;
+    if (sepT0 === null) { stage.visible = false; puff.visible = false; return; }
+    const ts = nowS() - sepT0;
+    if (ts >= SEP_S) { sepT0 = null; stage.visible = false; stageRest(); return; }
+    const e = 1 - Math.exp(-ts / SEP_TAU_S);                 // eased drift, no jump at t = 0
+    stage.visible = true;
+    stage.position.set(0.9 * e, -SEP_DRIFT_M * e, 0);
+    stage.rotation.set(0.5 * e, 0, 0.22 * e);
+    const fade = Math.min(1, Math.max(0, (SEP_S - ts) / 3));  // last 3 s fade to nothing
+    for (const m of stageMats) { m.transparent = fade < 1; m.opacity = fade; }
+    const pf = ts / 1.6;
+    puff.visible = pf < 1;
+    if (puff.visible) { puff.scale.set(1.2 + 3.5 * pf, 0.25 + 0.5 * pf, 1.2 + 3.5 * pf); puff.material.opacity = 0.5 * (1 - pf) * Math.min(1, ts / 0.08); }
+  }
 
   // articulation: array drive, dish on the Earth, plumes; sunBody/earthBody are body-frame unit vectors
   function articulate({ sunBody = null, earthBody = null, throttle = 0, stageAttached = false, stageFiring = false } = {}) {
     if (sunBody) arrayDrive.rotation.y = arrayAngle(sunBody);
     if (earthBody) dish.quaternion.setFromUnitVectors(up, tmp.set(...earthBody).normalize());
-    stage.visible = stageAttached;
+    stageStep(stageAttached);
     const th = stageFiring ? 0 : Math.max(0, Math.min(1, throttle));
     plume.visible = th > 0.01;
     plume.scale.set(1, 2 + th * 9, 1);
@@ -207,8 +241,8 @@ export function buildLanderModel() {
       { id: 'tanks', label: 'Propellant tank', pos: tanks[0].position.clone().add(new T.Vector3(0.38, 0, 0)) },
       { id: 'rcs', label: 'RCS thrusters', pos: rcs[2].position.clone() },
     ];
-    if (stage.visible) out.push({ id: 'stage', label: 'Trans-lunar stage', pos: new T.Vector3(1.5, -3.6, 0) });
+    if (stage.visible && wasAttached) out.push({ id: 'stage', label: 'Trans-lunar stage', pos: new T.Vector3(1.5, -3.6, 0) });
     return out;
   }
-  return { group: root, plume, articulate, parts };
+  return { group: root, plume, articulate, parts, stage };
 }

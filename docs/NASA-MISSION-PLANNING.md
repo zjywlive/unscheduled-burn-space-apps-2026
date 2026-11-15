@@ -44,8 +44,9 @@ safety all have to line up on the same day ([NASA JSC, *Artemis IV Landing Site 
 ```
 
 The three pages of the tool follow the same order, which is why they share one mission and a three-step bar:
-**1 Landing** (lander page, where and when you land) → **2 Rover** (navigator, drive from the landing site) →
-**3 3D** (globe, see it). See the [user guide](GUIDE.md).
+**Plan: 1 Map** (the 3D Moon: site, date, landing spot, rover route) → **2 Finalise** (go / no-go, freeze) →
+**Fly: 3 Execute** (the frozen plan flown from launch to surface operations). The [overview page](../demo/overview.html)
+shows the same flow with the data and the algorithms behind each step. See the [user guide](GUIDE.md).
 
 ---
 

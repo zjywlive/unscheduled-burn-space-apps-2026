@@ -352,6 +352,43 @@
     .wide { display: none; }
     .narrow { display: inline; }
   }
+  /* What's happening + Earth link: two small cards right of the camera buttons, above the timeline */
+  .info { position: fixed; left: 172px; bottom: 104px; z-index: 2; display: flex; align-items: flex-end; gap: 8px; pointer-events: none; }
+  .info .ic-card { position: static; pointer-events: auto; padding: 0; font-size: 12px; overflow: hidden; }
+  .info .ic-explain { width: 300px; }
+  .info .ic-link { width: 236px; font-variant-numeric: tabular-nums; }
+  .ic-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 30px; padding: 0 10px 0 12px; border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .ic-h:hover { color: var(--text); }
+  .ic-h .chev { transition: transform 160ms ease; }
+  .ic-card.shut .ic-h .chev { transform: rotate(180deg); }
+  .ic-card.shut .ic-b { display: none; }
+  .ic-card.shut { width: auto; }
+  .ic-b { padding: 0 12px 10px; }
+  .ic-title { font-size: 14px; font-weight: 600; line-height: 1.25; margin-bottom: 4px; }
+  .ic-what { color: var(--text); line-height: 1.4; margin: 0; }
+  .ic-why { color: var(--muted); line-height: 1.4; margin: 4px 0 0; }
+  .ic-next { color: var(--faint); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ic-next b { color: var(--muted); font-weight: 500; }
+  .lk-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .lk-los { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--faint); white-space: nowrap; }
+  .lk-los.on { color: var(--earth); border-color: rgba(76, 179, 240, 0.5); }
+  .lk-los.off { color: #ff8a8a; border-color: rgba(255, 90, 95, 0.5); }
+  .lk-q { color: var(--muted); }
+  .lk-bar { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; height: 8px; margin-bottom: 6px; }
+  .lk-bar i { border-radius: 2px; background: var(--raised); }
+  .lk-bar i.on { background: var(--earth); }
+  .lk-bar.weak i.on { background: var(--sun); }
+  .lk-dl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; margin: 0; }
+  .lk-dl dt { color: var(--muted); }
+  .lk-dl dd { margin: 0; font-weight: 500; text-align: right; }
+  .lk-spark { display: block; width: 100%; height: 26px; margin-top: 6px; }
+  .lk-spark path { fill: none; stroke: var(--earth); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .lk-spark line { stroke: var(--line); stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+  .lk-cap { color: var(--faint); font-size: 10.5px; line-height: 1.3; margin-top: 4px; }
+  .lk-cap b { color: var(--muted); font-weight: 500; }
+  body.surface-on .info { visibility: hidden; }
+  .sf-bar #sf-link { color: var(--muted); font-size: 12px; white-space: nowrap; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; }
+  .sf-bar #sf-link:empty { display: none; }
   @media (max-width: 1100px) {
     .btn .btn-l { display: none; }
     .btn .ic { margin-right: 0; }
@@ -361,6 +398,8 @@
     #side-toggle { right: 364px; }
     .side:not(.closed) ~ .next { left: calc((100% - 356px) / 2); }
     .side:not(.closed) ~ .terrkey { right: 372px; }
+    .info .ic-explain { width: 260px; }
+    .info .ic-link { width: 216px; }
   }
   @media (max-width: 760px) {
     /* planner on a phone: the map on top, the scores below */
@@ -416,6 +455,9 @@
     .cam.zoom { margin-left: 0; }
     .cam[data-cam="zoom-out"] { order: 0; } .cam.follow { order: 1; } .cam[data-cam="zoom-in"] { order: 2; } .cam.look { order: 3; }
     .hud dl { font-size: 12px; }
+    .info { left: 16px; right: 16px; bottom: auto; top: calc(var(--top) + 44px); flex-wrap: wrap; align-items: flex-start; }
+    .info .ic-card:not(.shut) { width: 100%; }
+    .sf-bar #sf-link { display: none; }
     .timeline { height: 68px; padding: 0 10px; }
     .seg-ph span { display: none; }
   }
@@ -3306,6 +3348,43 @@ function createTimeline(root, plan, { onSeek, onBranch }) {
 
 // ---------- HUD ----------
 
+// write innerHTML only when it changed (the HUD and the cards are refreshed about ten times a second)
+const lastHtml = new WeakMap();
+function setHtml(el, html) {
+  if (lastHtml.get(el) === html) return;
+  lastHtml.set(el, html);
+  el.innerHTML = html;
+}
+
+// "What's happening" card (explain.js): the part of the flight in plain words, and the next event of the plan
+function renderExplain(el, ex, next) {
+  setHtml(el, `<div class="ic-title">${esc(ex.title)}</div><p class="ic-what">${esc(ex.what)}</p>${ex.why ? `<p class="ic-why">${esc(ex.why)}</p>` : ''}${next ? `<div class="ic-next">Next: <b>${esc(next.name)}</b> in ${fmtDur(next.inS)}</div>` : ''}`);
+}
+
+// "Earth link" card (link.js): line of sight, range, light time, path loss, received level and its recent history
+const QUALITY = { strong: 'Strong', ok: 'Good', weak: 'Weak', none: 'No link' };
+function linkLine(link) {
+  if (!link) return '';
+  const range = `${n0(link.rangeKm)} km`;
+  return link.inView ? `Earth link: ${n1(link.rxDbm, 0)} dBm, margin ${n1(link.marginDb, 0)} dB · ${range} · ${n1(link.lightTimeS, 2)} s` : `Earth link: no line of sight · ${range}`;
+}
+function renderLink(el, link, history, { note = '', losBy = 'the Moon', sparkPath, lo = -130, hi = -20 } = {}) {
+  const bars = 8, on = link.inView ? Math.max(link.marginDb >= 0 ? 1 : 0, Math.round(Math.min(1, Math.max(0, link.marginDb / 40)) * bars)) : 0;
+  const need = 26 - Math.max(0, Math.min(1, (link.needDbm - lo) / (hi - lo))) * 26;
+  setHtml(el, `
+    <div class="lk-top"><span class="lk-los ${link.inView ? 'on' : 'off'}">${link.inView ? 'Earth in sight' : `Blocked by ${esc(losBy)}`}</span><span class="lk-q">${QUALITY[link.quality]}</span></div>
+    <div class="lk-bar${link.quality === 'weak' ? ' weak' : ''}" role="img" aria-label="Link strength ${on} of ${bars}">${Array.from({ length: bars }, (_, i) => `<i${i < on ? ' class="on"' : ''}></i>`).join('')}</div>
+    <dl class="lk-dl">
+      <dt>Range to Earth</dt><dd>${n0(link.rangeKm)} km</dd>
+      <dt>Signal delay, one way</dt><dd>${link.lightTimeS < 0.1 ? `${n1(link.lightTimeS * 1000, 1)} ms` : `${n1(link.lightTimeS, 2)} s`}</dd>
+      <dt>Path loss</dt><dd>${n1(link.fsplDb, 1)} dB</dd>
+      <dt>Received</dt><dd>${link.inView ? `${n1(link.rxDbm, 1)} dBm` : '—'}</dd>
+      <dt>Margin</dt><dd>${link.inView ? `${link.marginDb >= 0 ? '+' : '−'}${n1(Math.abs(link.marginDb), 1)} dB` : '—'}</dd>
+    </dl>
+    <svg class="lk-spark" viewBox="0 0 200 26" preserveAspectRatio="none" role="img" aria-label="Received signal level over the last moments shown; gaps are times with no line of sight"><line x1="0" x2="200" y1="${need.toFixed(1)}" y2="${need.toFixed(1)}"/><path d="${sparkPath ? sparkPath(history, 200, 26, lo, hi) : ''}"/></svg>
+    <div class="lk-cap" title="${esc(note)}">Received level (dashed: needed). Radio <b>assumed</b>: S-band, 5 W, 34 m dish; geometry real.</div>`);
+}
+
 function renderHud(el, st, pw, plan) {
   const v = plan.vehicle;
   const thr = st.throttle > 0 ? `${Math.round(st.throttle * 100)} %` : 'off';
@@ -3315,7 +3394,7 @@ function renderHud(el, st, pw, plan) {
   const desc = st.descent && st.scene === 'surface' && st.phase !== 'landed'
     ? `<div class="row2"><span>Vertical <b>${n1(st.descent.vSpeedMs, 1)} m/s</b></span><span>Horizontal <b>${n1(st.descent.hSpeedMs, 1)} m/s</b></span></div>` : '';
   const soc = pw ? Math.round(pw.soc * 100) : null;
-  el.innerHTML = `
+  const html = `
     <div class="ph">${esc(st.phaseName)}</div>
     <div class="clock"><span>${fmtMet(st.tMs, plan.times.launchMs)}</span><span>${fmtUtc(st.tMs)}</span></div>
     <dl>
@@ -3333,6 +3412,7 @@ function renderHud(el, st, pw, plan) {
       <div class="bar"><i style="width:${soc ?? 0}%"></i><em style="left:${v.batteryMinSoc * 100}%"></em></div>
     </div>
     <div class="vis"><span class="${st.sunlit ? 'sun on' : 'sun'}">${st.sunlit ? 'Sunlit' : 'In shadow'}</span><span class="${st.earthInView ? 'earth on' : 'earth'}">${st.earthInView ? 'Earth in view' : 'Earth hidden'}</span>${st.tliStageAttached ? '<span>Upper stage attached</span>' : ''}</div>`;
+  setHtml(el, html);
 }
 
 // ---------- panels ----------
@@ -3410,7 +3490,7 @@ function vehicleFromForm(el, vehicle) {
   return out;
 }
 
-return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderHud, renderPlan, renderBranches, renderLanding, FIELDS, renderVehicle, vehicleFromForm };
+return { playbackStep, PHASE_WEIGHTS, fmtUtc, fmtDur, fmtMet, createTimeline, renderExplain, linkLine, renderLink, renderHud, renderPlan, renderBranches, renderLanding, FIELDS, renderVehicle, vehicleFromForm };
 })();
 __m['../globe-terrain.js'] = (() => {
 // Global lunar terrain model (phase 1, docs/PHASES.md): one height for any latitude and longitude on the
