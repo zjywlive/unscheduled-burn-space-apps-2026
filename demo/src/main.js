@@ -554,7 +554,7 @@ function start() {
         globeMap.setGlobalRoute({
           key: [rp.selected, rp.plan?.ms ?? null, rp.energy?.departMs ?? null, rp.havens?.stamp ?? null, rp.auto?.draw ? 1 : 0],
           payload, colourBy: rp.routeColour === 'plain' ? 'state' : 'slope',
-          candidates: rp.plan?.ok ? rp.plan.routes.filter((r) => r.id !== rp.selected && r.points?.length && !r.sameAs).map((r) => ({ points: ll(r.points) })) : [],
+          candidates: rp.plan?.ok ? rp.plan.routes.filter((r) => r.id !== rp.selected && r.points?.length && !r.sameAs).map((r) => ({ id: r.id, points: ll(r.points) })) : [],
           hand: rp.plan?.ok ? null : ll(rp.points), waypoints: ll(rp.plan?.waypoints ?? rp.points),
         });
       }

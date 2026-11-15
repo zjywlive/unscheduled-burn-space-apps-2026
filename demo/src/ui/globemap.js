@@ -241,6 +241,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   function frameTick() {
     const now = performance.now();
     if (gRoute?.layer) gRoute.layer.frame(`${terrain.version ?? 0}`);
+    frameCandidates();
     if (draft && getState().tool !== 'route') { draft = null; drawDraft(); }
     if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); placeLabels(); }
     // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
@@ -554,6 +555,64 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
   // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----
   let gRoute = null;   // { layer, extras }
+  // the other candidates: strips a constant CAND_PX wide on screen, over the terrain, in the card's styles (Flattest
+  // dashed, Sunniest dotted, others solid); rebuilt when the zoom changes by more than 12 %
+  const CAND_PX = 3;
+  let candLines = [], candBuilt = null, candObj = null;
+  function candStrips(kpp) {
+    const T = view.THREE, w = kpp * CAND_PX, lift = Math.min(0.012 * view.exaggeration, 0.0003 + w * 0.6);
+    const pos = [], idx = [];
+    let o = null;
+    for (const c of candLines) {
+      const P = c.points.map((p) => new T.Vector3(...view.surface(p.latDeg, p.lonDeg, lift)));
+      // on, off (km); close up a long route would need too many dashes: then they spread out (at most 20 000)
+      let total = 0;
+      for (let i = 0; i + 1 < P.length; i++) total += P[i].distanceTo(P[i + 1]);
+      const base = c.id === 'flat' ? [4, 2.6] : c.id === 'sunny' ? [1.2, 1.6] : null;
+      const f = base ? w * Math.max(1, total / (w * (base[0] + base[1]) * 20000)) : 0;
+      const pat = base ? [base[0] * f, base[1] * f] : null;
+      o ??= P[0].clone();
+      let phase = 0;
+      for (let i = 0; i + 1 < P.length; i++) {
+        const a = P[i], b = P[i + 1], len = a.distanceTo(b);
+        if (!(len > 0)) continue;
+        const side = new T.Vector3().crossVectors(b.clone().sub(a), a.clone().normalize()).normalize().multiplyScalar(w / 2);
+        const quad = (t0, t1) => {
+          const p0 = a.clone().lerp(b, t0).sub(o), p1 = a.clone().lerp(b, t1).sub(o), k = pos.length / 3;
+          pos.push(p0.x - side.x, p0.y - side.y, p0.z - side.z, p0.x + side.x, p0.y + side.y, p0.z + side.z,
+            p1.x - side.x, p1.y - side.y, p1.z - side.z, p1.x + side.x, p1.y + side.y, p1.z + side.z);
+          idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+        };
+        if (!pat) { quad(0, 1); continue; }
+        // walk the dash pattern along the segment (at most 40 000 dashes in all: farther apart when zoomed close)
+        const period = pat[0] + pat[1];
+        // the steps never shrink below a millionth of the period, so rounding cannot stall the walk
+        let d = 0;
+        for (let guard = 0; d < len && pos.length < 480000 && guard < 200000; guard++) {
+          const at = (phase + d) % period, on = at < pat[0];
+          const step = Math.min(len - d, Math.max(period * 1e-6, on ? pat[0] - at : period - at));
+          if (on) quad(d / len, (d + step) / len);
+          d += step;
+        }
+        phase = (phase + len) % period;
+      }
+    }
+    if (!pos.length) return null;
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    const m = new T.Mesh(g, new T.MeshBasicMaterial({ color: 0xdfe3e8, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, side: T.DoubleSide }));
+    m.position.copy(o); m.renderOrder = 14;   // under the chosen route's ribbon (15)
+    return m;
+  }
+  function frameCandidates() {
+    if (!candLines.length) { if (candObj) { clearObj(candObj); candObj = null; } return; }
+    const kpp = view.kmPerPx();
+    if (candBuilt && kpp / candBuilt < 1.12 && candBuilt / kpp < 1.12) return;
+    candBuilt = kpp;
+    clearObj(candObj); candObj = candStrips(kpp);
+    if (candObj) view.addObject(candObj);
+  }
   let gKeyRoute = '';
   function setGlobalRoute(data) {
     if (!view) return;
@@ -561,6 +620,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (k === gKeyRoute && (gRoute || !data)) return;
     gKeyRoute = k;
     if (gRoute) { gRoute.layer?.dispose(); clearObj(gRoute.extras); gRoute = null; }
+    candLines = []; candBuilt = null;
     if (!data) { view.redraw(); return; }
     const T = view.THREE, extras = new T.Group();
     let lay = null;
@@ -570,7 +630,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       const q = data.payload.pts[0];
       lay.setRover({ latDeg: q[0], lonDeg: q[1], km: 0, state: 'ready', soc: q[4] }, 0xffd23d, { headingDeg: 0, pitchDeg: 0, rollDeg: 0 });
     }
-    for (const c of data.candidates ?? []) if (c.points.length >= 2) extras.add(surfaceLine(c.points, 0xbfc5cc, { dashed: true, opacity: 0.8 }));
+    candLines = (data.candidates ?? []).filter((c) => c.points.length >= 2); candBuilt = null;
     // the hand-drawn line as a white ribbon (a route payload without a drive), so it reads at every zoom
     if (data.hand?.length >= 2 && !data.payload) {
       const pts = [];
