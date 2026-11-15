@@ -451,7 +451,7 @@ export function boot() {
       ? `${sum.label} route, ${sum.lengthKm.toFixed(1)} km · departs ${t(sum.departMs)} · ${sum.arriveMs ? `arrives ${t(sum.arriveMs)}` : 'no arrival simulated'}${off !== null ? ` · touchdown ${off} m from the route start` : ''}`
       : S.landed ? `No rover route in ${rehearsal ? 'a rehearsal' : 'this configuration'}: the lander stays at ${S.site.name}.` : 'No touchdown in the contingency flown: nothing on the surface.';
     const at = S.landed ?? S.site;
-    const src = `globe.html?v=flow1#lat=${at.latDeg.toFixed(4)}&lon=${at.lonDeg.toFixed(4)}&dist=12&tilt=50&heading=0&cfg=1${rehearsal ? '&rehearsal=1' : ''}`;
+    const src = `globe.html?v=flow2#lat=${at.latDeg.toFixed(4)}&lon=${at.lonDeg.toFixed(4)}&dist=12&tilt=50&heading=0&cfg=1${rehearsal ? '&rehearsal=1' : ''}`;
     if (!S.surface.frame) {
       const f = document.createElement('iframe');
       f.title = 'Surface operations: the rover drive on the 3D Moon';

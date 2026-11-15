@@ -51,7 +51,9 @@ export function startGlobe() {
   const hires = createHiresSet(hiresMeta, (name) => load(name), { onLoad: () => invalidateSouth() });
   // the mission's steps (mission-flow.js): the globe is the Map's 3D view (planning)
   const stagesSlot = document.getElementById('stages');
-  if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, 'map'));
+  // surface operations are step 3's, and name the frozen configuration's site and time (not the plan's)
+  const cfgMission = () => { const c = readConfig(); return c ? { siteId: c.site.id, siteName: c.site.name, latDeg: c.site.latDeg, lonDeg: c.site.lonDeg, landingMs: c.landing.requestedMs } : readMission(); };
+  if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, cfgMode ? 'execute' : 'map', cfgMode ? { getMission: cfgMission } : {}));
   // opened from the Map's route card (3D, Fly: route=1): a way back to route planning. The Map's tab is still open
   // when it opened this one, so closing returns to it as it was; otherwise the Map loads and brings the route back
   // from the storage (mission-flow.js readRoutePlan)
@@ -217,7 +219,7 @@ export function startGlobe() {
       window.addEventListener('hashchange', () => { if (!hashFlag('route') || cameraFromHash(location.hash).lat !== undefined) view.jumpTo(cameraFromHash(location.hash)); });
       if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission, payloadOverride: cfgMode ? cfg?.route ?? false : null });
       if (pickMode) startPick(view);
-      if (!embed && !pickMode && !cfgMode) {
+      if (!embed && !pickMode) {   // (surface operations show the same panel as the route view)
         window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), bar: $('ab-wp'), mission, terrain, payload: window.__globe.route?.payload ?? null });
         window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), bar: $('ab-mapped'), meta, hires: hiresMeta });
       }

@@ -459,6 +459,7 @@ const ZENITH_EPS_RAD = 1e-6;
 const POLE_LIMIT_DEG = 89.9999;
 
 function normalizeLon(lonDeg) {
+  if (lonDeg >= 0 && lonDeg < 360) return lonDeg;   // in range already: as it is (the +360 round trip adds float noise, 172.5649 → 172.56489999999997)
   const v = ((lonDeg % 360) + 360) % 360;
   return v === 360 ? 0 : v;
 }
@@ -3306,6 +3307,353 @@ const GAZETTEER = Object.freeze([
 
 return { GAZETTEER_SOURCE, GAZETTEER };
 })();
+__m['../map/shapes.js'] = (() => {
+// Region and route shapes on the map plane (phase 3 §4.6, §5.5). Pure functions, km plane:
+// pole at the origin, +x towards 90°E, +y towards 0°E. Areas and lengths are planar.
+//   { type: 'rect', x0, y0, x1, y1 }        corners in any order
+//   { type: 'circle', cx, cy, rKm }
+//   { type: 'polygon', points: [[x, y], …] } closed implicitly, at least 3 points
+//   { type: 'route', points: [[x, y], …] }   open polyline, at least 2 points
+
+function contains(shape, x, y) {
+  if (!shape) return false;
+  if (shape.type === 'rect') {
+    return x >= Math.min(shape.x0, shape.x1) && x <= Math.max(shape.x0, shape.x1)
+      && y >= Math.min(shape.y0, shape.y1) && y <= Math.max(shape.y0, shape.y1);
+  }
+  if (shape.type === 'circle') return Math.hypot(x - shape.cx, y - shape.cy) <= shape.rKm;
+  if (shape.type === 'polygon') {
+    // even-odd ray cast towards +x
+    const p = shape.points;
+    let inside = false;
+    for (let a = 0, b = p.length - 1; a < p.length; b = a++) {
+      const [xa, ya] = p[a], [xb, yb] = p[b];
+      if ((ya > y) !== (yb > y) && x < ((xb - xa) * (y - ya)) / (yb - ya) + xa) inside = !inside;
+    }
+    return inside;
+  }
+  return false;   // a route encloses nothing
+}
+
+function bbox(shape) {
+  if (shape.type === 'rect') {
+    return { x0: Math.min(shape.x0, shape.x1), y0: Math.min(shape.y0, shape.y1), x1: Math.max(shape.x0, shape.x1), y1: Math.max(shape.y0, shape.y1) };
+  }
+  if (shape.type === 'circle') return { x0: shape.cx - shape.rKm, y0: shape.cy - shape.rKm, x1: shape.cx + shape.rKm, y1: shape.cy + shape.rKm };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of shape.points) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return { x0, y0, x1, y1 };
+}
+
+function areaKm2(shape) {
+  if (shape.type === 'rect') return Math.abs((shape.x1 - shape.x0) * (shape.y1 - shape.y0));
+  if (shape.type === 'circle') return Math.PI * shape.rKm * shape.rKm;
+  if (shape.type === 'polygon') {
+    const p = shape.points;
+    let twice = 0;
+    for (let a = 0, b = p.length - 1; a < p.length; b = a++) twice += p[b][0] * p[a][1] - p[a][0] * p[b][1];
+    return Math.abs(twice) / 2;
+  }
+  return 0;
+}
+
+// Whether a closed outline crosses or touches itself: any two edges that are not neighbours meet.
+// Such a polygon has an even-odd inside (maskFor) but a shoelace area that cancels, so it is refused
+// when drawn (draw.js) and by the draw_region command.
+function orient(a, b, c) {
+  const v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  return v > 0 ? 1 : v < 0 ? -1 : 0;
+}
+function onSegment(a, b, c) {
+  return Math.min(a[0], b[0]) <= c[0] && c[0] <= Math.max(a[0], b[0]) && Math.min(a[1], b[1]) <= c[1] && c[1] <= Math.max(a[1], b[1]);
+}
+function segmentsMeet(a, b, c, d) {
+  const o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
+  if (o1 !== o2 && o3 !== o4) return true;
+  return (o1 === 0 && onSegment(a, b, c)) || (o2 === 0 && onSegment(a, b, d)) || (o3 === 0 && onSegment(c, d, a)) || (o4 === 0 && onSegment(c, d, b));
+}
+function selfIntersects(points) {
+  const n = points.length;
+  if (n < 4) return false;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (j === i + 1 || (i === 0 && j === n - 1)) continue;   // neighbouring edges share a vertex
+      if (segmentsMeet(points[i], points[(i + 1) % n], points[j], points[(j + 1) % n])) return true;
+    }
+  }
+  return false;
+}
+
+function lengthKm(points) {
+  let d = 0;
+  for (let n = 1; n < points.length; n++) d += Math.hypot(points[n][0] - points[n - 1][0], points[n][1] - points[n - 1][1]);
+  return d;
+}
+
+// Cells whose centre lies inside the shape. grid: { size, cellKm, halfKm }; cell k = j*size + i,
+// i to the right, j downwards, centre (−halfKm + (i+½)·cellKm, halfKm − (j+½)·cellKm).
+// rect is the tight inclusive cell range { i0, j0, i1, j1 } of the marked cells, null when count is 0.
+function maskFor(shape, grid) {
+  const { size, cellKm, halfKm } = grid;
+  const mask = new Uint8Array(size * size);
+  const b = bbox(shape);
+  const iFrom = Math.max(0, Math.ceil((b.x0 + halfKm) / cellKm - 0.5));
+  const iTo = Math.min(size - 1, Math.floor((b.x1 + halfKm) / cellKm - 0.5));
+  const jFrom = Math.max(0, Math.ceil((halfKm - b.y1) / cellKm - 0.5));
+  const jTo = Math.min(size - 1, Math.floor((halfKm - b.y0) / cellKm - 0.5));
+  let count = 0, i0 = size, j0 = size, i1 = -1, j1 = -1;
+  for (let j = jFrom; j <= jTo; j++) {
+    const y = halfKm - (j + 0.5) * cellKm;
+    for (let i = iFrom; i <= iTo; i++) {
+      if (!contains(shape, -halfKm + (i + 0.5) * cellKm, y)) continue;
+      mask[j * size + i] = 1;
+      count++;
+      if (i < i0) i0 = i; if (i > i1) i1 = i;
+      if (j < j0) j0 = j; if (j > j1) j1 = j;
+    }
+  }
+  return { mask, rect: count ? { i0, j0, i1, j1 } : null, count };
+}
+
+// Points along a polyline every stepKm from the start, plus the end point; at least 2 points. When that
+// would exceed maxPoints, the line is split into maxPoints − 1 equal steps instead.
+function sampleLine(points, stepKm = 0.5, maxPoints = 2000) {
+  if (!points.length) return [];
+  const total = lengthKm(points);
+  let dists;
+  const n = Math.floor(total / stepKm + 1e-9) + 1;
+  if (total === 0) dists = [0, 0];
+  else if (n + 1 > maxPoints) dists = Array.from({ length: maxPoints }, (_, k) => (k === maxPoints - 1 ? total : (total * k) / (maxPoints - 1)));
+  else {
+    dists = Array.from({ length: n }, (_, k) => k * stepKm);
+    if (total - dists[n - 1] > 1e-9) dists.push(total);
+  }
+  const out = [];
+  let seg = 1, segStart = 0;
+  for (const d of dists) {
+    while (seg < points.length - 1) {
+      const len = Math.hypot(points[seg][0] - points[seg - 1][0], points[seg][1] - points[seg - 1][1]);
+      if (segStart + len >= d) break;
+      segStart += len;
+      seg++;
+    }
+    if (points.length === 1) { out.push({ xKm: points[0][0], yKm: points[0][1], dKm: 0 }); continue; }
+    const [xa, ya] = points[seg - 1], [xb, yb] = points[seg];
+    const len = Math.hypot(xb - xa, yb - ya);
+    const t = len > 0 ? Math.min(1, Math.max(0, (d - segStart) / len)) : 0;
+    out.push({ xKm: xa + (xb - xa) * t, yKm: ya + (yb - ya) * t, dKm: d });
+  }
+  return out;
+}
+
+return { contains, bbox, areaKm2, selfIntersects, lengthKm, maskFor, sampleLine };
+})();
+__m['../georegion.js'] = (() => {
+// Regions anywhere on the Moon (pure; browser and Node). The polar map's regions are shapes in polar map km and read
+// the polar Sun and Earth grids (terrain skylines, heat.js). North of 80°S there are no such grids, so a region
+// drawn there on the globe is kept in latitude and longitude and read from the ephemeris over a SMOOTH horizon, as
+// the globe's heat colours outside the polar cap are (globalheat.js): no terrain shadows, an assumption the region
+// card names. Slope filters and suitability need the polar data, so they stay empty for these regions.
+//
+// Geo shapes (geo: true):
+//   { type: 'rect', geo: true, lat0, lat1, lonW, spanDeg }   a latitude/longitude box: lat0 < lat1, from lonW
+//                                                            eastward over spanDeg (0–180]
+//   { type: 'circle', geo: true, latDeg, lonDeg, rKm }       all ground within rKm (great-circle) of the centre
+//   { type: 'polygon', geo: true, pts: [[lat, lon], …] }     great-circle edges, 3–64 corners
+// Hash form: grect:lat0,lonW,lat1,spanDeg · gcircle:lat,lon,rKm · gpoly:lat,lon;lat,lon;…
+const RAD = Math.PI / 180, DEG = 180 / Math.PI;
+const MOON_R_KM = 1737.4;
+const r4 = (v) => Math.round(v * 1e4) / 1e4;
+const r2 = (v) => Math.round(v * 100) / 100;
+const lon360 = (v) => r4(((v % 360) + 360) % 360);
+
+const isGeo = (shape) => !!shape?.geo;
+
+// unit vector, the ephemeris frame (geometry.js unitFromLonLat): x to 0°E, z to the north pole
+function unitLL(latDeg, lonDeg) {
+  const la = latDeg * RAD, lo = lonDeg * RAD, c = Math.cos(la);
+  return [c * Math.cos(lo), c * Math.sin(lo), Math.sin(la)];
+}
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const gcKm = (a, b) => MOON_R_KM * Math.acos(Math.max(-1, Math.min(1, dot(unitLL(a[0], a[1]), unitLL(b[0], b[1])))));
+
+// the box from two clicked corners: the shorter way round in longitude
+function geoRect(a, b) {
+  const lat0 = Math.min(a.latDeg, b.latDeg), lat1 = Math.max(a.latDeg, b.latDeg);
+  let d = lon360(b.lonDeg - a.lonDeg);
+  const lonW = d <= 180 ? lon360(a.lonDeg) : lon360(b.lonDeg);
+  if (d > 180) d = 360 - d;
+  return lat1 - lat0 > 1e-4 && d > 1e-4 ? { type: 'rect', geo: true, lat0: r4(lat0), lat1: r4(lat1), lonW: r4(lonW), spanDeg: r4(d) } : null;
+}
+function geoCircle(c, edge) {
+  const rKm = gcKm([c.latDeg, c.lonDeg], [edge.latDeg, edge.lonDeg]);
+  return rKm > 0.05 ? { type: 'circle', geo: true, latDeg: r4(c.latDeg), lonDeg: r4(lon360(c.lonDeg)), rKm: r2(rKm) } : null;
+}
+function geoPolygon(points) {
+  const pts = points.map((p) => [r4(p.latDeg), r4(lon360(p.lonDeg))]);
+  return pts.length >= 3 && pts.length <= 64 ? { type: 'polygon', geo: true, pts } : null;
+}
+
+function geoParam(sh) {
+  if (!isGeo(sh)) return null;
+  // rounded (lon360 leaves float noise such as 25.853099999999984)
+  if (sh.type === 'rect') return `grect:${[sh.lat0, sh.lonW, sh.lat1, sh.spanDeg].map(r4).join(',')}`;
+  if (sh.type === 'circle') return `gcircle:${[r4(sh.latDeg), r4(sh.lonDeg), r2(sh.rKm)].join(',')}`;
+  if (sh.type === 'polygon') return `gpoly:${sh.pts.map((p) => p.map(r4).join(',')).join(';')}`;
+  return null;
+}
+const nums = (s, n) => { const v = s.split(',').map(Number); return v.length === n && v.every(Number.isFinite) ? v : null; };
+const latOk = (v) => v >= -90 && v <= 90;
+function parseGeo(kind, body) {
+  if (kind === 'grect') {
+    const v = nums(body, 4);
+    return v && latOk(v[0]) && latOk(v[2]) && v[2] > v[0] && v[3] > 0 && v[3] <= 180 ? { type: 'rect', geo: true, lat0: v[0], lonW: lon360(v[1]), lat1: v[2], spanDeg: v[3] } : null;
+  }
+  if (kind === 'gcircle') {
+    const v = nums(body, 3);
+    return v && latOk(v[0]) && v[2] > 0 && v[2] <= 3000 ? { type: 'circle', geo: true, latDeg: v[0], lonDeg: lon360(v[1]), rKm: v[2] } : null;
+  }
+  if (kind === 'gpoly') {
+    const pts = body.split(';').map((p) => nums(p, 2));
+    return pts.length >= 3 && pts.length <= 64 && pts.every((p) => p && latOk(p[0])) ? { type: 'polygon', geo: true, pts: pts.map(([a, b]) => [a, lon360(b)]) } : null;
+  }
+  return null;
+}
+
+// the centre of a shape (lat, lon) and a gnomonic projection about it: great circles are straight lines in it, so a
+// polygon with great-circle edges is a plain polygon there (fine for shapes smaller than a hemisphere)
+function centreOf(sh) {
+  if (sh.type === 'rect') return [(sh.lat0 + sh.lat1) / 2, sh.lonW + sh.spanDeg / 2];
+  if (sh.type === 'circle') return [sh.latDeg, sh.lonDeg];
+  const s = [0, 0, 0];
+  for (const [a, b] of sh.pts) { const u = unitLL(a, b); s[0] += u[0]; s[1] += u[1]; s[2] += u[2]; }
+  const n = Math.hypot(...s) || 1;
+  return [Math.asin(s[2] / n) * DEG, lon360(Math.atan2(s[1], s[0]) * DEG)];
+}
+function gnomonic(c) {
+  const C = unitLL(c[0], c[1]);
+  const E = [-Math.sin(c[1] * RAD), Math.cos(c[1] * RAD), 0];
+  const N = [C[1] * E[2] - C[2] * E[1], C[2] * E[0] - C[0] * E[2], C[0] * E[1] - C[1] * E[0]];
+  return (lat, lon) => { const u = unitLL(lat, lon), d = dot(u, C); return d > 1e-6 ? [dot(u, E) / d, dot(u, N) / d] : null; };
+}
+
+// (lat, lon) → inside the shape
+function geoContains(sh) {
+  if (sh.type === 'rect') return (lat, lon) => lat >= sh.lat0 && lat <= sh.lat1 && lon360(lon - sh.lonW) <= sh.spanDeg;
+  if (sh.type === 'circle') { const c = [sh.latDeg, sh.lonDeg]; return (lat, lon) => gcKm(c, [lat, lon]) <= sh.rKm; }
+  const proj = gnomonic(centreOf(sh)), poly = sh.pts.map(([a, b]) => proj(a, b));
+  if (poly.some((p) => !p)) return () => false;
+  return (lat, lon) => {
+    const q = proj(lat, lon);
+    if (!q) return false;
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > q[1]) !== (yj > q[1]) && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+}
+
+// the outline to draw, as { latDeg, lonDeg } corners joined by great circles (the box: its parallels sampled finely,
+// since a parallel is not a great circle)
+function geoOutline(sh) {
+  if (sh.type === 'rect') {
+    const n = Math.max(2, Math.ceil(sh.spanDeg * 2)), out = [];
+    for (let k = 0; k <= n; k++) out.push({ latDeg: sh.lat0, lonDeg: sh.lonW + (sh.spanDeg * k) / n });
+    for (let k = n; k >= 0; k--) out.push({ latDeg: sh.lat1, lonDeg: sh.lonW + (sh.spanDeg * k) / n });
+    out.push(out[0]);
+    return out;
+  }
+  if (sh.type === 'circle') {
+    const d = sh.rKm / MOON_R_KM, la = sh.latDeg * RAD, lo = sh.lonDeg * RAD, out = [];
+    for (let k = 0; k <= 96; k++) {
+      const b = (2 * Math.PI * k) / 96;
+      const lat = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
+      const lon = lo + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(lat));
+      out.push({ latDeg: lat * DEG, lonDeg: lon360(lon * DEG) });
+    }
+    return out;
+  }
+  const out = sh.pts.map(([a, b]) => ({ latDeg: a, lonDeg: b }));
+  out.push(out[0]);
+  return out;
+}
+
+// the latitude band and longitude span a shape covers (for the sampling grid)
+function extent(sh) {
+  if (sh.type === 'rect') return { lat0: sh.lat0, lat1: sh.lat1, lonW: sh.lonW, span: sh.spanDeg };
+  const o = geoOutline(sh);
+  let lat0 = 90, lat1 = -90;
+  for (const p of o) { lat0 = Math.min(lat0, p.latDeg); lat1 = Math.max(lat1, p.latDeg); }
+  if (sh.type === 'circle') {   // a cap over a pole covers every longitude
+    const dLat = (sh.rKm / MOON_R_KM) * DEG;
+    if (sh.latDeg + dLat >= 90) lat1 = 90;
+    if (sh.latDeg - dLat <= -90) lat0 = -90;
+  }
+  if (lat1 >= 89.99 || lat0 <= -89.99) return { lat0, lat1, lonW: 0, span: 360 };
+  // the smallest eastward span holding every outline longitude
+  const lons = o.map((p) => lon360(p.lonDeg)).sort((a, b) => a - b);
+  let gap = -1, at = 0;
+  for (let i = 0; i < lons.length; i++) { const g = lon360((lons[(i + 1) % lons.length] - lons[i]) || 360); if (g > gap) { gap = g; at = (i + 1) % lons.length; } }
+  return { lat0, lat1, lonW: lons[at], span: Math.min(360, 360 - gap) };
+}
+
+// Exact areas for the box and the cap; the polygon from the sampled cells (geoStats)
+function geoAreaKm2(sh) {
+  const R2 = MOON_R_KM * MOON_R_KM;
+  if (sh.type === 'rect') return R2 * sh.spanDeg * RAD * (Math.sin(sh.lat1 * RAD) - Math.sin(sh.lat0 * RAD));
+  if (sh.type === 'circle') return 2 * Math.PI * R2 * (1 - Math.cos(sh.rKm / MOON_R_KM));
+  return null;
+}
+
+// Sun, Earth and both above the smooth horizon over [startMs, startMs + lenMs], on cells of about `targetCells`
+// inside the shape: the area-weighted means (0–1), the cell count, the area, and the best cell for `mode`.
+// eph.at(t) → { sun, earth } unit vectors (or null outside the ephemeris).
+function geoStats(sh, eph, startMs, lenMs, { mode = 'both', stepMs = 2 * 3600e3, targetCells = 3000 } = {}) {
+  const ex = extent(sh), inside = geoContains(sh);
+  const midCos = Math.max(0.05, Math.cos(((ex.lat0 + ex.lat1) / 2) * RAD));
+  const areaDeg = Math.max(1e-6, (ex.lat1 - ex.lat0) * ex.span * midCos);
+  const step = Math.max(0.01, Math.min(1, Math.sqrt(areaDeg / targetCells)));
+  const cells = [];
+  for (let lat = ex.lat0 + step / 2; lat < ex.lat1; lat += step) {
+    const lonStep = step / Math.max(0.05, Math.cos(lat * RAD));
+    for (let d = lonStep / 2; d < ex.span; d += lonStep) {
+      const lon = lon360(ex.lonW + d);
+      if (inside(lat, lon)) cells.push({ lat, lon, u: unitLL(lat, lon), w: Math.cos(lat * RAD) * lonStep * step, sun: 0, earth: 0, both: 0 });
+    }
+  }
+  // a region smaller than one cell: its centre stands for it
+  if (!cells.length) { const c = centreOf(sh); cells.push({ lat: c[0], lon: c[1], u: unitLL(c[0], c[1]), w: 1, sun: 0, earth: 0, both: 0 }); }
+  let steps = 0;
+  for (let t = startMs; t <= startMs + lenMs; t += stepMs) {
+    const e = eph.at(t);
+    if (!e) continue;
+    steps++;
+    for (const c of cells) {
+      const s = dot(c.u, e.sun) > 0, m = dot(c.u, e.earth) > 0;
+      if (s) c.sun++;
+      if (m) c.earth++;
+      if (s && m) c.both++;
+    }
+  }
+  if (!steps) return null;
+  let W = 0, sun = 0, earth = 0, both = 0, best = null;
+  for (const c of cells) {
+    c.sun /= steps; c.earth /= steps; c.both /= steps;
+    W += c.w; sun += c.sun * c.w; earth += c.earth * c.w; both += c.both * c.w;
+    const v = c[mode] ?? c.both;
+    if (!best || v > best.value) best = { latDeg: r4(c.lat), lonDeg: r4(c.lon), value: v };
+  }
+  const area = geoAreaKm2(sh) ?? W * RAD * RAD * MOON_R_KM * MOON_R_KM;
+  return { cells: cells.length, cellDeg: step, areaKm2: area, sun: sun / W, earth: earth / W, both: both / W, pass: null, score: null, best };
+}
+
+return { MOON_R_KM, isGeo, unitLL, gcKm, geoRect, geoCircle, geoPolygon, geoParam, parseGeo, geoContains, geoOutline, geoAreaKm2, geoStats };
+})();
 __m['terrain-local.js'] = (() => {
 // Terrain around one site for the descent scene, finest first: the site's high-resolution LOLA patch (5, 10 or
 // 20 m, 10 × 10 km; demo/src/hires.js), then the 20 m and 40 m tiles listed in the box, then the finest plain
@@ -3653,8 +4001,16 @@ __m['landeval.js'] = (() => {
 //   deps: { eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin? }
 //   evaluate → Promise<{ list: [pick, spot 1…5], grid, limit, battH, stayDays } | null (superseded by a newer call)>
 //   hooks: { onGrid(grid), onProgress(stage 1 | 2, fraction) }
+//   opts (the screening settings, ui/landcard.js): { minSun, minEarth (0–1, shares of the stay a grid point must reach
+//     to pass, besides slope, darkness against the battery and permanent shadow), radiusKm (around a point),
+//     cells (grid points over a region), ellipse: { downrangeM, crossrangeM } }
+//   evaluateRegion(shape, hooks) → the same search inside a drawn region (polar map km, or latitude/longitude,
+//     georegion.js) instead of 15 km around a point: about REGION_CELLS grid points over it, then the eight best in
+//     detail, five kept → { list: [spot 1…5], grid, limit, battH, stayDays, region: true }
 const { loadData } = __m['../data-loader.js'];
-const { createDem, toXY, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
+const { createDem, toXY, fromXY, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
+const { contains: polarContains, bbox: polarBbox } = __m['../map/shapes.js'];
+const { isGeo, geoContains, geoOutline } = __m['../georegion.js'];
 const { createPsr, PSR_PACK } = __m['../psr.js'];
 const { loadSiteTerrain } = __m['terrain-local.js'];
 const { pickLandingWindow, skyAt, mapScale, slopeDeg } = __m['landing.js'];
@@ -3666,6 +4022,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
 const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
 const SEARCH_RADIUS_KM = 15;
+const REGION_CELLS = 500;   // grid points screened over a drawn region (the step follows its area)
 
 function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCtx, getVehicle, getFromMs, getStayDays, getMargin = () => NaN }) {
   // the layers: navigator 1 km and 2 km slope and shadow grids, the LOLA PSR map, the 120 m polar DEM; fine: the
@@ -3702,7 +4059,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
 
   // one place in detail: { site, landingMs, figs, verdict, resKm, polar, skyline, patch, distKm }
   // from: the proposed point, for distKm; fine: keep this place's terrain as L.fine
-  async function detail(c, { vehicle, limit, battH, stayDays, fromMs, from = null, fine = false }) {
+  async function detail(c, { vehicle, limit, battH, stayDays, fromMs, from = null, fine = false, ellipse = null }) {
     const dem = getDem();
     const polar = c.latDeg <= TERRAIN_MAX_LAT;
     const listed = sites.find((s) => distanceBearing(s, c).km < 0.2);
@@ -3723,7 +4080,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; patch = ctx.patch;
     }
     // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
-    const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
+    const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k, ...(ellipse ?? {}) });
     const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
     if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(xy[0], xy[1]) === 0 ? 1 : 0);
     else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
@@ -3742,7 +4099,10 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
   }
 
   let token = 0;
-  async function evaluate(latDeg, lonDeg, { onGrid = () => {}, onProgress = () => {} } = {}) {
+  // the hard limits of the screen: the navigator's (slope, longest dark against the battery, not in permanent shadow)
+  // and the settings' minimum Sun and Earth shares
+  const passOk = (q, ok, o) => ok && q.sun >= (o.minSun ?? 0) && q.earth >= (o.minEarth ?? 0);
+  async function evaluate(latDeg, lonDeg, { onGrid = () => {}, onProgress = () => {} } = {}, opts = {}) {
     const my = ++token;
     await loadLayers();
     if (my !== token) return null;
@@ -3759,8 +4119,9 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const land0 = pickLandingWindow(eph, pick0, mask0, fromMs)?.tMs ?? fromMs;
     const dirs4 = skyDirections(eph, land0, stayDays, 4);
     const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
-    const grid = searchGrid(x, y, { radiusKm: SEARCH_RADIUS_KM * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
-    const hb = (SEARCH_RADIUS_KM + stepKm / 2) * k;
+    const radiusKm = opts.radiusKm ?? SEARCH_RADIUS_KM;
+    const grid = searchGrid(x, y, { radiusKm: radiusKm * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
+    const hb = (radiusKm + stepKm / 2) * k;
     grid.box = { x0: x - hb, x1: x + hb, y0: y - hb, y1: y + hb };
     grid.cellKm = stepKm * k;
     onGrid(grid);
@@ -3773,7 +4134,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
       Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
       if (n % 24 === 23 || n === grid.length - 1) {
         const done = grid.slice(0, n + 1), s = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, i) => { q.score = s[i].score; q.ok = s[i].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        done.forEach((q, i) => { q.score = s[i].score; q.ok = passOk(q, s[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
         onProgress(1, (n + 1) / grid.length);
         onGrid(grid);
         await tick();
@@ -3787,7 +4148,7 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     const all = [pick, ...cands];
     onProgress(2, 0);
     for (let n = 0; n < all.length; n++) {
-      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs, from: pick0, fine: n === 0 }));
+      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs, from: pick0, fine: n === 0, ellipse: opts.ellipse }));
       if (my !== token) return null;
       onProgress(2, (n + 1) / all.length);
       await tick();
@@ -3796,14 +4157,96 @@ function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCt
     cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
     const list = [pick, ...cands.slice(0, 5)];
     list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
-    return { list, grid, limit, battH, stayDays };
+    return { list, grid, limit, battH, stayDays, radiusKm, screened: grid.length, passed: grid.filter((p) => p.ok).length };
   }
+  // ---- inside a drawn region ----
+  async function evaluateRegion(shape, { onGrid = () => {}, onProgress = () => {} } = {}, opts = {}) {
+    const my = ++token;
+    await loadLayers();
+    if (my !== token) return null;
+    const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
+    const fromMs = getFromMs();
+    const dem = getDem();
+    // candidate points: a lat/lon (geo) region on a cos-latitude grid, a polar one on its map-km box, ~REGION_CELLS
+    const pts = [];
+    let stepKm;
+    if (isGeo(shape)) {
+      const inside = geoContains(shape), o = geoOutline(shape);
+      let la0 = 90, la1 = -90;
+      for (const q of o) { la0 = Math.min(la0, q.latDeg); la1 = Math.max(la1, q.latDeg); }
+      const lons = o.map((q) => q.lonDeg), c = o[0].lonDeg;
+      const rel = lons.map((l) => ((l - c + 540) % 360) - 180);
+      const lo0 = c + Math.min(...rel), lo1 = c + Math.max(...rel);
+      const midCos = Math.max(0.05, Math.cos(((la0 + la1) / 2) * Math.PI / 180));
+      const areaKm2 = (la1 - la0) * 30.32 * (lo1 - lo0) * 30.32 * midCos;
+      stepKm = Math.max(2, Math.sqrt(areaKm2 / (opts.cells ?? REGION_CELLS)));
+      const dLat = stepKm / 30.32;
+      for (let la = la0 + dLat / 2; la < la1; la += dLat) {
+        const dLon = dLat / Math.max(0.05, Math.cos((la * Math.PI) / 180));
+        for (let lo = lo0 + dLon / 2; lo < lo1; lo += dLon) {
+          const lon = ((lo % 360) + 360) % 360;
+          if (inside(la, lon)) { const [x, y] = toXY(la, lon); pts.push({ latDeg: la, lonDeg: lon, xKm: x, yKm: y }); }
+        }
+      }
+    } else {
+      const b = polarBbox(shape), area = (b.x1 - b.x0) * (b.y1 - b.y0);
+      stepKm = Math.max(1, Math.sqrt(area / (opts.cells ?? REGION_CELLS)));
+      for (let y = b.y0 + stepKm / 2; y < b.y1; y += stepKm) for (let x = b.x0 + stepKm / 2; x < b.x1; x += stepKm) {
+        if (polarContains(shape, x, y)) { const ll = fromXY(x, y); pts.push({ latDeg: ll.latDeg, lonDeg: ll.lonDeg, xKm: x, yKm: y }); }
+      }
+    }
+    if (!pts.length) return { list: [], grid: pts, limit, battH, stayDays, region: true, stepKm };
+    pts.cellKm = stepKm;
+    onGrid(pts);
+    // the global terrain around the region's middle (its tiles serve the skylines and slopes off the pole)
+    const mid = pts[Math.floor(pts.length / 2)];
+    const anyGlobal = pts.some((p) => p.latDeg > TERRAIN_MAX_LAT);
+    if (anyGlobal) { try { await siteCtx.around(mid, Math.min(400, Math.sqrt(pts.length) * stepKm)); } catch { /* coarse tiles stand in */ } }
+    if (my !== token) return null;
+    const land0 = pickLandingWindow(eph, mid, mid.latDeg <= TERRAIN_MAX_LAT ? skylineFor(dem, mid) : siteCtx.quickMask(mid), fromMs)?.tMs ?? fromMs;
+    const dirs4 = skyDirections(eph, land0, stayDays, 4);
+    const margin = getMargin();
+    // slope off the pole: over 1 km on the global terrain, from heights 0.5 km either side
+    const slopeLL = (p) => {
+      const h = (la, lo) => siteCtx.sampleLL(la, lo), d = 0.5 / 30.32, dl = d / Math.max(0.05, Math.cos((p.latDeg * Math.PI) / 180));
+      const gx = (h(p.latDeg, p.lonDeg + dl) - h(p.latDeg, p.lonDeg - dl)) / 1000, gy = (h(p.latDeg + d, p.lonDeg) - h(p.latDeg - d, p.lonDeg)) / 1000;
+      return Math.atan(Math.hypot(gx, gy)) * 180 / Math.PI;
+    };
+    for (let n = 0; n < pts.length; n++) {
+      const p = pts[n], polar = p.latDeg <= TERRAIN_MAX_LAT;
+      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
+      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: polar ? slopeAt(p.xKm, p.yKm) : slopeLL(p), shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
+      if (n % 16 === 15 || n === pts.length - 1) {
+        const done = pts.slice(0, n + 1), sc = suitability(done, { limitDeg: limit, battH });
+        done.forEach((q, i) => { q.score = sc[i].score; q.ok = passOk(q, sc[i].ok, opts); q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        onProgress(1, (n + 1) / pts.length);
+        await tick();
+        if (my !== token) return null;
+      }
+    }
+    // the eight best that pass, apart by two grid steps (in map km at their latitude), in detail; five kept
+    const best = bestPoints(pts.map((p) => ({ ...p, xKm: p.xKm / mapScale(p.latDeg), yKm: p.yKm / mapScale(p.latDeg) })), { count: 8, minKm: 2 * stepKm });
+    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: toXY(p.latDeg, p.lonDeg)[0], yKm: toXY(p.latDeg, p.lonDeg)[1], score: p.score }));
+    onProgress(2, 0);
+    for (let n = 0; n < cands.length; n++) {
+      Object.assign(cands[n], await detail(cands[n], { vehicle, limit, battH, stayDays, fromMs, ellipse: opts.ellipse }));
+      if (my !== token) return null;
+      onProgress(2, (n + 1) / cands.length);
+      await tick();
+    }
+    const count = (c, g) => c.figs.filter((f) => f.grade === g).length;
+    cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
+    const list = cands.slice(0, 5);
+    list.forEach((c, n) => { c.name = `Spot ${n + 1}`; c.distKm = 0; });
+    return { list, grid: pts, limit, battH, stayDays, region: true, stepKm, screened: pts.length, passed: pts.filter((p) => p.ok).length };
+  }
+
   const cancel = () => { token++; };
 
-  return { L, loadLayers, slopeAt, shadowAt, detail, evaluate, cancel };
+  return { L, loadLayers, slopeAt, shadowAt, detail, evaluate, evaluateRegion, cancel };
 }
 
-return { SEARCH_RADIUS_KM, createLandingEvaluator };
+return { SEARCH_RADIUS_KM, REGION_CELLS, createLandingEvaluator };
 })();
 __m['../heat.js'] = (() => {
 // Heat-map arithmetic over the precomputed terrain-skyline grid (spec phase 2 §2.4, §3.1–§3.2).

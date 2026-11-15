@@ -78,9 +78,8 @@
   .leg-label[hidden], .wp-label[hidden], .frame-label[hidden], .frames-box[hidden] { display: none; }
   /* the small 3D window in the navigator (embed=1): the view only */
   /* pick=1 (the Map's whole-Moon level, framed): the globe, the names, the camera buttons and Fly to; cfg=1 (the
-     execution page's surface operations, framed): the route playback without the planning tools */
+     execution page's surface operations, framed): the same page as the route view (header, actions, the panel) */
   body.pick .panel, body.pick .status, body.pick .act-bar, body.pick .brand, body.pick .readout, body.pick .cam-ctl { display: none !important; }
-  body.exec .brand, body.exec .act-bar, body.exec .panel { display: none !important; }
   @media (max-width: 600px) { body.exec .cam-ctl, body.exec #route-left { display: none !important; } }   /* a phone's small frame: the playback first; drag and pinch move the camera */
   body.pick canvas { cursor: crosshair; }
   body.embed .brand, body.embed .panel, body.embed .readout, body.embed .status, body.embed #route-left, body.embed .route-hud, body.embed #labels, body.embed .cam-ctl { display: none !important; }
