@@ -15,7 +15,7 @@ import { createGlobeTerrain, MOON_R_KM } from '../globe-terrain.js';
 import { createGlobeView } from '../globe-view.js';
 import { toXY, fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { loadData } from '../data-loader.js';
-import { globalGrid, globalFractions, globalStates } from '../globalheat.js';
+import { globalGrid, globalFractions } from '../globalheat.js';
 import { heatColour, readColours } from '../map/layers.js';
 import { clampView } from '../map/view.js';
 import { GAZETTEER } from '../lander/gazetteer.js';
@@ -79,7 +79,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       : { lat: s0?.latDeg ?? 0, lon: s0?.lonDeg ?? 0, heading: 0, tilt: 0, dist: 1600 };
     if (polar && st.viewport && (st.viewport.cx || st.viewport.cy)) { const c = fromXY(st.viewport.cx, st.viewport.cy); initial.lat = c.latDeg; initial.lon = c.lonDeg; initial.heading = northUp(c.latDeg, c.lonDeg); }
     view = createGlobeView(canvas, terrain, {
-      overlays: true, initial,
+      overlays: true, initial, shadeGrey: 0.1,   // about the polar map's hillshade grey, so the two meet without a seam
       canDrag: () => (getState().tool ?? 'select') === 'select',
       onCamera: (c) => { cameraMoved(c); onCamera(c); },
     });
@@ -144,15 +144,17 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const cur = frame.view;
     const same = Math.abs(cur.zoom - want.zoom) / want.zoom < 0.04 && Math.hypot(cur.cx - want.cx, cur.cy - want.cy) < 0.02 * (2 * MAX_HALF) / want.zoom;
     // (the map clamps a view to its square; the clamped view is what it will show)
-    if (!same) { requested = clampView(want); api.onPolarView?.(requested); }
+    if (!same) { requested = clampView(want); requestedAt = performance.now(); api.onPolarView?.(requested); }
     else requested = { ...cur };
     schedule(60);
   }
   let polarInView = true;
   let requested = null;   // the polar view the camera last asked for
+  let requestedAt = 0;
   // the polar map moved by itself (fit to a planned route, a story step, the Coordinates fold): the camera follows
   function followPolarView() {
-    if (!view || gesturing || !requested) return;
+    // (only once the map has had time to take the camera's own request: the page renders before the map applies it)
+    if (!view || gesturing || !requested || view.flying || performance.now() - requestedAt < 900) return;
     const v = frame.view, geo = frame.geo;
     if (!geo.W) return;
     const near = Math.abs(v.zoom - requested.zoom) / requested.zoom < 0.08 && Math.hypot(v.cx - requested.cx, v.cy - requested.cy) < 0.05 * (2 * MAX_HALF) / v.zoom;
@@ -207,7 +209,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       if (comp.width !== w || comp.height !== h) { comp.width = w; comp.height = h; } else cctx.clearRect(0, 0, w, h);
       const put = (el) => { const r = el.getBoundingClientRect(); if (r.width && el.width) cctx.drawImage(el, (r.left - fr.left) * s, (r.top - fr.top) * s, r.width * s, r.height * s); };
       for (const c of host.querySelectorAll(':scope > canvas.map-canvas')) if (getComputedStyle(c).display !== 'none') put(c);
-      const imgs = await Promise.all([...host.querySelectorAll(':scope > svg.map-overlay, :scope > svg.map-shapes, :scope > svg.map-sky')].map(svgImage));
+      // (not the Sun and Earth arrows: they sit at the polar map's view centre, which is not the globe's; the sky dial
+      // shows the directions at the site)
+      const imgs = await Promise.all([...host.querySelectorAll(':scope > svg.map-overlay, :scope > svg.map-shapes')].map(svgImage));
       for (const it of imgs) if (it) cctx.drawImage(it.img, (it.r.left - fr.left) * s, (it.r.top - fr.top) * s, it.r.width * s, it.r.height * s);
       const box = frame.boundsFor(frame.view);
       if (box) view.setOverlay({ polar: { canvas: comp, box, mix: 1 } });
@@ -223,7 +227,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   let lastUpd = 0;
   function frameTick() {
     const now = performance.now();
-    if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); }
+    if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); }
     const k = `${host.dataset.sharp ?? ''}|${host.dataset.redrawMs ?? ''}|${host.dataset.moveMs ?? ''}|${pyramid.version ?? ''}`;
     if (k !== lastSharp) { lastSharp = k; schedule(120); }
     if (pyramid.version !== pyrV) { pyrV = pyramid.version; view.invalidate({ pole: 'S' }); }
@@ -245,18 +249,29 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (!view) return;
     const st = getState();
     const mode = st.mapMode ?? 'both';
-    const hour = Math.floor((st.cursorMs ?? st.landingMs ?? 0) / 3600e3);
-    const key = `${mode}|${st.landingMs}|${st.stayDays}|${st.slipDays}|${mode === 'now' ? hour : ''}|${st.windowOn}`;
+    const style = frame.terrain?.style ?? 'data';
+    const tenMin = Math.floor((st.cursorMs ?? st.landingMs ?? 0) / 600e3);
+    const live = mode === 'now' || !st.windowOn || !Number.isFinite(st.landingMs);
+    const night = host.dataset.live === 'on';   // the polar map's "Light at the playhead" veil is showing
+    const key = `${mode}|${st.landingMs}|${st.stayDays}|${st.slipDays}|${live || night ? tenMin : ''}|${st.windowOn}|${style}|${night}`;
     if (!force && key === gKey) return;
     gKey = key;
     const colours = readColours();
+    // over Topo and Real light the heat goes on at the polar map's strength there (mapframe.js HEAT_ON_TERRAIN)
+    const alpha = style === 'data' ? 1 : 0.35;
+    const dNow = night ? eph.at(st.cursorMs ?? st.landingMs ?? eph.startMs) : null;
+    view.setNight(dNow ? dNow.sun : null);
+    if (live) {
+      const d = eph.at(st.cursorMs ?? st.landingMs ?? eph.startMs);
+      view.setLive(d ? { sun: d.sun, earth: d.earth, colours } : null);
+      view.setOverlay({ global: { canvas: gcv, alpha } });
+      return;
+    }
+    view.setLive(null);
     const img = gctx.createImageData(grid.w, grid.h), d = img.data;
     const N = grid.w * grid.h;
     let pick = null;
-    if (mode === 'now' || !st.windowOn || !Number.isFinite(st.landingMs)) {
-      const states = globalStates(grid, eph, st.cursorMs ?? st.landingMs ?? eph.startMs);
-      pick = (c) => heatColour('now', { state: states[c] }, colours);
-    } else if (mode === 'change') {
+    if (mode === 'change') {
       const a = fractions(st.landingMs, st.stayDays), b = fractions(st.landingMs + (st.slipDays ?? 0) * 86400e3, st.stayDays);
       pick = (c) => heatColour('change', { delta: b.both[c] - a.both[c] }, colours);
     } else if (mode === 'both' || mode === 'sun' || mode === 'earth') {
@@ -271,7 +286,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       d[c * 4] = r; d[c * 4 + 1] = g; d[c * 4 + 2] = b; d[c * 4 + 3] = Math.round(a * 255);
     }
     gctx.putImageData(img, 0, 0);
-    view.setOverlay({ global: { canvas: gcv, alpha: 0.85 } });
+    view.setOverlay({ global: { canvas: gcv, alpha } });
   }
 
   // ---- terrain style and contours of the globe (the polar picture carries its own) ----
@@ -282,8 +297,10 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const key = `${ts.style}|${ts.contours}|${ts.style === 'real' ? Math.floor((st.cursorMs ?? 0) / 600e3) : ''}`;
     if (key === tsKey) return;
     tsKey = key;
-    view.setColour(ts.style === 'topo' ? 'height' : 'shade');
+    view.setColour(ts.style === 'topo' ? 'tint' : 'shade');
     view.setContours(!!ts.contours);
+    // contour ink as on the polar map for each style (mapframe.js CONTOUR_INK, the index lines)
+    view.setContourInk(ts.style === 'topo' ? [58, 32, 14] : ts.style === 'real' ? [255, 206, 150] : [235, 235, 235]);
     const d = ts.style === 'real' ? eph.at(st.cursorMs ?? st.landingMs) : null;
     view.setSun(d ? d.sun : null);
   }
@@ -377,7 +394,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     flyTo(cam) { view?.flyTo({ tilt: 0, heading: northUp(cam.lat, cam.lon), ms: 1400, ...cam }); },
     zoom(dir) { if (!view) return false; const c = view.camera; view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.05, Math.min(14000, c.dist * (dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 400 }); return true; },
     // the page re-rendered (mode, window, terrain style, site, playhead): bring the globe's own layers up to date
-    update() { refreshGlobal(); refreshTerrain(); placeLabels(); followPolarView(); schedule(150); },
+    update() { refreshGlobal(); refreshTerrain(); placeLabels(); schedule(150); },
     get camera() { return view?.camera ?? null; },
   };
   void lastCam;

@@ -11,6 +11,8 @@ import { MOON_R_KM, G1, G2 } from './globe-terrain.js';
 import { fromXY } from './terrain.js';
 
 const RAD = Math.PI / 180, DEG = 180 / Math.PI;
+const lin = (c) => Math.pow(c / 255, 2.2);
+const TINT_LINEAR = [[0, [46, 58, 82]], [0.3, [86, 98, 112]], [0.6, [150, 146, 136]], [1, [222, 205, 165]]].map(([t, c]) => [t, c.map(lin)]);   // terrain-style.js TINT
 export const SEG = 32;                 // grid cells per node side
 export const CAP_HALF_KM = 320;        // polar root: ±320 km (≈ 79.4° latitude at the corners' axes)
 export const BAND_LAT = 80;            // cylindrical band edge
@@ -104,7 +106,7 @@ function reliefM(n) {
 //     polar   a canvas in south polar stereographic km (terrain.js toXY) over the box { x0, x1, y0, y1 }: the Map's
 //             own picture of the polar cap (heat modes, terrain style, contours, shapes, routes, labels)
 //     global  an equirectangular canvas (0°E at the left, 90°N at the top): the whole-Moon heat layer
-export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {}, capDepth = () => MAX_DEPTH_CAP, canDrag = () => true, overlays = false } = {}) {
+export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {}, capDepth = () => MAX_DEPTH_CAP, canDrag = () => true, overlays = false, shadeGrey = 0.36 } = {}) {
   const THREE = window.THREE;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -125,8 +127,12 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   const blank = () => { const t = new THREE.DataTexture(new Uint8Array(4), 1, 1); t.needsUpdate = true; return t; };
   const overlayU = {
     uPolarTex: { value: blank() }, uPolarBox: { value: new THREE.Vector4(-1, 1, -1, 1) }, uPolarOn: { value: 0 }, uPolarMix: { value: 1 },
-    uGlobalTex: { value: blank() }, uGlobalOn: { value: 0 }, uGlobalAlpha: { value: 1 },
+    uGlobalTex: { value: blank() }, uGlobalOn: { value: 0 }, uGlobalAlpha: { value: 1 }, uGlobalEdge: { value: -80 * RAD },
+    // Live (Sun and Earth now) worked out per pixel with a smooth horizon: no cells, so the terminators are smooth
+    uLiveOn: { value: 0 }, uNightOn: { value: 0 }, uLiveSun: { value: new THREE.Vector3(1, 0, 0) }, uLiveEarth: { value: new THREE.Vector3(1, 0, 0) },
+    uColSun: { value: new THREE.Vector3(1, 0.7, 0.2) }, uColEarth: { value: new THREE.Vector3(0.3, 0.7, 0.95) }, uColBoth: { value: new THREE.Vector3(1, 1, 1) },
   };
+  contourU.uContourInk = { value: new THREE.Vector3(1.0, 0.86, 0.45) };
   for (const m of [matCyl, matCap]) {
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, contourU, overlays ? overlayU : {});
@@ -139,23 +145,34 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
           vec3 nU = normalize(vLsnWorld);
           float lat = asin(clamp(nU.y, -1.0, 1.0)), lon = atan(-nU.z, nU.x);
           float lum = clamp(dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)) / 0.42, 0.25, 1.6);
-          if (uGlobalOn > 0.5) {
-            float u = fract(lon / 6.2831853 + 1.0), vt = (1.5707963 - lat) / 3.1415927;
-            vec4 g = texture2D(uGlobalTex, vec2(u, 1.0 - vt));
-            gl_FragColor.rgb = mix(gl_FragColor.rgb, g.rgb * (0.55 + 0.45 * lum), g.a * uGlobalAlpha);
+          // the whole-Moon layers stop at the polar data's edge, where the polar picture takes over
+          if (lat > uGlobalEdge) {
+            // the polar map's "no Sun now" veil, carried on outside it (smooth horizon)
+            if (uNightOn > 0.5 && dot(vec3(nU.x, -nU.z, nU.y), uLiveSun) <= 0.0) gl_FragColor.rgb *= 0.5;
+            if (uLiveOn > 0.5) {
+              vec3 nM = vec3(nU.x, -nU.z, nU.y);   // Moon-fixed (x 0°E, y 90°E, z north), as the ephemeris
+              bool sUp = dot(nM, uLiveSun) > 0.0, eUp = dot(nM, uLiveEarth) > 0.0;
+              vec3 lc = sUp && eUp ? uColBoth : sUp ? uColSun : uColEarth;
+              float la = (sUp || eUp) ? 0.7 * uGlobalAlpha : 0.0;
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, lc * (0.55 + 0.45 * lum), la);
+            } else if (uGlobalOn > 0.5) {
+              float u = fract(lon / 6.2831853 + 1.0), vt = (1.5707963 - lat) / 3.1415927;
+              vec4 g = texture2D(uGlobalTex, vec2(u, 1.0 - vt));
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, g.rgb * (0.55 + 0.45 * lum), g.a * uGlobalAlpha);
+            }
           }
-          if (uPolarOn > 0.5 && lat < -1.36) {
+          if (uPolarOn > 0.5 && lat < uGlobalEdge) {   // the polar picture holds data only inside 80°S
             float rS = 2.0 * uMoonR * tan((1.5707963 + lat) * 0.5);
             float X = rS * sin(lon), Y = rS * cos(lon);
             vec2 uv = vec2((X - uPolarBox.x) / (uPolarBox.y - uPolarBox.x), (uPolarBox.w - Y) / (uPolarBox.w - uPolarBox.z));
             if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
               vec4 c = texture2D(uPolarTex, vec2(uv.x, 1.0 - uv.y));
               lsnInPolar = step(0.5, c.a);
-              gl_FragColor.rgb = mix(gl_FragColor.rgb, c.rgb * mix(1.0, 0.7 + 0.3 * lum, 0.6), c.a * uPolarMix);
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, c.rgb * mix(1.0, 0.85 + 0.15 * lum, 0.5), c.a * uPolarMix);   // the picture has its own shading: only a hint of the mesh's
             }
           }
         }` : '\n        float lsnInPolar = 0.0;';
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;${overlays ? '\nuniform sampler2D uPolarTex, uGlobalTex;\nuniform vec4 uPolarBox;\nuniform float uPolarOn, uPolarMix, uGlobalOn, uGlobalAlpha;' : ''}`)
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;${overlays ? '\nuniform sampler2D uPolarTex, uGlobalTex;\nuniform vec4 uPolarBox;\nuniform float uPolarOn, uPolarMix, uGlobalOn, uGlobalAlpha, uGlobalEdge, uLiveOn, uNightOn;\nuniform vec3 uLiveSun, uLiveEarth, uColSun, uColEarth, uColBoth;' : ''}\nuniform vec3 uContourInk;`)
         .replace('#include <dithering_fragment>', `#include <dithering_fragment>${drape}
         if (uContours > 0.5 && lsnInPolar < 0.5) {
           float hm = (length(vLsnWorld) - uMoonR) * 1000.0 / uExag;
@@ -163,7 +180,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
           float d = abs(fract(q + 0.5) - 0.5) / max(w, 1e-5);
           float major = abs(fract(q / 5.0 + 0.5) - 0.5) * 5.0 / max(w, 1e-5);
           float line = (1.0 - smoothstep(0.3, 1.1, d)) * 0.4 + (1.0 - smoothstep(0.6, 1.8, major)) * 0.45;
-          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.86, 0.45), clamp(line, 0.0, 0.85) * step(w, 0.45));
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, uContourInk, clamp(line, 0.0, 0.85) * step(w, 0.45));
         }`);
     };
   }
@@ -178,14 +195,17 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
 
   // ---- mesh building ----
   function colourFor(hM, out, k) {
-    if (state.colour === 'height') {
-      const t = Math.min(1, Math.max(0, (hM + 9000) / 19500));
-      const stops = [[0.0, [0.13, 0.17, 0.55]], [0.25, [0.1, 0.55, 0.8]], [0.45, [0.25, 0.75, 0.35]], [0.6, [0.95, 0.9, 0.3]], [0.8, [0.9, 0.35, 0.15]], [1, [0.98, 0.95, 0.95]]];
+    if (state.colour === 'height' || state.colour === 'tint') {
+      // 'height': a rainbow over the Moon's whole range; 'tint': the polar map's Topo tint (terrain-style.js TINT, made
+      // linear) over ±7 km, so the globe and the draped polar picture share one palette
+      const tint = state.colour === 'tint';
+      const t = tint ? Math.min(1, Math.max(0, (hM + 7000) / 14000)) : Math.min(1, Math.max(0, (hM + 9000) / 19500));
+      const stops = tint ? TINT_LINEAR : [[0.0, [0.13, 0.17, 0.55]], [0.25, [0.1, 0.55, 0.8]], [0.45, [0.25, 0.75, 0.35]], [0.6, [0.95, 0.9, 0.3]], [0.8, [0.9, 0.35, 0.15]], [1, [0.98, 0.95, 0.95]]];
       let i = 0; while (i < stops.length - 2 && t > stops[i + 1][0]) i++;
       const [t0, c0] = stops[i], [t1, c1] = stops[i + 1], f = (t - t0) / (t1 - t0);
       out[k] = c0[0] + (c1[0] - c0[0]) * f; out[k + 1] = c0[1] + (c1[1] - c0[1]) * f; out[k + 2] = c0[2] + (c1[2] - c0[2]) * f;
     } else {
-      const g = 0.36 + 0.05 * Math.max(-1, Math.min(1, hM / 6000));   // lunar grey (linear), a touch lighter on high ground
+      const g = shadeGrey + 0.05 * Math.max(-1, Math.min(1, hM / 6000));   // lunar grey (linear), a touch lighter on high ground
       out[k] = g; out[k + 1] = g * 0.985; out[k + 2] = g * 0.96;
     }
   }
@@ -652,6 +672,19 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     // the light: null = the display light (low, from the upper left of the screen); a unit vector in the
     // Moon-fixed frame of geometry.js (x 0°E, y 90°E, z north) = the real Sun
     setSun(dir) { realSun = dir; dirty = true; },
+    // Live per pixel: { sun, earth } unit vectors (Moon-fixed, geometry.js) and colours [r, g, b] 0–255, or null
+    setLive(live) {
+      overlayU.uLiveOn.value = live ? 1 : 0;
+      if (live) {
+        overlayU.uLiveSun.value.set(...live.sun); overlayU.uLiveEarth.value.set(...live.earth);
+        const c = (v) => new THREE.Vector3(...v.map(lin));
+        if (live.colours) { overlayU.uColSun.value = c(live.colours.sun); overlayU.uColEarth.value = c(live.colours.earth); overlayU.uColBoth.value = c(live.colours.both); }
+      }
+      dirty = true;
+    },
+    // the night veil outside the polar map: the Sun's direction (Moon-fixed unit vector), or null for none
+    setNight(sun) { overlayU.uNightOn.value = sun ? 1 : 0; if (sun && !overlayU.uLiveOn.value) overlayU.uLiveSun.value.set(...sun); dirty = true; },
+    setContourInk(rgb) { contourU.uContourInk.value.set(...rgb.map(lin)); dirty = true; },
     get contourInterval() { return state.contours ? contourU.uInterval.value : null; },
     maxTilt,
     get canvas() { return canvas; },
