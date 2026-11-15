@@ -83,7 +83,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (polar && st.viewport && (st.viewport.cx || st.viewport.cy)) { const c = fromXY(st.viewport.cx, st.viewport.cy); initial.lat = c.latDeg; initial.lon = c.lonDeg; initial.heading = northUp(c.latDeg, c.lonDeg); }
     view = createGlobeView(canvas, terrain, {
       overlays: true, initial, shadeGrey: 0.1,   // about the polar map's hillshade grey, so the two meet without a seam
-      canDrag: () => (getState().tool ?? 'select') === 'select',
+      canDrag: () => true,   // a drag always moves the camera; the drawing tools place points by clicking
+      dblZoom: () => (getState().tool ?? 'select') === 'select',
       onCamera: (c) => { cameraMoved(c); onCamera(c); },
     });
     view.setExaggeration(1);   // true relief: the cast shadows of the real Sun have their true length
@@ -185,6 +186,11 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     for (let i = 0; i < src.length; i++) {
       // the graticule, site marks and feature names are drawn by the globe itself, over the whole Moon, upright
       if (src[i].matches?.('.graticule, .site-marks, .feature-names')) { dst[i].setAttribute('style', 'display:none'); continue; }
+      // routes too (hand-drawn and planned, with their havens, stops and traps): the globe draws them as ribbons
+      // and lines on the terrain. The station's coverage and the landing marks stay in the picture.
+      const KEEP = '.rp-cov, .rp-station-mark, [class*="rp-lander"], [class*="rp-landing"]';
+      if (src[i].matches?.('svg.map-shapes path.route, svg.map-shapes polyline.route, svg.map-shapes .route')
+        || (src[i].parentElement?.matches?.('.routes-layer') && !src[i].matches(KEEP) && !src[i].querySelector?.(KEEP))) { dst[i].setAttribute('style', 'display:none'); continue; }
       const cs = getComputedStyle(src[i]);
       let style = '';
       for (const k of STYLE_PROPS) { const v = cs.getPropertyValue(k); if (v) style += `${k}:${v};`; }
@@ -423,11 +429,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   const say = (text) => { note.textContent = text; note.hidden = !text; clearTimeout(say.t); if (text) say.t = setTimeout(() => { note.hidden = true; }, 3500); };
   canvas.addEventListener('pointerdown', (e) => {
     down = { x: e.clientX, y: e.clientY, tool: getState().tool ?? 'select' };
-    if (down.tool === 'select' || down.tool === 'route' || e.button !== 0) return;   // the Route tool draws on the globe itself
-    const h = hit(e);
-    if (!h || h.latDeg > POLAR_LAT) { say('Regions need the polar data (south of 80°S): its Sun and Earth grids give their statistics. Routes can be drawn anywhere.'); down = null; return; }
-    gesturing = true;
-    send('pointerdown', frameClient(h.latDeg, h.lonDeg));
+    // the drawing tools act on a click (pointer up without a drag), so a drag (or a three-finger drag) still moves
+    // the globe: the Route tool draws on the globe itself; rectangle, circle and polygon are clicked out on the polar
+    // map (two clicks for a rectangle or circle, a click per vertex for a polygon)
   });
   canvas.addEventListener('pointermove', (e) => {
     const now = performance.now();
@@ -438,7 +442,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (draft) { draft.cursor = snapped(e, h); drawDraft(); }
     if (h.latDeg > POLAR_LAT) { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); return; }
     const at = frameClient(h.latDeg, h.lonDeg);
-    send('pointermove', at, { buttons: gesturing ? 1 : 0 });
+    send('pointermove', at, { buttons: 0 });
+    if (getState().tool !== 'select' && getState().tool !== 'route') schedule(40);   // the draft shape follows
     // the hover card sits by the real pointer, not where the event was replayed
     const card = host.querySelector('.hover-card, #lsn-map-hover');
     if (card) { const r = host.getBoundingClientRect(); card.style.transform = `translate(${Math.round(e.clientX - r.left + 14)}px, ${Math.round(e.clientY - r.top + 14)}px)`; }
@@ -451,8 +456,11 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const h = hit(e);
     if (d.tool === 'route') { if (!moved && h) addDraftPoint(snapped(e, h)); return; }
     if (d.tool !== 'select') {
-      if (h && h.latDeg <= POLAR_LAT) send('pointerup', frameClient(h.latDeg, h.lonDeg));
-      gesturing = false; schedule(30);
+      if (moved || !h) return;
+      if (h.latDeg > POLAR_LAT) { say('Regions need the polar data (south of 80°S): its Sun and Earth grids give their statistics. Routes can be drawn anywhere.'); return; }
+      const at = frameClient(h.latDeg, h.lonDeg);
+      send('pointerdown', at); send('pointerup', at);
+      schedule(30);
       return;
     }
     if (moved || !h) return;
@@ -541,20 +549,38 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
   // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----
   let gRoute = null;   // { layer, extras }
+  let gKeyRoute = '';
   function setGlobalRoute(data) {
     if (!view) return;
+    const k = data ? JSON.stringify([data.key ?? null, data.colourBy, data.hand, data.waypoints, (data.candidates ?? []).map((c) => c.points.length), data.payload?.pts?.length, data.payload?.departMs]) : '';
+    if (k === gKeyRoute && (gRoute || !data)) return;
+    gKeyRoute = k;
     if (gRoute) { gRoute.layer?.dispose(); clearObj(gRoute.extras); gRoute = null; }
     if (!data) { view.redraw(); return; }
     const T = view.THREE, extras = new T.Group();
     let lay = null;
     if (data.payload) {
-      lay = createRouteLayer(view, data.payload);
+      lay = createRouteLayer(view, data.payload, { onTop: true });
       if (data.colourBy) lay.setColourBy(data.colourBy);
       const q = data.payload.pts[0];
       lay.setRover({ latDeg: q[0], lonDeg: q[1], km: 0, state: 'ready', soc: q[4] }, 0xffd23d, { headingDeg: 0, pitchDeg: 0, rollDeg: 0 });
     }
     for (const c of data.candidates ?? []) if (c.points.length >= 2) extras.add(surfaceLine(c.points, 0xbfc5cc, { dashed: true, opacity: 0.8 }));
-    if (data.hand?.length >= 2) extras.add(surfaceLine(data.hand, 0xffffff));
+    // the hand-drawn line as a white ribbon (a route payload without a drive), so it reads at every zoom
+    if (data.hand?.length >= 2 && !data.payload) {
+      const pts = [];
+      let km = 0;
+      for (let i = 0; i + 1 < data.hand.length; i++) {
+        const a = data.hand[i], b = data.hand[i + 1];
+        const dLon = ((b.lonDeg - a.lonDeg + 540) % 360) - 180;
+        const seg = MOON_R_KM * RAD * Math.hypot(b.latDeg - a.latDeg, dLon * Math.cos(((a.latDeg + b.latDeg) / 2) * RAD));
+        const n = Math.max(2, Math.ceil(seg / 0.5));
+        for (let k = i ? 1 : 0; k <= n; k++) { const f = k / n; pts.push([a.latDeg + (b.latDeg - a.latDeg) * f, (a.lonDeg + dLon * f + 360) % 360, km + seg * f, null, null, 1]); }
+        km += seg;
+      }
+      lay = createRouteLayer(view, { v: 1, label: 'Drawn', lengthKm: km, departMs: null, arriveMs: null, reserve: 0.2, pts }, { onTop: true });
+      lay.setRover({ latDeg: pts[0][0], lonDeg: pts[0][1], km: 0, state: 'ready', soc: null }, 0xffd23d, { headingDeg: 0, pitchDeg: 0, rollDeg: 0 });
+    }
     const wps = data.waypoints ?? data.hand ?? [];
     if (wps.length) extras.add(surfaceDots(wps, 0xffffff, 9));
     view.addObject(extras);

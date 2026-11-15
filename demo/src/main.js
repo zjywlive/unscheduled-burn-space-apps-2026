@@ -352,6 +352,7 @@ function start() {
     globeMap.onPolarView = (v) => update({ viewport: v });
     // the globe's own Route tool (anywhere on the Moon)
     globeMap.onRouteDrawn = (lls) => setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg)));
+    globeMap.ready.then(() => redrawRoutes());   // a route from the link shows as soon as the globe exists
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
       topbar: shell.topbar, getMission: () => readMission(),
@@ -543,13 +544,14 @@ function start() {
     mapView?.frame.redrawShapes({ routePlan: rp });
     const sel = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
     slopeLegend.setShown(rp.routeColour !== 'plain' && !!sel?.profile?.x?.length);
-    // a route away from the polar picture: drawn on the globe itself
+    // every route is drawn on the globe itself (the polar picture leaves routes out)
     if (globeMap) {
-      if (!isGlobalRoute(rp.points)) globeMap.setGlobalRoute(null);
+      if (!rp.points?.length) globeMap.setGlobalRoute(null);
       else {
         const ll = (pts) => (pts ?? []).map(([x, y]) => fromXY(x, y));
         const payload = sel?.profile ? route3dPayload() : null;
         globeMap.setGlobalRoute({
+          key: [rp.selected, rp.plan?.ms ?? null, rp.energy?.departMs ?? null, rp.havens?.stamp ?? null, rp.auto?.draw ? 1 : 0],
           payload, colourBy: rp.routeColour === 'plain' ? 'state' : 'slope',
           candidates: rp.plan?.ok ? rp.plan.routes.filter((r) => r.id !== rp.selected && r.points?.length && !r.sameAs).map((r) => ({ points: ll(r.points) })) : [],
           hand: rp.plan?.ok ? null : ll(rp.points), waypoints: ll(rp.plan?.waypoints ?? rp.points),
@@ -772,7 +774,7 @@ function start() {
   const isGlobalRoute = (pts) => (pts ?? []).some((p) => fromXY(p[0], p[1]).latDeg > TERRAIN_MAX_LAT);
   function fitPlanned(id) {
     if (!mapView) return;
-    if (globeMap && isGlobalRoute(rp.points)) {
+    if (globeMap) {   // the Map is the globe: frame the routes on it
       const routes = (rp.plan?.routes ?? []).filter((r) => r.points?.length && (!id || r.id === id));
       globeMap.flyToPoints(routes.flatMap((r) => r.points).map(([x, y]) => fromXY(x, y)));
       return;

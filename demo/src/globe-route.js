@@ -13,7 +13,9 @@ const RAD = Math.PI / 180;
 const ROVER_LEN_M = 2.2;   // model length in metres
 
 // roverPx: draw the rover that many pixels long instead of at its real size (the navigator's small preview)
-export function createRouteLayer(view, payload, { roverPx = null } = {}) {
+// onTop: the ribbon and its search lines are drawn over the terrain (the Map's overview, where a coarse far tile can
+// hide a ribbon laid on finer heights); the playback page keeps them in the terrain's depth
+export function createRouteLayer(view, payload, { roverPx = null, onTop = false } = {}) {
   const THREE = view.THREE;
   const group = new THREE.Group();
   view.addObject(group);
@@ -49,7 +51,8 @@ export function createRouteLayer(view, payload, { roverPx = null } = {}) {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setIndex(idx);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false }));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false, depthTest: !onTop }));
+    if (onTop) m.renderOrder = 15;
     m.position.copy(o);
     m.renderOrder = 3;
     return m;
@@ -92,13 +95,13 @@ export function createRouteLayer(view, payload, { roverPx = null } = {}) {
       const pos = new Float32Array(a.trees.length * 6);
       a.trees.forEach(([la1, lo1, la2, lo2], i) => { const p = V(la1, lo1), q = V(la2, lo2); pos.set([p.x, p.y, p.z, q.x, q.y, q.z], i * 6); });
       const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x5b7cfa, transparent: true, opacity: 0.35, depthWrite: false }));
+      const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x5b7cfa, transparent: true, opacity: 0.35, depthWrite: false, depthTest: !onTop }));
       lines.position.copy(o); lines.renderOrder = 2; g.add(lines);
     }
     for (const c of a.candidates ?? []) {
       if (c.length < 2) continue;
       const geo = new THREE.BufferGeometry().setFromPoints(c.map(([la, lo]) => V(la, lo, w * 0.2)));
-      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x3b5bdb, transparent: true, opacity: 0.85, depthWrite: false }));
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x3b5bdb, transparent: true, opacity: 0.85, depthWrite: false, depthTest: !onTop }));
       line.position.copy(o); line.renderOrder = 3; g.add(line);
     }
     if (a.trajectory?.length > 1) {
@@ -111,7 +114,8 @@ export function createRouteLayer(view, payload, { roverPx = null } = {}) {
   // ---- markers: spheres scaled with the zoom ----
   const markers = [];
   function marker(lat, lon, color, r = 1, cls = '') {
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color }));
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color, depthTest: !onTop }));
+    if (onTop) mesh.renderOrder = 16;
     mesh.userData = { lat, lon, r, cls };
     group.add(mesh); markers.push(mesh);
     return mesh;
@@ -214,9 +218,12 @@ export function createRouteLayer(view, payload, { roverPx = null } = {}) {
   // per frame: keep sizes in step with the zoom, rebuild what is draped when the zoom, exaggeration or terrain changes
   function frame(terrainStamp) {
     // about 5 px wide, down to 0.8 m close up, under a metre off the ground (the rover is 2.2 m long, 2 m tall)
-    const kpp = view.kmPerPx(), w = Math.min(3, Math.max(0.0008, kpp * 5));
+    // onTop (the Map): the same 5 px at every zoom, rebuilt within 12 %; the playback page caps it at 3 km and
+    // rebuilds within 35 %
+    const kpp = view.kmPerPx(), w = onTop ? Math.max(0.0008, kpp * 5) : Math.min(3, Math.max(0.0008, kpp * 5));
+    const tol = onTop ? 1.12 : 1.35;
     const key = `${terrainStamp}:${view.exaggeration}:${colourBy}`;
-    if (!built || built.key !== key || w / built.w > 1.35 || built.w / w > 1.35) {
+    if (!built || built.key !== key || w / built.w > tol || built.w / w > tol) {
       dispose(ribbon); ribbon = buildRibbon(w); group.add(ribbon);
       dispose(search); search = buildSearch(w); if (search) { search.visible = show.search; group.add(search); }
       if (!built || built.key !== key) { dispose(traps); traps = buildTraps(); if (traps) { traps.visible = show.traps; group.add(traps); } }

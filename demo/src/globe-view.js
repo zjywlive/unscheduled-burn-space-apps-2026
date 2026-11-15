@@ -106,7 +106,7 @@ function reliefM(n) {
 //     polar   a canvas in south polar stereographic km (terrain.js toXY) over the box { x0, x1, y0, y1 }: the Map's
 //             own picture of the polar cap (heat modes, terrain style, contours, shapes, routes, labels)
 //     global  an equirectangular canvas (0°E at the left, 90°N at the top): the whole-Moon heat layer
-export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {}, capDepth = () => MAX_DEPTH_CAP, canDrag = () => true, overlays = false, shadeGrey = 0.36 } = {}) {
+export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {}, capDepth = () => MAX_DEPTH_CAP, canDrag = () => true, dblZoom = canDrag, overlays = false, shadeGrey = 0.36 } = {}) {
   const THREE = window.THREE;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -568,7 +568,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     fly = null; dirty = true;
   }, { passive: false });
   canvas.addEventListener('dblclick', (e) => {
-    if (!canDrag(e)) return;
+    if (!dblZoom(e)) return;
     const hit = pick(e.clientX, e.clientY);
     if (hit) flyTo({ lat: hit.latDeg, lon: hit.lonDeg, dist: cam.dist * 0.35 });
   });
