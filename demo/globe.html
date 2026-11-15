@@ -77,6 +77,13 @@
   .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 62px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
   .leg-label[hidden], .wp-label[hidden], .frame-label[hidden], .frames-box[hidden] { display: none; }
   /* the small 3D window in the navigator (embed=1): the view only */
+  /* pick=1 (the Map's whole-Moon level, framed): the globe, the names, the camera buttons and Fly to; cfg=1 (the
+     execution page's surface operations, framed): the route playback without the planning tools */
+  body.pick .panel, body.pick .status, body.pick #ab-wp, body.pick #ab-mapped, body.pick .ab-sep, body.pick .brand { display: none !important; }
+  body.exec .brand, body.exec .act-bar, body.exec .panel { display: none !important; }
+  .pick-hint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); padding: 8px 14px; font-size: 12px; color: var(--muted); z-index: 5; max-width: calc(100vw - 24px); text-align: center; }
+  .pick-hint b { color: var(--text, #fff); font-weight: 600; }
+  body.pick canvas { cursor: crosshair; }
   body.embed .brand, body.embed .panel, body.embed .readout, body.embed .status, body.embed #route-left, body.embed .route-hud, body.embed #labels, body.embed .cam-ctl { display: none !important; }
   .panel h2 { margin: 0 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
   #presets { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -295,7 +302,7 @@
 <script src="vendor/three.classic.js"></script>
 <script type="application/json" id="data-terrain">{"source":"NASA PDS, LRO LOLA LDEM_75S_240M (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_240m.img)","generatedAt":"2026-11-12T08:01:56.374Z","dem":{"file":"dem_480m.bin","size":1906,"kmPerPixel":0.48,"dnToMeters":0.5},"horizon":{"file":"horizon_grid.bin","size":320,"cellKm":2,"halfKm":320,"azimuths":72,"offsetDeg":-5,"stepDeg":0.1,"observerM":2,"maxKm":300,"sourceKmPerPixel":0.24},"levels":[{"name":"dem_480m","file":"dem_480m.bin","size":1906,"kmPerPixel":0.48,"dnToMeters":0.5,"halfKm":457.44},{"name":"dem_240m","file":"dem_240m.bin","size":2700,"kmPerPixel":0.24,"dnToMeters":0.5,"halfKm":324},{"name":"dem_120m","file":"dem_120m.bin","size":2600,"kmPerPixel":0.12,"dnToMeters":0.5,"halfKm":156},{"name":"dem_40m","tiled":true,"kmPerPixel":0.04,"dnToMeters":0.5,"tilePx":256,"apronPx":1,"halfKm":307.2,"tiles":["r00c29","r00c30","r00c31","r01c29","r01c30","r01c31","r14c37","r14c38","r14c39","r15c36","r15c37","r15c38","r15c39","r16c29","r16c30","r16c36","r16c37","r16c38","r16c39","r17c28","r17c29","r17c30","r17c31","r17c36","r17c37","r17c38","r18c28","r18c29","r18c30","r18c31","r18c36","r18c37","r18c38","r18c39","r19c25","r19c26","r19c29","r19c30","r19c36","r19c37","r19c38","r19c39","r20c24","r20c25","r20c26","r20c27","r20c37","r20c38","r20c43","r20c44","r20c45","r21c12","r21c24","r21c25","r21c26","r21c27","r21c43","r21c44","r21c45","r21c46","r22c11","r22c12","r22c13","r22c25","r22c26","r22c43","r22c44","r22c45","r22c46","r23c11","r23c12","r23c13","r24c11","r24c12","r24c13","r26c27","r26c28","r26c29","r26c30","r26c31","r26c32","r27c24","r27c25","r27c26","r27c27","r27c28","r27c29","r27c30","r27c31","r27c32","r27c33","r28c24","r28c25","r28c26","r28c27","r28c28","r28c29","r28c30","r28c31","r28c32","r28c33","r29c25","r29c26","r29c27","r29c28","r29c29","r29c30","r29c31","r29c32","r29c33","r30c26","r30c27","r30c28","r30c29","r30c30","r30c31","r30c32","r30c33","r31c26","r31c27","r31c28","r31c29","r31c30","r31c31","r31c32","r31c33","r32c26","r32c27","r32c28","r32c29","r32c30","r32c31","r32c32","r32c33","r33c27","r33c28","r33c29","r33c30","r33c31","r33c32"],"noData":-32768,"sourceHalfKm":304,"coverage":{"poleKm":40,"siteKm":12,"sites":["im1","im2","shackleton","peak-near-cabeus-b","haworth","malapert-massif","mons-mouton-plateau","mons-mouton","nobile-rim-1","nobile-rim-2","de-gerlache-rim-2"]},"source":"LDEM_80S_40M.IMG"},{"name":"dem_20m","tiled":true,"kmPerPixel":0.02,"dnToMeters":0.5,"tilePx":256,"apronPx":1,"halfKm":76.8,"tiles":["r10c05","r10c06","r10c07","r11c05","r11c06","r11c07","r11c08","r11c12","r11c13","r11c14","r11c15","r11c16","r11c17","r12c05","r12c06","r12c07","r12c11","r12c12","r12c13","r12c14","r12c15","r12c16","r12c17","r12c18","r13c11","r13c12","r13c13","r13c14","r13c15","r13c16","r13c17","r13c18","r14c11","r14c12","r14c13","r14c14","r14c15","r14c16","r14c17","r14c18","r15c11","r15c12","r15c13","r15c14","r15c15","r15c16","r15c17","r15c18","r16c11","r16c12","r16c13","r16c14","r16c15","r16c16","r16c17","r16c18","r17c11","r17c12","r17c13","r17c14","r17c15","r17c16","r17c17","r17c18","r18c11","r18c12","r18c13","r18c14","r18c15","r18c16","r18c17"],"noData":-32768,"sourceHalfKm":75.84,"coverage":{"poleKm":20,"siteKm":6,"sites":["shackleton","de-gerlache-rim-2"]},"source":"LDEM_875S_20M.IMG"}],"horizons":[{"name":"horizon_grid","file":"horizon_grid.bin","size":320,"cellKm":2,"halfKm":320,"azimuths":72,"offsetDeg":-5,"stepDeg":0.1,"observerM":2,"maxKm":300,"sourceKmPerPixel":0.24},{"name":"horizon_1km","file":"horizon_1km.bin","size":640,"cellKm":1,"halfKm":320,"azimuths":72,"offsetDeg":-5,"stepDeg":0.1,"observerM":2,"maxKm":300,"sourceKmPerPixel":0.24}],"sources":[{"name":"ldem_75s_240m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_240m.img","bytes":29062688},{"name":"ldem_75s_240m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_240m.lbl","bytes":4990},{"name":"ldem_75s_120m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_120m.img","bytes":116250752},{"name":"ldem_75s_120m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_120m.lbl","bytes":4991},{"name":"ldem_80s_40m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_40m.img","bytes":462080000},{"name":"ldem_80s_40m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_40m.lbl","bytes":4991},{"name":"ldem_875s_20m.img","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_875s_20m.img","bytes":115034112},{"name":"ldem_875s_20m.lbl","url":"https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_875s_20m.lbl","bytes":4988},{"name":"LPSR_75S_120M_201608.IMG","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/LPSR_75S_120M_201608.IMG","bytes":116250752},{"name":"LPSR_75S_120M_201608.LBL","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/LPSR_75S_120M_201608.LBL","bytes":3913},{"name":"AVGVISIB_75S_120M_201608.IMG","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608.IMG","bytes":116250752},{"name":"AVGVISIB_75S_120M_201608.LBL","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608.LBL","bytes":4092},{"name":"AVGVISIB_75S_120M_201608_EARTH.IMG","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608_EARTH.IMG","bytes":116250752},{"name":"AVGVISIB_75S_120M_201608_EARTH.LBL","url":"http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_75S_120M_201608_EARTH.LBL","bytes":4112}],"slope":[{"name":"slope_2km","file":"slope_2km.bin","size":320,"cellKm":2,"scale":0.25,"baselineKm":0.24},{"name":"slope_1km","file":"slope_1km.bin","size":640,"cellKm":1,"scale":0.25,"baselineKm":0.24}],"shadow":[{"name":"shadow_2km","file":"shadow_2km.bin","size":320,"cellKm":2,"halfKm":320,"source":"LPSR_75S_120M_201608.IMG (Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update)","rule":"0 when more than half of the 120 m PSR pixels whose centres fall in the cell are permanent shadow; otherwise the map-plane distance in km from the cell centre to the nearest PSR pixel centre in a PSR patch (8-connected) of at least 1 km² ground area, rounded, at least 1, capped at 255. Patches and distances use the whole 120 m raster (±457 km).","minPatchKm2":1,"connectivity":8,"majority":0.5,"capKm":255},{"name":"shadow_1km","file":"shadow_1km.bin","size":640,"cellKm":1,"halfKm":320,"source":"LPSR_75S_120M_201608.IMG (Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update)","rule":"0 when more than half of the 120 m PSR pixels whose centres fall in the cell are permanent shadow; otherwise the map-plane distance in km from the cell centre to the nearest PSR pixel centre in a PSR patch (8-connected) of at least 1 km² ground area, rounded, at least 1, capped at 255. Patches and distances use the whole 120 m raster (±457 km).","minPatchKm2":1,"connectivity":8,"majority":0.5,"capKm":255}],"psr":{"file":"psr_120m.bin","size":5400,"kmPerPixel":0.12,"halfKm":324,"bitOrder":"rows top to bottom, most significant bit first","source":"LPSR_75S_120M_201608.IMG (Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update)","rule":"Bit = 1 where the official permanently-shadowed-region flag (DN × 0.000025 + 0.5) is 1: the pixel never sees any part of the Sun over the 18.6-year simulation at 1 h steps. Centred 5400² crop of the 120 m source; no resampling."},"nasaAvg":{"sun":{"file":"nasa_sun_480m.bin","size":1350,"kmPerPixel":0.48,"halfKm":324,"scale":250,"noData":255,"source":"AVGVISIB_75S_120M_201608.IMG","meaning":"share of time steps with any part of the solar disc above the local horizon"},"earth":{"file":"nasa_earth_480m.bin","size":1350,"kmPerPixel":0.48,"halfKm":324,"scale":250,"noData":255,"source":"AVGVISIB_75S_120M_201608_EARTH.IMG","meaning":"share of time steps with any part of the Earth disc above the local horizon"},"source":"Mazarico, E., Neumann, G. A., Smith, D. E., Zuber, M. T., Torrence, M. H. (2011), Illumination conditions of the lunar polar regions using LOLA topography, Icarus 211, 1066–1081, doi:10.1016/j.icarus.2010.10.030; LOLA PDS extras, 2016-08 update","span":"18.6 years, 1 h steps","rule":"Byte = round(mean of the 4 × 4 120 m pixels × 250); 255 = no data. Centred ±324 km window of the 120 m source."}}</script>
 <script type="application/json" id="data-sites">[{"id":"apollo11","name":"Apollo 11","subtitle":"Tranquility Base, 1969","latDeg":0.67416,"lonDeg":23.47314,"source":"https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html","verified":true,"group":"missions"},{"id":"apollo17","name":"Apollo 17","subtitle":"Taurus-Littrow, 1972","latDeg":20.1911,"lonDeg":30.7723,"source":"https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html","verified":true,"group":"missions"},{"id":"blueghost1","name":"Blue Ghost M1","subtitle":"Mare Crisium, 2025 (CLPS)","latDeg":18.5623,"lonDeg":61.8103,"source":"https://lroc.im-ldi.com/images/1400","verified":true,"group":"missions"},{"id":"chandrayaan3","name":"Chandrayaan-3","subtitle":"Shiv Shakti point, 2023","latDeg":-69.3733,"lonDeg":32.3191,"source":"https://lroc.im-ldi.com/images/1314","verified":true,"group":"missions"},{"id":"change4","name":"Chang'e-4","subtitle":"Von Kármán crater, 2019","latDeg":-45.4446,"lonDeg":177.5991,"source":"https://lroc.im-ldi.com/images/1087","verified":true,"group":"missions"},{"id":"im1","name":"IM-1 Odysseus","subtitle":"Malapert A, 2024 (CLPS)","latDeg":-80.13,"lonDeg":1.44,"source":"https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/","verified":true,"group":"missions"},{"id":"im2","name":"IM-2 Athena","subtitle":"Mons Mouton, 2025 (CLPS)","latDeg":-84.7906,"lonDeg":29.1957,"source":"https://lroc.im-ldi.com/images/1408","verified":true,"group":"missions"},{"id":"shackleton","name":"Shackleton ridge","subtitle":"Connecting ridge, candidate","latDeg":-89.45,"lonDeg":222.69,"source":"https://doi.org/10.1016/j.icarus.2010.10.030","verified":true,"group":"missions"},{"id":"peak-near-cabeus-b","name":"Peak near Cabeus B","subtitle":"Artemis III candidate region","latDeg":-83.6,"lonDeg":291.2,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_CABEUSPKLO1","verified":false,"group":"candidates"},{"id":"haworth","name":"Haworth","subtitle":"Artemis III candidate region","latDeg":-86.7,"lonDeg":336.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_HAWORTH_LO1","verified":false,"group":"candidates"},{"id":"malapert-massif","name":"Malapert Massif","subtitle":"Artemis III candidate region","latDeg":-86,"lonDeg":0.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MALAPERTLO1","verified":false,"group":"candidates"},{"id":"mons-mouton-plateau","name":"Mons Mouton Plateau","subtitle":"Artemis III candidate region","latDeg":-84.3,"lonDeg":30.6,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MOUTNPLTLO1","verified":false,"group":"candidates"},{"id":"mons-mouton","name":"Mons Mouton","subtitle":"Artemis III candidate region","latDeg":-85.4,"lonDeg":35.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MTMOUTONLO1","verified":false,"group":"candidates"},{"id":"nobile-rim-1","name":"Nobile Rim 1","subtitle":"Artemis III candidate region","latDeg":-85.4,"lonDeg":35.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_MTMOUTONLO1","verified":false,"group":"candidates"},{"id":"nobile-rim-2","name":"Nobile Rim 2","subtitle":"Artemis III candidate region","latDeg":-84.20156,"lonDeg":60.69989,"source":"https://www.hou.usra.edu/meetings/lpsc2025/pdf/1149.pdf","verified":true,"group":"candidates"},{"id":"de-gerlache-rim-2","name":"de Gerlache Rim 2","subtitle":"Artemis III candidate region","latDeg":-88.5,"lonDeg":293.3,"source":"https://data.lroc.im-ldi.com/lroc/view_rdr/NAC_ROI_DEGERRIMLO1","verified":false,"group":"candidates"}]</script>
-<script type="application/json" id="data-hires">{"about":"High-resolution LOLA patches around the south-pole sites (tools/fetch-hires.mjs). Patch packs: delta-coded Int16 DN (× 0.5 m above 1737.4 km) + gzip.","sites":{"im2":{"pack":"hires_im2","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":72.1,"yMax":143,"halfKm":5,"latDeg":-84.7906,"lonDeg":29.1957,"despikedPixels":1,"despikeM":40,"packBytes":136956},"shackleton":{"pack":"hires_shackleton","product":"ldem_875s_5m","kmPerPixel":0.005,"n":2000,"xMin":-16.31,"yMax":-7.26,"halfKm":5,"latDeg":-89.45,"lonDeg":222.69,"despikedPixels":76,"despikeM":10,"packBytes":1470820},"peak-near-cabeus-b":{"pack":"hires_peak_near_cabeus_b","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":-186.12,"yMax":75.26,"halfKm":5,"latDeg":-83.6,"lonDeg":291.2,"despikedPixels":0,"despikeM":40,"packBytes":151117},"haworth":{"pack":"hires_haworth","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":-45.23,"yMax":96.65,"halfKm":5,"latDeg":-86.7,"lonDeg":336.3,"despikedPixels":31,"despikeM":20,"packBytes":473065},"malapert-massif":{"pack":"hires_malapert_massif","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":-4.36,"yMax":126.34,"halfKm":5,"latDeg":-86,"lonDeg":0.3,"despikedPixels":27,"despikeM":20,"packBytes":534788},"mons-mouton-plateau":{"pack":"hires_mons_mouton_plateau","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":83.06,"yMax":153.9,"halfKm":5,"latDeg":-84.3,"lonDeg":30.6,"despikedPixels":22,"despikeM":40,"packBytes":148086},"mons-mouton":{"pack":"hires_mons_mouton","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":75.65,"yMax":118.9,"halfKm":5,"latDeg":-85.4,"lonDeg":35.3,"despikedPixels":11,"despikeM":20,"packBytes":498714},"nobile-rim-1":{"pack":"hires_nobile_rim_1","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":75.65,"yMax":118.9,"halfKm":5,"latDeg":-85.4,"lonDeg":35.3,"despikedPixels":11,"despikeM":20,"packBytes":498714},"nobile-rim-2":{"pack":"hires_nobile_rim_2","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":148.46,"yMax":91.12,"halfKm":5,"latDeg":-84.20156,"lonDeg":60.69989,"despikedPixels":0,"despikeM":40,"packBytes":147898},"de-gerlache-rim-2":{"pack":"hires_de_gerlache_rim_2","product":"ldem_875s_5m","kmPerPixel":0.005,"n":2000,"xMin":-46.78,"yMax":22.99,"halfKm":5,"latDeg":-88.5,"lonDeg":293.3,"despikedPixels":33,"despikeM":10,"packBytes":1313533}},"source":"NASA PDS, LRO LOLA GDR polar products (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/)"}</script>
+<script type="application/json" id="data-hires">{"about":"High-resolution LOLA patches around the south-pole sites (tools/fetch-hires.mjs). Patch packs: delta-coded Int16 DN (× 0.5 m above 1737.4 km) + gzip.","sites":{"im2":{"pack":"hires_im2","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":72.1,"yMax":143,"halfKm":5,"latDeg":-84.7906,"lonDeg":29.1957,"despikedPixels":1,"despikeM":40,"packBytes":136956},"shackleton":{"pack":"hires_shackleton","product":"ldem_875s_5m","kmPerPixel":0.005,"n":2000,"xMin":-16.31,"yMax":-7.26,"halfKm":5,"latDeg":-89.45,"lonDeg":222.69,"despikedPixels":76,"despikeM":10,"packBytes":1470820},"peak-near-cabeus-b":{"pack":"hires_peak_near_cabeus_b","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":-186.12,"yMax":75.26,"halfKm":5,"latDeg":-83.6,"lonDeg":291.2,"despikedPixels":0,"despikeM":40,"packBytes":151117},"haworth":{"pack":"hires_haworth","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":-45.23,"yMax":96.65,"halfKm":5,"latDeg":-86.7,"lonDeg":336.3,"despikedPixels":31,"despikeM":20,"packBytes":473065},"malapert-massif":{"pack":"hires_malapert_massif","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":-4.36,"yMax":126.34,"halfKm":5,"latDeg":-86,"lonDeg":0.3,"despikedPixels":27,"despikeM":20,"packBytes":534788},"mons-mouton-plateau":{"pack":"hires_mons_mouton_plateau","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":83.06,"yMax":153.9,"halfKm":5,"latDeg":-84.3,"lonDeg":30.6,"despikedPixels":22,"despikeM":40,"packBytes":148086},"mons-mouton":{"pack":"hires_mons_mouton","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":75.65,"yMax":118.9,"halfKm":5,"latDeg":-85.4,"lonDeg":35.3,"despikedPixels":11,"despikeM":20,"packBytes":498714},"nobile-rim-1":{"pack":"hires_nobile_rim_1","product":"ldem_85s_10m","kmPerPixel":0.01,"n":1000,"xMin":75.65,"yMax":118.9,"halfKm":5,"latDeg":-85.4,"lonDeg":35.3,"despikedPixels":11,"despikeM":20,"packBytes":498714},"nobile-rim-2":{"pack":"hires_nobile_rim_2","product":"ldem_80s_20m","kmPerPixel":0.02,"n":500,"xMin":148.46,"yMax":91.12,"halfKm":5,"latDeg":-84.20156,"lonDeg":60.69989,"despikedPixels":0,"despikeM":40,"packBytes":147898},"de-gerlache-rim-2":{"pack":"hires_de_gerlache_rim_2","product":"ldem_875s_5m","kmPerPixel":0.005,"n":2000,"xMin":-46.78,"yMax":22.99,"halfKm":5,"latDeg":-88.5,"lonDeg":293.3,"despikedPixels":33,"despikeM":10,"packBytes":1313533}},"source":"NASA PDS, LRO LOLA GDR polar products (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/)","patches":{"apollo11":{"pack":"hires_apollo11","product":"sldem2015_512","projection":"equirect","files":["sldem2015_512_00n_30n_000_045_float.img"],"ppd":512,"width":68,"height":68,"latMin":0.607421875,"latMax":0.740234375,"lonMin":23.40625,"lonMax":23.5390625,"kmPerPixel":0.0592252938,"dnToMeters":0.5,"halfKm":2,"latDeg":0.67416,"lonDeg":23.47314,"despikedPixels":0,"despikeM":118.451,"packBytes":3856}},"patchesSource":"NASA PDS, LRO LOLA north polar GDR (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/) and SLDEM2015 (https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/sldem2015/tiles/float_img/); entries carry their projection (tools/fetch-hires.mjs)."}</script>
 <script src="data/js/globe_g0.js"></script>
 <script src="data/js/globe_n480.js"></script>
 <script src="data/js/dem_480m.js"></script>
@@ -2695,24 +2702,36 @@ function createCameraControls(view, { onUser = () => {}, parent = document.body 
 return { CONTROLS_CSS, createCameraControls };
 })();
 __m['mission-flow.js'] = (() => {
-// One mission across the pages (navigator, lander, 3D globe): the chosen landing site and time travel from
-// step to step, and every page shows the same stage bar
-//   1 Landing (lander.html: site, time, descent) → 2 Rover (index.html: site analysis and the route card)
-//   → 3 3D (globe.html).
-// The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
-// small DOM builder with no dependencies, so any page can use it.
+// One mission across the pages. Everything is planned before launch, then frozen and flown:
+//   PLAN  1 Map (index.html: the whole Moon → a region → the south-pole site analysis, the landing spot, timing,
+//         the rover route)  →  2 Finalise (finalise.html: go/no-go checks, the vehicle, freeze)
+//   FLY   3 Execute (lander.html: the frozen configuration flown from launch to surface operations).
+// The planning state lives in localStorage (per browser, per origin; works from file:// too); the frozen
+// configuration the execution page flies is in mission-config.js. Pure helpers plus one small DOM builder with
+// no dependencies, so any page can use it.
 //
-// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs,
+// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, vehicle?, updatedMs,
 //             landed: { latDeg, lonDeg, tMs, siteId, missM, source } | null }   where the lander touched down
-//             (written by the lander page; the rover route starts there)
+//             (written by the execution page; the 3D globe draws the lander there)
 
 const MISSION_KEY = 'lsn-mission';
 const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
+const CONFIG_KEY = 'lsn-config';   // mission-config.js CONFIG_KEY (the frozen configuration)
 const STAGES = Object.freeze([
-  { id: 'landing', n: 1, label: 'Landing', title: 'Choose the site and time and fly the lander down (lander)' },
-  { id: 'rover', n: 2, label: 'Rover', title: 'Check the site and plan the rover route from it (navigator, route card)' },
-  { id: '3d', n: 3, label: '3D', title: 'See the site and the route on the 3D Moon (globe)' },
+  { id: 'map', n: 1, group: 'Plan', label: 'Map', title: 'Plan the whole mission: the site anywhere on the Moon, its timing, the landing spot and the rover route (navigator)' },
+  { id: 'finalise', n: 2, group: 'Plan', label: 'Finalise', title: 'Check go / no-go and freeze the mission configuration (site, landing time and window, stay, vehicle, rover route)' },
+  { id: 'execute', n: 3, group: 'Fly', label: 'Execute', title: 'Fly the frozen mission: launch, spaceflight, orbital manoeuvres, lunar orbit insertion, landing, surface operations' },
 ]);
+// The six phases the execution page flies, in order (lander.html; the phase ids of lander/mission.js in each)
+const EXEC_PHASES = Object.freeze([
+  { id: 'launch', label: 'Launch', short: 'Launch', from: ['leo'] },
+  { id: 'spaceflight', label: 'Spaceflight', short: 'Spaceflight', from: ['tli', 'coast'] },
+  { id: 'orbit', label: 'Orbital manoeuvres', short: 'Manoeuvres', from: ['approach-moon'] },
+  { id: 'loi', label: 'Lunar orbit insertion', short: 'LOI', from: ['loi', 'llo'] },
+  { id: 'landing', label: 'Landing', short: 'Landing', from: ['doi', 'descent-coast', 'braking', 'approach', 'terminal', 'landed'] },
+  { id: 'surface', label: 'Surface operations', short: 'Surface', from: [] },
+]);
+const execPhaseOf = (landerPhaseId) => EXEC_PHASES.find((p) => p.from.includes(landerPhaseId))?.id ?? null;
 
 const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
 
@@ -2733,6 +2752,10 @@ function writeMission(patch, storage) {
 
 function hasRoute(storage) {
   try { return !!store(storage)?.getItem(ROUTE_KEY); } catch { return false; }
+}
+
+function hasConfig(storage) {
+  try { return !!store(storage)?.getItem(CONFIG_KEY); } catch { return false; }
 }
 
 // Great-circle distance between two lat/lon points on the Moon, km.
@@ -2762,15 +2785,20 @@ function landFromHash(hash) {
 
 const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().slice(0, 16)}Z`;
 
-// The URL of a stage for a mission (relative to demo/). Without a mission, the bare page.
+// The URL of a stage (or of a planning tool) for a mission, relative to demo/. Without a mission, the bare page.
+//   map, site   the Map at the site and time          rover    the Map with the route card open at the site
+//   region      the "Where to land" planner           finalise / execute   their pages (they read the storage)
+//   3d          the globe at the site (or the route)
 function stageUrl(stage, m, { route = false } = {}) {
-  const site = m?.siteId ? encodeURIComponent(m.siteId) : m ? `${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;
+  const site = m?.siteId ? encodeURIComponent(m.siteId) : m ? `c:${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;   // the navigator's custom site
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
-  if (stage === 'site') return nav();
+  if (stage === 'map' || stage === 'site') return nav();
   const landed = landedFor(m);
   if (stage === 'rover') return nav(`&plan=1${landed ? `&land=${landed.latDeg.toFixed(5)},${landed.lonDeg.toFixed(5)}` : ''}`);
-  if (stage === 'landing') return `lander.html${m?.siteId ? `?site=${encodeURIComponent(m.siteId)}${t ? `&t=${t}` : ''}` : ''}`;
+  if (stage === 'region') return `planner.html${m ? `?at=${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}${t ? `&t=${t}` : ''}` : ''}`;
+  if (stage === 'finalise') return 'finalise.html';
+  if (stage === 'execute') return 'lander.html';
   if (stage === '3d') {
     if (route) return 'globe.html#route=1';
     const c = landed ?? m;
@@ -2784,32 +2812,46 @@ const STAGE_CSS = `
 .lsn-stages a { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; border-radius: 999px; color: #9aa0a6; text-decoration: none; white-space: nowrap; }
 .lsn-stages a:hover { color: #e8eaed; background: rgba(255,255,255,0.08); }
 .lsn-stages a[aria-current="step"] { color: #0b0c0e; background: #e8eaed; }
+.lsn-stages a[data-locked] { opacity: 0.55; }
 .lsn-stages .n { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 700; background: rgba(255,255,255,0.12); color: inherit; }
 .lsn-stages a[aria-current="step"] .n { background: #0b0c0e; color: #e8eaed; }
 .lsn-stages .sep { color: rgba(255,255,255,0.25); font-size: 10px; }
+.lsn-stages .grp { padding: 0 2px 0 8px; color: rgba(255,255,255,0.38); font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.lsn-stages .grp + a { margin-left: 2px; }
 .lsn-stages .where { margin-left: 4px; padding: 0 8px 0 4px; color: #9aa0a6; font-weight: 400; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lsn-stages.compact .grp { display: none; }
 `;
 
-// The stage bar: <nav> with the four stages as links (the current one marked), and the mission's site and
-// date. Links are rebuilt from the stored mission when clicked, so they follow changes made on the page.
-function stageBar(doc, current, { getMission = () => readMission(), compact = false } = {}) {
+// The stage bar: <nav> with the steps as links under their group (Plan: Map, Finalise; Fly: Execute), the current
+// one marked, and the mission's site and date. Execute is marked locked until a configuration is frozen (its link
+// still opens the page, which says so). Links are rebuilt from the stored mission when used, so they follow
+// changes made on the page.
+function stageBar(doc, current, { getMission = () => readMission(), compact = false, locked = () => !hasConfig() } = {}) {
   if (!doc.getElementById('lsn-stages-css')) {
     const st = doc.createElement('style'); st.id = 'lsn-stages-css'; st.textContent = STAGE_CSS; (doc.head ?? doc.documentElement).appendChild(st);
   }
   const nav = doc.createElement('nav');
-  nav.className = 'lsn-stages';
+  nav.className = `lsn-stages${compact ? ' compact' : ''}`;
   nav.setAttribute('aria-label', 'Mission steps');
   const links = [];
+  let group = null;
   STAGES.forEach((s, i) => {
-    if (i) { const sep = doc.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
+    if (s.group !== group) {
+      group = s.group;
+      const g = doc.createElement('span'); g.className = 'grp'; g.textContent = s.group; g.setAttribute('aria-hidden', 'true'); nav.appendChild(g);
+    } else if (i) { const sep = doc.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
     const a = doc.createElement('a');
     a.dataset.stage = s.id;
-    a.title = s.title;
     const showLabel = !compact || s.id === current;   // compact: numbers only, but the current step keeps its name
     a.innerHTML = `<span class="n">${s.n}</span>${showLabel ? s.label : ''}`;
     if (!showLabel) a.setAttribute('aria-label', `Step ${s.n}: ${s.label}`);
     if (s.id === current) a.setAttribute('aria-current', 'step');
-    const refresh = () => { a.href = stageUrl(s.id, getMission(), { route: s.id === '3d' && hasRoute() }); };
+    const refresh = () => {
+      a.href = stageUrl(s.id, getMission());
+      const lock = s.id === 'execute' && s.id !== current && locked();
+      a.toggleAttribute('data-locked', lock);
+      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : s.title;
+    };
     refresh();
     a.addEventListener('pointerenter', refresh);
     a.addEventListener('focus', refresh);
@@ -2817,7 +2859,7 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
     links.push(refresh);
     nav.appendChild(a);
   });
-  const listen = (fn) => { try { doc.defaultView?.addEventListener('lsn-mission', fn); } catch { /* no window */ } };
+  const listen = (fn) => { try { doc.defaultView?.addEventListener('lsn-mission', fn); doc.defaultView?.addEventListener('storage', fn); } catch { /* no window */ } };
   if (compact) { nav.refresh = () => links.forEach((f) => f()); listen(nav.refresh); return nav; }
   const where = doc.createElement('span');
   where.className = 'where';
@@ -2833,29 +2875,7 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
   return nav;
 }
 
-// The next steps after a stage as a row of links (for a page's own panel): e.g. from the navigator's site panel
-// (after 'site', which is not a stage, so every stage is listed), "Plan the landing",
-// "Plan the rover route", "See in 3D". Links are rebuilt from the stored mission when used.
-const NEXT_LABELS = Object.freeze({ landing: 'Plan the landing', rover: 'Plan the rover route', '3d': 'See it in 3D' });
-function nextSteps(doc, after, { getMission = () => readMission(), className = 'lsn-next' } = {}) {
-  const at = STAGES.findIndex((s) => s.id === after);
-  const row = doc.createElement('div');
-  row.className = className;
-  for (const s of STAGES.slice(at + 1)) {
-    const a = doc.createElement('a');
-    a.dataset.stage = s.id;
-    a.title = s.title;
-    a.textContent = `${NEXT_LABELS[s.id] ?? s.label} →`;
-    const refresh = () => { a.href = stageUrl(s.id, getMission(), { route: s.id === '3d' && hasRoute() }); };
-    refresh();
-    a.addEventListener('pointerenter', refresh); a.addEventListener('focus', refresh); a.addEventListener('click', refresh);
-    try { doc.defaultView?.addEventListener('lsn-mission', refresh); } catch { /* no window */ }
-    row.appendChild(a);
-  }
-  return row;
-}
-
-return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
+return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
 })();
 __m['globe-waypoints.js'] = (() => {
 // Waypoints on the 3D globe: click the terrain (or type a latitude and longitude) to place numbered
@@ -3377,6 +3397,181 @@ function createHiresSet(manifest, load, { onLoad = () => {} } = {}) {
 
 return { createPatch, createHiresSet };
 })();
+__m['mission-config.js'] = (() => {
+// The frozen mission configuration: what step 2 (Finalise, finalise.html) hands to step 3 (Execute, lander.html).
+// Everything is decided while planning (the Map); finalising copies the decisions into one record, stamps it with
+// an id made from its content, and stores it. The execution page flies only this record: it never reads the
+// planning state, so later changes on the Map do not move a mission that is already finalised. The Map and the
+// Finalise page compare the planning state with it and say when it has changed since ("finalise again").
+// Pure helpers (browser and Node); the storage is localStorage unless one is passed.
+//
+// Config = { v: 1, id, frozenMs,
+//   site: { id | null, name, latDeg, lonDeg },
+//   landing: { requestedMs, windowStartMs | null, windowEndMs | null, earth: bool },   Sun (and Earth) above the skyline
+//   stayDays, vehicle (lander/vehicle.js fields, cleaned),
+//   route: route3d.js payload | null,  departMs | null,
+//   checks: [{ id, label, value, ok, level: 'go' | 'warn' | 'no-go', note }] }
+
+const CONFIG_KEY = 'lsn-config';
+const CONFIG_VERSION = 1;
+
+const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+
+// FNV-1a over a string → 8 hex digits (a short, stable name for a configuration; not a security hash)
+function hash32(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+
+// the content that names a configuration: the decisions, not when they were frozen or the check texts
+function configId(c) {
+  const r = c.route;
+  const route = r ? { label: r.label, lengthKm: r.lengthKm, departMs: r.departMs ?? null, n: r.pts?.length ?? 0, a: r.pts?.[0]?.slice(0, 2), b: r.pts?.[r.pts.length - 1]?.slice(0, 2) } : null;
+  return hash32(JSON.stringify([c.site?.id ?? null, c.site?.latDeg, c.site?.lonDeg, c.landing?.requestedMs, c.stayDays, c.vehicle ?? null, route, c.departMs ?? null])).slice(0, 6);
+}
+
+// Builds the record from the planning state. mission: mission-flow.js mission; vehicle: cleaned vehicle;
+// route: the route3d payload chosen on the Map (or null); window: { startMs, endMs, earth } around the landing.
+function buildConfig({ mission, vehicle, route = null, window = null, checks = [], nowMs = Date.now() }) {
+  if (!mission || !Number.isFinite(mission.latDeg) || !Number.isFinite(mission.lonDeg)) throw new Error('No site chosen: pick one on the Map first.');
+  if (!Number.isFinite(mission.landingMs)) throw new Error('No landing time set: set one on the Map first.');
+  const c = {
+    v: CONFIG_VERSION, id: '', frozenMs: nowMs,
+    site: { id: mission.siteId ?? null, name: mission.siteName ?? `${mission.latDeg.toFixed(3)}°, ${mission.lonDeg.toFixed(3)}°`, latDeg: mission.latDeg, lonDeg: mission.lonDeg },
+    landing: { requestedMs: mission.landingMs, windowStartMs: window?.startMs ?? null, windowEndMs: window?.endMs ?? null, earth: window ? !!window.earth : null },
+    stayDays: Number.isFinite(mission.stayDays) ? mission.stayDays : 14,
+    vehicle: vehicle ?? null,
+    route: route ?? null,
+    departMs: route?.departMs ?? null,
+    checks,
+  };
+  c.id = configId(c);
+  return c;
+}
+
+function readConfig(storage) {
+  try {
+    const c = JSON.parse(store(storage)?.getItem(CONFIG_KEY) ?? 'null');
+    return c && c.v === CONFIG_VERSION && c.site && Number.isFinite(c.site.latDeg) && Number.isFinite(c.landing?.requestedMs) ? c : null;
+  } catch { return null; }
+}
+
+function writeConfig(c, storage) {
+  store(storage)?.setItem(CONFIG_KEY, JSON.stringify(c));   // throws when storage is full or blocked: the page says so
+  try { if (!storage && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('lsn-mission', { detail: null })); } catch { /* no window */ }
+  return c;
+}
+
+function clearConfig(storage) {
+  try { store(storage)?.removeItem(CONFIG_KEY); } catch { /* blocked */ }
+}
+
+// What changed on the Map since the configuration was frozen: [] when nothing did. mission: the planning
+// mission; route: the route3d payload on the Map now (undefined when unknown, then the route is not compared);
+// vehicle: the planning vehicle (undefined: not compared).
+function changesSince(c, mission, { route, vehicle } = {}) {
+  if (!c) return [];
+  const out = [];
+  if (!mission) return out;
+  const near = (a, b, eps) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= eps;
+  if ((c.site.id ?? null) !== (mission.siteId ?? null) || !near(c.site.latDeg, mission.latDeg, 1e-6) || !near(c.site.lonDeg, mission.lonDeg, 1e-6)) out.push('site');
+  if (!near(c.landing.requestedMs, mission.landingMs, 30e3)) out.push('landing time');
+  if (Number.isFinite(mission.stayDays) && mission.stayDays !== c.stayDays) out.push('stay');
+  if (vehicle !== undefined && JSON.stringify(vehicle ?? null) !== JSON.stringify(c.vehicle ?? null)) out.push('vehicle');
+  if (route !== undefined) {
+    const a = route ? configId({ route }) : null, b = c.route ? configId({ route: c.route }) : null;
+    if (a !== b) out.push('rover route');
+  }
+  return out;
+}
+
+// The window around tMs in which clear(t) holds (stepping stepMs out each way, at most maxMs): { startMs, endMs }
+// or null when clear(tMs) does not hold. A window that reaches maxMs is open-ended on that side (its edge is the cap).
+function windowAround(tMs, clear, { stepMs = 3600e3, maxMs = 20 * 86400e3 } = {}) {
+  if (!clear(tMs)) return null;
+  let a = tMs, b = tMs;
+  while (tMs - a < maxMs && clear(a - stepMs)) a -= stepMs;
+  while (b - tMs < maxMs && clear(b + stepMs)) b += stepMs;
+  return { startMs: a, endMs: b };
+}
+
+// Overall verdict from the go / no-go rows: 'no-go' if any row is, else 'warn' if any row is, else 'go'.
+function verdictOf(checks) {
+  if (checks.some((c) => c.level === 'no-go')) return 'no-go';
+  if (checks.some((c) => c.level === 'warn')) return 'warn';
+  return 'go';
+}
+
+// The rover route as the Finalise page and the execution page show it (route3d.js payload v1). pts[i] =
+// [lat, lon, km, tMs, soc, flags, …], flags 1 lit, 2 Earth, 4 station. belongs: it starts within 30 km of the site.
+function routeSummary(p, site) {
+  if (!p?.pts?.length) return null;
+  const R = 1737.4, r = Math.PI / 180;
+  const km = (a, b) => 2 * R * Math.asin(Math.min(1, Math.sqrt(Math.sin((b[0] - a[0]) * r / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin((b[1] - a[1]) * r / 2) ** 2)));
+  const socs = p.pts.map((q) => q[4]).filter(Number.isFinite);
+  const share = (bit) => p.pts.filter((q) => q[5] & bit).length / p.pts.length;
+  const startKm = site ? km([site.latDeg, site.lonDeg], p.pts[0]) : 0;
+  return {
+    label: p.label ?? 'Route', lengthKm: p.lengthKm ?? p.pts[p.pts.length - 1][2],
+    departMs: Number.isFinite(p.departMs) ? p.departMs : null, arriveMs: Number.isFinite(p.arriveMs) ? p.arriveMs : null,
+    minSoc: socs.length ? Math.min(...socs) : null, reserve: p.reserve ?? 0.2,
+    litShare: share(1), earthShare: share(2), stationShare: share(4),
+    havens: p.havens?.length ?? 0, emptyAt: p.emptyAt ?? null, startKm, belongs: startKm <= 30,
+  };
+}
+
+// The go / no-go rows of the Finalise page from what it computed. Levels: 'go', 'warn' (flown anyway, said
+// so), 'no-go' (a real problem; freezing is still allowed except without a site or a landing time, which
+// buildConfig refuses). Inputs: site { latDeg, polar, resKm }, sky at the landing { sun, earth } clearances in
+// degrees (null: outside the ephemeris), window (windowAround) | null, plan (lander/mission.js; null when it failed,
+// planError then), checks (lander landingChecks rows) | null, route (routeSummary) | null.
+function goNoGoRows({ site, sky, window, plan, planError = null, checks = null, route = null }) {
+  const rows = [];
+  const add = (id, label, value, level, note = '') => rows.push({ id, label, value, level, ok: level === 'go', note });
+  const h = (ms) => `${Math.round(ms / 3600e3)} h`;
+  add('terrain', 'Terrain at the site', site.polar ? `LOLA polar, ${Math.round(site.resKm * 1000)} m and finer near the listed sites` : `global LOLA ${Math.round(site.resKm * 1000)} m, skyline computed`,
+    site.polar ? 'go' : 'warn', site.polar ? '' : 'Lander-scale hazards (rocks, small craters, slopes under ~1 km) are not resolved here; the rover planner needs the polar data south of 80°S.');
+  if (!sky) add('sky', 'Sun and Earth at landing', 'outside the ephemeris (Nov 2026 – Dec 2028)', 'no-go');
+  else {
+    const sun = sky.sun > 0, earth = sky.earth > 0;
+    add('sky', 'Sun and Earth at landing', `${sun ? 'Sun up' : 'Sun down'} (${sky.sun.toFixed(1)}°) · ${earth ? 'Earth up' : 'no Earth'} (${sky.earth.toFixed(1)}°) over the skyline`,
+      sun && earth ? 'go' : sun ? 'warn' : 'no-go', sun && !earth ? 'No direct link to Earth at touchdown: a relay is needed.' : !sun ? 'Touchdown in the dark: no solar power and no lit terrain for the hazard camera.' : '');
+  }
+  add('window', 'Landing window', window ? `${h(window.endMs - window.startMs)} with the bodies up around the landing` : 'none: the bodies are not both up at the landing time', window && window.endMs - window.startMs >= 6 * 3600e3 ? 'go' : 'warn',
+    window ? 'A slip inside the window keeps the same lighting; outside it, plan again.' : '');
+  if (!plan) add('dv', 'Trajectory and Δv', planError ?? 'not planned', 'no-go');
+  else {
+    const m = plan.budget.marginMs;
+    add('dv', 'Δv margin (lander)', `${Math.round(m)} m/s after a ${plan.budget.reserveDvMs} m/s reserve`, m >= 0 ? 'go' : 'no-go', m >= 0 ? '' : 'Not enough propellant: change the vehicle (more propellant, higher Isp, lighter) or the site.');
+  }
+  if (checks) {
+    const bad = checks.filter((c) => !c.ok);
+    add('landing', 'Landing checks', bad.length ? `${checks.length - bad.length} of ${checks.length} pass` : `all ${checks.length} pass`, bad.length ? 'warn' : 'go', bad.map((c) => `${c.label}: ${c.value} (limit ${c.limit})`).join('; '));
+  }
+  if (!route) add('route', 'Rover route', 'none planned', 'warn', 'Surface operations will keep the lander at the site. Plan a route on the Map (route card) to drive it.');
+  else if (!route.belongs) add('route', 'Rover route', `starts ${route.startKm.toFixed(0)} km from the site`, 'warn', 'This route was planned for another site and is left out. Plan one from this site on the Map.');
+  else {
+    add('route', 'Rover route', `${route.label}, ${route.lengthKm.toFixed(1)} km${route.departMs ? '' : ', no departure time'}`, route.departMs ? 'go' : 'warn', route.departMs ? '' : 'Set the departure time in the route card (the drive is simulated from it).');
+    if (route.minSoc !== null) add('battery', 'Rover battery', route.emptyAt ? `runs out at km ${route.emptyAt.km.toFixed(1)}` : `lowest ${Math.round(route.minSoc * 100)} %`, route.emptyAt || route.minSoc < route.reserve ? 'no-go' : 'go', route.emptyAt ? 'Pick another departure time or route on the Map.' : '');
+    add('comms', 'Rover comms', `Earth in view on ${Math.round(route.earthShare * 100)} % of the drive${route.stationShare ? `, station on ${Math.round(route.stationShare * 100)} %` : ''}`, route.earthShare >= 0.5 || route.stationShare >= 0.5 ? 'go' : 'warn');
+  }
+  return rows;
+}
+
+// Where the execution page's lander touched down for a configuration (the nominal descent, or the contingency
+// flown): { configId, landed: { latDeg, lonDeg, tMs, missM, source } | null }. The globe draws the lander there in
+// surface operations. Kept apart from the planning mission, which execution never changes.
+const FLOWN_KEY = 'lsn-flown';
+function writeFlown(configId, landed, storage) {
+  try { store(storage)?.setItem(FLOWN_KEY, JSON.stringify({ configId, landed: landed ?? null })); } catch { /* blocked */ }
+}
+function readFlown(configId, storage) {
+  try { const f = JSON.parse(store(storage)?.getItem(FLOWN_KEY) ?? 'null'); return f && f.configId === configId ? f.landed ?? null : null; } catch { return null; }
+}
+
+return { CONFIG_KEY, CONFIG_VERSION, hash32, configId, buildConfig, readConfig, writeConfig, clearConfig, changesSince, windowAround, verdictOf, routeSummary, goNoGoRows, FLOWN_KEY, writeFlown, readFlown };
+})();
 __m['boot.js'] = (() => {
 // Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
 // page itself, so it shows while the page and its data load, before any script runs; the page's script then
@@ -3453,7 +3648,8 @@ const { createWaypointTool } = __m['globe-waypoints.js'];
 const { createMappedLayer } = __m['globe-mapped.js'];
 const { attitudeAt, bearingDeg } = __m['rover-attitude.js'];
 const { createHiresSet } = __m['hires.js'];
-const { stageBar, readMission, landedFor } = __m['mission-flow.js'];
+const { stageBar, readMission, landedFor, stageUrl } = __m['mission-flow.js'];
+const { readConfig, readFlown } = __m['mission-config.js'];
 const { bootScreen } = __m['boot.js'];
 const { slopeColour, SLOPE_BANDS } = __m['slope-colours.js'];
 const { buildRecord, saveRecord, RECORDING_FIELDS, recordingCSV, fileName, downloadText } = __m['mission-save.js'];
@@ -3481,12 +3677,17 @@ function startGlobe() {
   const hiresMeta = readJson('data-hires');
   const embed = hashFlag('embed');
   if (embed) document.body.classList.add('embed');
+  // pick=1: the Map's whole-Moon level (in a frame on index.html): a click on the terrain picks a point and the Map
+  // opens the region around it. cfg=1: the execution page's surface operations: the frozen configuration's route
+  const pickMode = hashFlag('pick'), cfgMode = hashFlag('cfg');
+  if (pickMode) document.body.classList.add('pick');
+  if (cfgMode) document.body.classList.add('exec');
   document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CONTROLS_CSS }));
   // high-resolution patches around the sites (5 / 10 / 20 m), loaded as the camera comes close
   const hires = createHiresSet(hiresMeta, (name) => load(name), { onLoad: () => invalidateSouth() });
-  // the mission's steps (mission-flow.js): this page is step 3
+  // the mission's steps (mission-flow.js): the globe is the Map's 3D view (planning)
   const stagesSlot = document.getElementById('stages');
-  if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, '3d'));
+  if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, 'map'));
   let inflight = 0;
   const counted = (p) => { inflight++; showLoading(); return p.finally(() => { inflight--; showLoading(); }); };
   const load = (name) => counted(loadData(name, { timeoutMs: 60000 }));
@@ -3608,14 +3809,17 @@ function startGlobe() {
       boot.set(0.15, 'Global terrain in; building the view…');
       await terrain.init();
       let hashTimer = 0;
-      const routeMode = hashFlag('route');
-      const keep = `${routeMode ? '&route=1' : ''}${embed ? '&embed=1' : ''}`;
+      const routeMode = hashFlag('route') || cfgMode;
+      const keep = `${hashFlag('route') ? '&route=1' : ''}${embed ? '&embed=1' : ''}${pickMode ? '&pick=1' : ''}${cfgMode ? '&cfg=1' : ''}`;
       const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + keep), 300); };
       // tiles over a high-resolution patch may refine to its pixel size (5 m: depth 12, 10 m: 11), elsewhere 20 m (10)
       const capDepth = (b) => { const k = hires.finestKmAt(b); return k === null ? 10 : k <= 0.0051 ? 12 : k <= 0.0101 ? 11 : 10; };
       const fromHash = cameraFromHash(location.hash);
       // opened from the stage bar without a camera: start over the mission's site
-      const mission = readMission();
+      // in the execution page: the frozen configuration's site (and where it touched down), not the planning one
+      // (a rehearsal flown from a link has no configuration: the camera's place only, no route)
+      const cfg = cfgMode && !hashFlag('rehearsal') ? readConfig() : null;
+      const mission = cfgMode ? (cfg ? { siteId: cfg.site.id, siteName: cfg.site.name, latDeg: cfg.site.latDeg, lonDeg: cfg.site.lonDeg, landingMs: cfg.landing.requestedMs, landed: readFlown(cfg.id) } : null) : readMission();
       const touch = landedFor(mission);   // where the lander came down, if it has
       const startAt = fromHash.lat === undefined && mission && !routeMode ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
       view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
@@ -3626,8 +3830,9 @@ function startGlobe() {
       const controls = embed ? null : createCameraControls(view, { onUser: (a) => { if (!['in', 'out', 'tiltUp', 'tiltDown'].includes(a)) window.__globe.route?.stopFollow?.(); } });
       window.__globe.controls = controls;
       window.addEventListener('hashchange', () => { if (!hashFlag('route') || cameraFromHash(location.hash).lat !== undefined) view.jumpTo(cameraFromHash(location.hash)); });
-      if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission });
-      if (!embed) {
+      if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission, payloadOverride: cfgMode ? cfg?.route ?? false : null });
+      if (pickMode) startPick(view);
+      if (!embed && !pickMode && !cfgMode) {
         window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), bar: $('ab-wp'), mission, terrain, payload: window.__globe.route?.payload ?? null });
         window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), bar: $('ab-mapped'), meta, hires: hiresMeta });
       }
@@ -3649,6 +3854,28 @@ function startGlobe() {
       $('loading').textContent = `Could not load the terrain: ${e.message}`;
     }
   })();
+}
+
+// The Map's whole-Moon level: a click (not a drag) on the terrain picks the point. In the Map's frame it goes to the
+// Map (postMessage { type: 'lsn-pick' }), which opens the region around it; on its own page, the region planner.
+function startPick(view) {
+  const framed = window.parent && window.parent !== window;
+  const hint = document.createElement('div');
+  hint.className = 'glass pick-hint';
+  hint.innerHTML = '<b>Whole Moon</b> · drag to turn, scroll to zoom · <b>click a point</b> to look at the region around it';
+  document.body.appendChild(hint);
+  let down = null;
+  view.canvas.addEventListener('pointerdown', (e) => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
+  view.canvas.addEventListener('pointerup', (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) { down = null; return; }
+    down = null;
+    const hit = view.pick(e.clientX, e.clientY);
+    if (!hit) return;
+    const latDeg = +hit.latDeg.toFixed(4), lonDeg = +(((hit.lonDeg % 360) + 360) % 360).toFixed(4);
+    hint.innerHTML = `<b>${Math.abs(latDeg).toFixed(2)}°${latDeg < 0 ? 'S' : 'N'} ${lonDeg.toFixed(2)}°E</b> · opening the region around it…`;
+    if (framed) window.parent.postMessage({ type: 'lsn-pick', latDeg, lonDeg }, '*');
+    else location.href = stageUrl('region', { latDeg, lonDeg });
+  });
 }
 
 // Where the craft lands: the touchdown written by the lander page (a lander on its legs), else the mission's
@@ -3692,11 +3919,12 @@ function showLanding(view, mission, labels, labelEls, chips) {
 }
 
 // phase 6: the route handed over by the navigator (route3d.js payload in localStorage), with playback
-function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
+function startRoute(view, camFromHash, { embed = false, mission = null, payloadOverride = null } = {}) {
   const $ = (id) => document.getElementById(id);
   let payload = null;
-  try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; }
-  if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
+  if (payloadOverride) payload = payloadOverride;
+  else if (payloadOverride === null) { try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; } }
+  if (!payload) { $('centre-src').textContent = payloadOverride === false ? 'The frozen configuration has no rover route: the lander stays at the site.' : 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
   document.body.classList.add('route-mode');
   const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : null });
   const terrain = window.__globe.terrain;

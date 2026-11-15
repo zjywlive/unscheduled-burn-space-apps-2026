@@ -456,6 +456,9 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
       { id: 'fly', label: 'Fly along in 3D', short: 'Fly', icon: 'fly', disabled: !canRoute, hint: 'Choose a route first', onClick: () => callbacks.onFly3d?.() },
       { id: 'inset', label: '3D preview', short: '3D', icon: 'cube', pressed: insetOn(), disabled: !canRoute && !insetOn(), hint: 'Choose a route first', title: 'Show or hide the 3D preview window', onClick: () => { callbacks.onInset3d?.(); renderBar(); } },
       { id: 'save', label: 'Save mission', short: 'Save', icon: 'save', disabled: !mission.ready(), hint: 'Choose a route first', onClick: () => mission.save() },
+      // step 2 of the mission: freeze the plan (site, time, vehicle, this route and its departure) for execution
+      { type: 'divider' },
+      { id: 'finalise', label: 'Finalise mission', short: 'Finalise', icon: 'go', primary: canRoute, title: 'Step 2: check go / no-go and freeze the mission (site, landing time and window, stay, vehicle, this route and its departure)', onClick: () => callbacks.onFinalise?.() },
       { type: 'status', id: 'note', text: barNote });
     return items;
   }

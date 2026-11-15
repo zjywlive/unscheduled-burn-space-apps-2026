@@ -4,7 +4,7 @@
 // Phase 5 (G, docs/phase4/mock/structure.html): in the big layout the modes and the Layers menu (filters,
 // overlays, weights) sit in the top bar; the right panel is an inspector that follows the selected object
 // (point / route / region); the status line, legend and scale bar go to the time dock (main.js mounts them).
-import { STAGES, NEXT_LABELS, stageUrl, readMission, hasRoute } from '../mission-flow.js';
+import { stageUrl, readMission, hasRoute } from '../mission-flow.js';
 import { createActionBar } from './actionbar.js';
 import { h, s, clear } from './dom.js';
 import { panelIcon, closeX } from './shell.js';
@@ -414,7 +414,12 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       { id: 'dial', label: 'Sky dial', short: 'Sky dial', icon: 'sun', pressed: dialPressed, title: 'Show or hide the sky dial on the map (K)', cls: 'dial-btn', onClick: () => cb.onDial?.(!dialPressed) },
       { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
       { type: 'divider' },
-      ...STAGES.slice(STAGES.findIndex((st) => st.id === 'site') + 1).map((st) => ({ id: `next-${st.id}`, label: `${NEXT_LABELS[st.id] ?? st.label} →`, short: NEXT_LABELS[st.id]?.split(' ').pop() ?? st.label, icon: 'go', title: st.title, attrs: { 'data-stage': st.id }, href: () => stageUrl(st.id, readMission(), { route: st.id === '3d' && hasRoute() }) })),
+      // planning tools at other levels, then step 2 of the mission (mission-flow.js)
+      { id: 'next-region', label: 'Where to land', short: 'Land', icon: 'details', title: 'The region around the site: landing ellipse scores and better spots nearby (Map, Region level)', onClick: () => cb.onLevel?.('region') },
+      { id: 'next-rover', label: 'Plan the rover route', short: 'Route', icon: 'route', title: 'Plan the rover route from the landing site (route card)', attrs: { 'data-stage': 'rover' }, href: () => stageUrl('rover', readMission()) },
+      { id: 'next-3d', label: 'See it in 3D', short: '3D', icon: 'cube', title: 'The site (or the planned route) on the 3D Moon', attrs: { 'data-stage': '3d' }, href: () => stageUrl('3d', readMission(), { route: hasRoute() }) },
+      { type: 'divider' },
+      { id: 'next-finalise', label: 'Finalise mission', short: 'Finalise', icon: 'go', primary: true, title: 'Step 2: check go / no-go and freeze the mission configuration for execution', attrs: { 'data-stage': 'finalise' }, onClick: () => cb.onFinalise?.() },
     ]);
   }
   const pName = h('button', { type: 'button', class: 'point-name insp-name-btn', title: 'Show the site list', 'aria-controls': 'lsn-sidebar', onclick: () => openSites() });

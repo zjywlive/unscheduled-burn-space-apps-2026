@@ -12,7 +12,8 @@ import { createWaypointTool } from './globe-waypoints.js';
 import { createMappedLayer } from './globe-mapped.js';
 import { attitudeAt, bearingDeg } from './rover-attitude.js';
 import { createHiresSet } from './hires.js';
-import { stageBar, readMission, landedFor } from './mission-flow.js';
+import { stageBar, readMission, landedFor, stageUrl } from './mission-flow.js';
+import { readConfig, readFlown } from './mission-config.js';
 import { bootScreen } from './boot.js';
 import { slopeColour, SLOPE_BANDS } from './slope-colours.js';
 import { buildRecord, saveRecord, RECORDING_FIELDS, recordingCSV, fileName, downloadText } from './mission-save.js';
@@ -40,12 +41,17 @@ export function startGlobe() {
   const hiresMeta = readJson('data-hires');
   const embed = hashFlag('embed');
   if (embed) document.body.classList.add('embed');
+  // pick=1: the Map's whole-Moon level (in a frame on index.html): a click on the terrain picks a point and the Map
+  // opens the region around it. cfg=1: the execution page's surface operations: the frozen configuration's route
+  const pickMode = hashFlag('pick'), cfgMode = hashFlag('cfg');
+  if (pickMode) document.body.classList.add('pick');
+  if (cfgMode) document.body.classList.add('exec');
   document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CONTROLS_CSS }));
   // high-resolution patches around the sites (5 / 10 / 20 m), loaded as the camera comes close
   const hires = createHiresSet(hiresMeta, (name) => load(name), { onLoad: () => invalidateSouth() });
-  // the mission's steps (mission-flow.js): this page is step 3
+  // the mission's steps (mission-flow.js): the globe is the Map's 3D view (planning)
   const stagesSlot = document.getElementById('stages');
-  if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, '3d'));
+  if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, 'map'));
   let inflight = 0;
   const counted = (p) => { inflight++; showLoading(); return p.finally(() => { inflight--; showLoading(); }); };
   const load = (name) => counted(loadData(name, { timeoutMs: 60000 }));
@@ -167,14 +173,17 @@ export function startGlobe() {
       boot.set(0.15, 'Global terrain in; building the view…');
       await terrain.init();
       let hashTimer = 0;
-      const routeMode = hashFlag('route');
-      const keep = `${routeMode ? '&route=1' : ''}${embed ? '&embed=1' : ''}`;
+      const routeMode = hashFlag('route') || cfgMode;
+      const keep = `${hashFlag('route') ? '&route=1' : ''}${embed ? '&embed=1' : ''}${pickMode ? '&pick=1' : ''}${cfgMode ? '&cfg=1' : ''}`;
       const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + keep), 300); };
       // tiles over a high-resolution patch may refine to its pixel size (5 m: depth 12, 10 m: 11), elsewhere 20 m (10)
       const capDepth = (b) => { const k = hires.finestKmAt(b); return k === null ? 10 : k <= 0.0051 ? 12 : k <= 0.0101 ? 11 : 10; };
       const fromHash = cameraFromHash(location.hash);
       // opened from the stage bar without a camera: start over the mission's site
-      const mission = readMission();
+      // in the execution page: the frozen configuration's site (and where it touched down), not the planning one
+      // (a rehearsal flown from a link has no configuration: the camera's place only, no route)
+      const cfg = cfgMode && !hashFlag('rehearsal') ? readConfig() : null;
+      const mission = cfgMode ? (cfg ? { siteId: cfg.site.id, siteName: cfg.site.name, latDeg: cfg.site.latDeg, lonDeg: cfg.site.lonDeg, landingMs: cfg.landing.requestedMs, landed: readFlown(cfg.id) } : null) : readMission();
       const touch = landedFor(mission);   // where the lander came down, if it has
       const startAt = fromHash.lat === undefined && mission && !routeMode ? (touch ? { lat: touch.latDeg, lon: touch.lonDeg, dist: 12, tilt: 50, heading: 0 } : { lat: mission.latDeg, lon: mission.lonDeg, dist: 45, tilt: 50, heading: 0 }) : fromHash;
       view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
@@ -185,8 +194,9 @@ export function startGlobe() {
       const controls = embed ? null : createCameraControls(view, { onUser: (a) => { if (!['in', 'out', 'tiltUp', 'tiltDown'].includes(a)) window.__globe.route?.stopFollow?.(); } });
       window.__globe.controls = controls;
       window.addEventListener('hashchange', () => { if (!hashFlag('route') || cameraFromHash(location.hash).lat !== undefined) view.jumpTo(cameraFromHash(location.hash)); });
-      if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission });
-      if (!embed) {
+      if (routeMode) startRoute(view, cameraFromHash(location.hash), { embed, mission, payloadOverride: cfgMode ? cfg?.route ?? false : null });
+      if (pickMode) startPick(view);
+      if (!embed && !pickMode && !cfgMode) {
         window.__globe.waypoints = createWaypointTool(view, { parent: $('wp-slot'), bar: $('ab-wp'), mission, terrain, payload: window.__globe.route?.payload ?? null });
         window.__globe.mapped = createMappedLayer(view, { parent: $('mapped-slot'), bar: $('ab-mapped'), meta, hires: hiresMeta });
       }
@@ -208,6 +218,28 @@ export function startGlobe() {
       $('loading').textContent = `Could not load the terrain: ${e.message}`;
     }
   })();
+}
+
+// The Map's whole-Moon level: a click (not a drag) on the terrain picks the point. In the Map's frame it goes to the
+// Map (postMessage { type: 'lsn-pick' }), which opens the region around it; on its own page, the region planner.
+function startPick(view) {
+  const framed = window.parent && window.parent !== window;
+  const hint = document.createElement('div');
+  hint.className = 'glass pick-hint';
+  hint.innerHTML = '<b>Whole Moon</b> · drag to turn, scroll to zoom · <b>click a point</b> to look at the region around it';
+  document.body.appendChild(hint);
+  let down = null;
+  view.canvas.addEventListener('pointerdown', (e) => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
+  view.canvas.addEventListener('pointerup', (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) { down = null; return; }
+    down = null;
+    const hit = view.pick(e.clientX, e.clientY);
+    if (!hit) return;
+    const latDeg = +hit.latDeg.toFixed(4), lonDeg = +(((hit.lonDeg % 360) + 360) % 360).toFixed(4);
+    hint.innerHTML = `<b>${Math.abs(latDeg).toFixed(2)}°${latDeg < 0 ? 'S' : 'N'} ${lonDeg.toFixed(2)}°E</b> · opening the region around it…`;
+    if (framed) window.parent.postMessage({ type: 'lsn-pick', latDeg, lonDeg }, '*');
+    else location.href = stageUrl('region', { latDeg, lonDeg });
+  });
 }
 
 // Where the craft lands: the touchdown written by the lander page (a lander on its legs), else the mission's
@@ -251,11 +283,12 @@ function showLanding(view, mission, labels, labelEls, chips) {
 }
 
 // phase 6: the route handed over by the navigator (route3d.js payload in localStorage), with playback
-function startRoute(view, camFromHash, { embed = false, mission = null } = {}) {
+function startRoute(view, camFromHash, { embed = false, mission = null, payloadOverride = null } = {}) {
   const $ = (id) => document.getElementById(id);
   let payload = null;
-  try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; }
-  if (!payload) { $('centre-src').textContent = 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
+  if (payloadOverride) payload = payloadOverride;
+  else if (payloadOverride === null) { try { payload = parsePayload(localStorage.getItem(ROUTE3D_KEY)); } catch { payload = null; } }
+  if (!payload) { $('centre-src').textContent = payloadOverride === false ? 'The frozen configuration has no rover route: the lander stays at the site.' : 'No route to show: plan one in the navigator and press "Fly along in 3D".'; return; }
   document.body.classList.add('route-mode');
   const layer = createRouteLayer(view, payload, { roverPx: embed ? 28 : null });
   const terrain = window.__globe.terrain;

@@ -77,6 +77,13 @@
   .frame-note { position: fixed; left: 50%; transform: translateX(-50%); top: 62px; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,0.6); color: var(--muted); font-size: 11px; }
   .leg-label[hidden], .wp-label[hidden], .frame-label[hidden], .frames-box[hidden] { display: none; }
   /* the small 3D window in the navigator (embed=1): the view only */
+  /* pick=1 (the Map's whole-Moon level, framed): the globe, the names, the camera buttons and Fly to; cfg=1 (the
+     execution page's surface operations, framed): the route playback without the planning tools */
+  body.pick .panel, body.pick .status, body.pick #ab-wp, body.pick #ab-mapped, body.pick .ab-sep, body.pick .brand { display: none !important; }
+  body.exec .brand, body.exec .act-bar, body.exec .panel { display: none !important; }
+  .pick-hint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); padding: 8px 14px; font-size: 12px; color: var(--muted); z-index: 5; max-width: calc(100vw - 24px); text-align: center; }
+  .pick-hint b { color: var(--text, #fff); font-weight: 600; }
+  body.pick canvas { cursor: crosshair; }
   body.embed .brand, body.embed .panel, body.embed .readout, body.embed .status, body.embed #route-left, body.embed .route-hud, body.embed #labels, body.embed .cam-ctl { display: none !important; }
   .panel h2 { margin: 0 0 6px; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
   #presets { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -697,6 +697,29 @@ th:last-child, td:last-child { padding-right: 0; }
 .terrain-check h3 { font-size: var(--fs-body); line-height: 20px; font-weight: 600; margin-bottom: 6px; }
 .terrain-table .terrain-note { font-size: var(--fs-small); line-height: 16px; }
 
+/* styles/phase10-flow.css */
+/* ---------- mission flow: the steps and the Map's levels of detail (mission-flow.js, ui/maplevels.js) ---------- */
+/* the top bar's flow group: the steps (Plan 1 Map › 2 Finalise · Fly 3 Execute), then Moon · Region · Site */
+.topbar-stages { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.is-bigmap .topbar-stages { margin-left: 0; flex: none; }
+@media (max-width: 1100px) {
+  .topbar-stages { order: 1; width: 100%; margin: 0 0 8px; overflow-x: auto; scrollbar-width: none; }
+  .topbar-stages::-webkit-scrollbar { display: none; }
+}
+.map-levels { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); flex: none; }
+.map-levels button { height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: none; color: #9aa0a6; font: 500 12px/1 Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+.map-levels button:hover { color: #e8eaed; background: rgba(255, 255, 255, 0.08); }
+.map-levels button[aria-pressed="true"] { color: #0b0c0e; background: #e8eaed; }
+.map-levels button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 1px; }
+
+/* the whole Moon and the region: frames over the page under the top bar */
+.map-level-layer { position: fixed; left: 0; right: 0; top: var(--level-top, 56px); bottom: 0; z-index: 900; background: #000; }
+.map-level-layer[hidden] { display: none; }
+.map-level-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+.map-level-frame[hidden] { display: none; }
+/* while a frame covers the map, the map's own floating chrome (action bar, dock, dial) stays under it */
+.map-level-open .ab-wrap { visibility: hidden; }
+
 /* styles/phase3-agent.css */
 /* Phase 3: the Ask panel, the first-visit tour prompt, and driver.js pressed into the project's tokens.
    No new colours: surface, raised and rule steps only; no shadows, gradients or glow. */
@@ -1523,9 +1546,7 @@ button.relay-win:hover .relay-win-time { text-decoration: underline; text-underl
 .rp-power .rp-rover-unit { display: none; }
 .rp-power .rp-rover-box { padding: 0 6px; }
 
-/* ---------- mission flow (mission-flow.js) ---------- */
-.topbar-stages { display: none; }
-.is-bigmap .topbar-stages { display: flex; align-items: center; margin-left: 12px; }
+/* ---------- mission flow (mission-flow.js; the top bar's steps are in phase10-flow.css) ---------- */
 .insp-next { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .insp-next a { font-size: var(--fs-small); color: var(--text); text-decoration: none; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--raised) 70%, transparent); }
 .insp-next a:hover { border-color: var(--text); }
@@ -2678,24 +2699,36 @@ html[data-reduce-motion="true"] :is(.story-card, .app[data-story="on"] *) { tran
 'use strict';
 const __m = {};
 __m['mission-flow.js'] = (() => {
-// One mission across the pages (navigator, lander, 3D globe): the chosen landing site and time travel from
-// step to step, and every page shows the same stage bar
-//   1 Landing (lander.html: site, time, descent) → 2 Rover (index.html: site analysis and the route card)
-//   → 3 3D (globe.html).
-// The mission lives in localStorage (per browser, per origin; works from file:// too). Pure helpers plus one
-// small DOM builder with no dependencies, so any page can use it.
+// One mission across the pages. Everything is planned before launch, then frozen and flown:
+//   PLAN  1 Map (index.html: the whole Moon → a region → the south-pole site analysis, the landing spot, timing,
+//         the rover route)  →  2 Finalise (finalise.html: go/no-go checks, the vehicle, freeze)
+//   FLY   3 Execute (lander.html: the frozen configuration flown from launch to surface operations).
+// The planning state lives in localStorage (per browser, per origin; works from file:// too); the frozen
+// configuration the execution page flies is in mission-config.js. Pure helpers plus one small DOM builder with
+// no dependencies, so any page can use it.
 //
-// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, updatedMs,
+// Mission = { siteId, siteName, latDeg, lonDeg, landingMs, stayDays, vehicle?, updatedMs,
 //             landed: { latDeg, lonDeg, tMs, siteId, missM, source } | null }   where the lander touched down
-//             (written by the lander page; the rover route starts there)
+//             (written by the execution page; the 3D globe draws the lander there)
 
 const MISSION_KEY = 'lsn-mission';
 const ROUTE_KEY = 'lsn-route3d';   // route3d.js ROUTE3D_KEY, repeated so this module has no imports
+const CONFIG_KEY = 'lsn-config';   // mission-config.js CONFIG_KEY (the frozen configuration)
 const STAGES = Object.freeze([
-  { id: 'landing', n: 1, label: 'Landing', title: 'Choose the site and time and fly the lander down (lander)' },
-  { id: 'rover', n: 2, label: 'Rover', title: 'Check the site and plan the rover route from it (navigator, route card)' },
-  { id: '3d', n: 3, label: '3D', title: 'See the site and the route on the 3D Moon (globe)' },
+  { id: 'map', n: 1, group: 'Plan', label: 'Map', title: 'Plan the whole mission: the site anywhere on the Moon, its timing, the landing spot and the rover route (navigator)' },
+  { id: 'finalise', n: 2, group: 'Plan', label: 'Finalise', title: 'Check go / no-go and freeze the mission configuration (site, landing time and window, stay, vehicle, rover route)' },
+  { id: 'execute', n: 3, group: 'Fly', label: 'Execute', title: 'Fly the frozen mission: launch, spaceflight, orbital manoeuvres, lunar orbit insertion, landing, surface operations' },
 ]);
+// The six phases the execution page flies, in order (lander.html; the phase ids of lander/mission.js in each)
+const EXEC_PHASES = Object.freeze([
+  { id: 'launch', label: 'Launch', short: 'Launch', from: ['leo'] },
+  { id: 'spaceflight', label: 'Spaceflight', short: 'Spaceflight', from: ['tli', 'coast'] },
+  { id: 'orbit', label: 'Orbital manoeuvres', short: 'Manoeuvres', from: ['approach-moon'] },
+  { id: 'loi', label: 'Lunar orbit insertion', short: 'LOI', from: ['loi', 'llo'] },
+  { id: 'landing', label: 'Landing', short: 'Landing', from: ['doi', 'descent-coast', 'braking', 'approach', 'terminal', 'landed'] },
+  { id: 'surface', label: 'Surface operations', short: 'Surface', from: [] },
+]);
+const execPhaseOf = (landerPhaseId) => EXEC_PHASES.find((p) => p.from.includes(landerPhaseId))?.id ?? null;
 
 const store = (s) => s ?? (typeof localStorage !== 'undefined' ? localStorage : null);
 
@@ -2716,6 +2749,10 @@ function writeMission(patch, storage) {
 
 function hasRoute(storage) {
   try { return !!store(storage)?.getItem(ROUTE_KEY); } catch { return false; }
+}
+
+function hasConfig(storage) {
+  try { return !!store(storage)?.getItem(CONFIG_KEY); } catch { return false; }
 }
 
 // Great-circle distance between two lat/lon points on the Moon, km.
@@ -2745,15 +2782,20 @@ function landFromHash(hash) {
 
 const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().slice(0, 16)}Z`;
 
-// The URL of a stage for a mission (relative to demo/). Without a mission, the bare page.
+// The URL of a stage (or of a planning tool) for a mission, relative to demo/. Without a mission, the bare page.
+//   map, site   the Map at the site and time          rover    the Map with the route card open at the site
+//   region      the "Where to land" planner           finalise / execute   their pages (they read the storage)
+//   3d          the globe at the site (or the route)
 function stageUrl(stage, m, { route = false } = {}) {
-  const site = m?.siteId ? encodeURIComponent(m.siteId) : m ? `${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;
+  const site = m?.siteId ? encodeURIComponent(m.siteId) : m ? `c:${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;   // the navigator's custom site
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
-  if (stage === 'site') return nav();
+  if (stage === 'map' || stage === 'site') return nav();
   const landed = landedFor(m);
   if (stage === 'rover') return nav(`&plan=1${landed ? `&land=${landed.latDeg.toFixed(5)},${landed.lonDeg.toFixed(5)}` : ''}`);
-  if (stage === 'landing') return `lander.html${m?.siteId ? `?site=${encodeURIComponent(m.siteId)}${t ? `&t=${t}` : ''}` : ''}`;
+  if (stage === 'region') return `planner.html${m ? `?at=${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}${t ? `&t=${t}` : ''}` : ''}`;
+  if (stage === 'finalise') return 'finalise.html';
+  if (stage === 'execute') return 'lander.html';
   if (stage === '3d') {
     if (route) return 'globe.html#route=1';
     const c = landed ?? m;
@@ -2767,32 +2809,46 @@ const STAGE_CSS = `
 .lsn-stages a { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; border-radius: 999px; color: #9aa0a6; text-decoration: none; white-space: nowrap; }
 .lsn-stages a:hover { color: #e8eaed; background: rgba(255,255,255,0.08); }
 .lsn-stages a[aria-current="step"] { color: #0b0c0e; background: #e8eaed; }
+.lsn-stages a[data-locked] { opacity: 0.55; }
 .lsn-stages .n { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 700; background: rgba(255,255,255,0.12); color: inherit; }
 .lsn-stages a[aria-current="step"] .n { background: #0b0c0e; color: #e8eaed; }
 .lsn-stages .sep { color: rgba(255,255,255,0.25); font-size: 10px; }
+.lsn-stages .grp { padding: 0 2px 0 8px; color: rgba(255,255,255,0.38); font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.lsn-stages .grp + a { margin-left: 2px; }
 .lsn-stages .where { margin-left: 4px; padding: 0 8px 0 4px; color: #9aa0a6; font-weight: 400; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lsn-stages.compact .grp { display: none; }
 `;
 
-// The stage bar: <nav> with the four stages as links (the current one marked), and the mission's site and
-// date. Links are rebuilt from the stored mission when clicked, so they follow changes made on the page.
-function stageBar(doc, current, { getMission = () => readMission(), compact = false } = {}) {
+// The stage bar: <nav> with the steps as links under their group (Plan: Map, Finalise; Fly: Execute), the current
+// one marked, and the mission's site and date. Execute is marked locked until a configuration is frozen (its link
+// still opens the page, which says so). Links are rebuilt from the stored mission when used, so they follow
+// changes made on the page.
+function stageBar(doc, current, { getMission = () => readMission(), compact = false, locked = () => !hasConfig() } = {}) {
   if (!doc.getElementById('lsn-stages-css')) {
     const st = doc.createElement('style'); st.id = 'lsn-stages-css'; st.textContent = STAGE_CSS; (doc.head ?? doc.documentElement).appendChild(st);
   }
   const nav = doc.createElement('nav');
-  nav.className = 'lsn-stages';
+  nav.className = `lsn-stages${compact ? ' compact' : ''}`;
   nav.setAttribute('aria-label', 'Mission steps');
   const links = [];
+  let group = null;
   STAGES.forEach((s, i) => {
-    if (i) { const sep = doc.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
+    if (s.group !== group) {
+      group = s.group;
+      const g = doc.createElement('span'); g.className = 'grp'; g.textContent = s.group; g.setAttribute('aria-hidden', 'true'); nav.appendChild(g);
+    } else if (i) { const sep = doc.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
     const a = doc.createElement('a');
     a.dataset.stage = s.id;
-    a.title = s.title;
     const showLabel = !compact || s.id === current;   // compact: numbers only, but the current step keeps its name
     a.innerHTML = `<span class="n">${s.n}</span>${showLabel ? s.label : ''}`;
     if (!showLabel) a.setAttribute('aria-label', `Step ${s.n}: ${s.label}`);
     if (s.id === current) a.setAttribute('aria-current', 'step');
-    const refresh = () => { a.href = stageUrl(s.id, getMission(), { route: s.id === '3d' && hasRoute() }); };
+    const refresh = () => {
+      a.href = stageUrl(s.id, getMission());
+      const lock = s.id === 'execute' && s.id !== current && locked();
+      a.toggleAttribute('data-locked', lock);
+      a.title = lock ? `${s.title}. Not finalised yet: finalise the mission first (step 2).` : s.title;
+    };
     refresh();
     a.addEventListener('pointerenter', refresh);
     a.addEventListener('focus', refresh);
@@ -2800,7 +2856,7 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
     links.push(refresh);
     nav.appendChild(a);
   });
-  const listen = (fn) => { try { doc.defaultView?.addEventListener('lsn-mission', fn); } catch { /* no window */ } };
+  const listen = (fn) => { try { doc.defaultView?.addEventListener('lsn-mission', fn); doc.defaultView?.addEventListener('storage', fn); } catch { /* no window */ } };
   if (compact) { nav.refresh = () => links.forEach((f) => f()); listen(nav.refresh); return nav; }
   const where = doc.createElement('span');
   where.className = 'where';
@@ -2816,29 +2872,109 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
   return nav;
 }
 
-// The next steps after a stage as a row of links (for a page's own panel): e.g. from the navigator's site panel
-// (after 'site', which is not a stage, so every stage is listed), "Plan the landing",
-// "Plan the rover route", "See in 3D". Links are rebuilt from the stored mission when used.
-const NEXT_LABELS = Object.freeze({ landing: 'Plan the landing', rover: 'Plan the rover route', '3d': 'See it in 3D' });
-function nextSteps(doc, after, { getMission = () => readMission(), className = 'lsn-next' } = {}) {
-  const at = STAGES.findIndex((s) => s.id === after);
-  const row = doc.createElement('div');
-  row.className = className;
-  for (const s of STAGES.slice(at + 1)) {
-    const a = doc.createElement('a');
-    a.dataset.stage = s.id;
-    a.title = s.title;
-    a.textContent = `${NEXT_LABELS[s.id] ?? s.label} →`;
-    const refresh = () => { a.href = stageUrl(s.id, getMission(), { route: s.id === '3d' && hasRoute() }); };
-    refresh();
-    a.addEventListener('pointerenter', refresh); a.addEventListener('focus', refresh); a.addEventListener('click', refresh);
-    try { doc.defaultView?.addEventListener('lsn-mission', refresh); } catch { /* no window */ }
-    row.appendChild(a);
+return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
+})();
+__m['ui/maplevels.js'] = (() => {
+// The Map's three levels of detail (mission step 1), switched in the top bar:
+//   Moon    the whole Moon in 3D (globe.html#pick=1 in a frame): LOLA 7.6 km → 474 m, polar 240–20 m; a click picks
+//           a point and opens the region around it
+//   Region  "Where to land" (planner.html in a frame): about ±200 km around the point, polar data south of 80°S or
+//           the global LOLA terrain with a computed skyline elsewhere; landing ellipse scores, better spots;
+//           "Use this site" makes it the mission's site and comes back to the site level
+//   Site    this page's own analysis (heat maps, sky dial, route card, comms, havens), detailed south of 80°S
+// The frames are made on first use and kept, so going back and forth is instant; they cover the page below the top
+// bar, which stays (stage bar, levels, site). Messages from the frames: lsn-pick { latDeg, lonDeg } (globe),
+// lsn-site { mission } and lsn-close (planner). index.html?level=moon|region opens on that level.
+const { stageUrl } = __m['mission-flow.js'];
+
+// bumped when the framed pages change, so a browser that cached an older globe.html / planner.html loads the new one
+const FRAME_V = 'flow1';
+
+const LEVELS = Object.freeze([
+  { id: 'moon', label: 'Moon', title: 'The whole Moon in 3D: click a point to look at the region around it' },
+  { id: 'region', label: 'Region', title: 'Where to land: about ±200 km around the site, landing ellipse scores and better spots nearby' },
+  { id: 'site', label: 'Site', title: 'The site analysis: Sun and Earth over the stay, power, comms and the rover route (detailed south of 80°S)' },
+]);
+
+function createMapLevels(doc, { slot, topbar, getMission, onSite }) {
+  const seg = doc.createElement('div');
+  seg.className = 'map-levels';
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', 'Map level of detail');
+  const buttons = LEVELS.map((lv) => {
+    const b = doc.createElement('button');
+    b.type = 'button'; b.dataset.level = lv.id; b.textContent = lv.label; b.title = lv.title;
+    b.addEventListener('click', () => show(lv.id));
+    seg.appendChild(b);
+    return b;
+  });
+  slot?.appendChild(seg);
+
+  const layer = doc.createElement('section');
+  layer.className = 'map-level-layer';
+  layer.hidden = true;
+  doc.body.appendChild(layer);
+  const frames = {};
+  let level = 'site', regionAt = null;
+
+  // the layer starts under the top bar (which wraps on narrow screens)
+  const place = () => { const r = topbar?.getBoundingClientRect(); doc.documentElement.style.setProperty('--level-top', `${Math.max(0, Math.round(r ? r.bottom : 0))}px`); };
+  if (typeof ResizeObserver === 'function' && topbar) new ResizeObserver(place).observe(topbar);
+  doc.defaultView.addEventListener('resize', place);
+
+  function frame(id, src) {
+    let f = frames[id];
+    if (!f) {
+      f = doc.createElement('iframe');
+      f.className = 'map-level-frame';
+      f.title = id === 'moon' ? 'The whole Moon in 3D' : 'Where to land';
+      f.setAttribute('allow', 'fullscreen');
+      layer.appendChild(f);
+      frames[id] = f;
+    }
+    if (src && f.dataset.src !== src) { f.dataset.src = src; f.src = src; }
+    return f;
   }
-  return row;
+  function moonSrc() {
+    const m = getMission();
+    const lat = m?.latDeg ?? -60, lon = m?.lonDeg ?? 0;
+    return `globe.html?v=${FRAME_V}#lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&dist=6200&tilt=0&heading=0&pick=1`;
+  }
+  function show(id, { at = null } = {}) {
+    place();
+    level = id;
+    for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.level === id));
+    layer.hidden = id === 'site';
+    doc.documentElement.classList.toggle('map-level-open', id !== 'site');
+    if (id === 'moon') frame('moon', frames.moon?.dataset.src ?? moonSrc());
+    if (id === 'region') {
+      const m = getMission();
+      const p = at ?? regionAt ?? (m ? { latDeg: m.latDeg, lonDeg: m.lonDeg } : null);
+      regionAt = p;
+      const url = stageUrl('region', p ? { ...p, landingMs: m?.landingMs } : m);
+      frame('region', `${url}${url.includes('?') ? '&' : '?'}v=${FRAME_V}`);
+    }
+    for (const [k, f] of Object.entries(frames)) f.hidden = k !== id;
+    // the site level's own map is under the layer: give the keyboard back to it
+    if (id === 'site') doc.getElementById('main')?.focus?.({ preventScroll: true });
+  }
+  doc.defaultView.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || typeof d !== 'object') return;
+    const from = Object.values(frames).find((f) => f.contentWindow === e.source);
+    if (!from) return;
+    if (d.type === 'lsn-pick' && Number.isFinite(d.latDeg) && Number.isFinite(d.lonDeg)) show('region', { at: { latDeg: d.latDeg, lonDeg: d.lonDeg } });
+    else if (d.type === 'lsn-site' && d.mission) { regionAt = { latDeg: d.mission.latDeg, lonDeg: d.mission.lonDeg }; show('site'); onSite?.(d.mission); }
+    else if (d.type === 'lsn-close') show('site');
+  });
+  doc.defaultView.addEventListener('keydown', (e) => { if (e.key === 'Escape' && level !== 'site' && !e.defaultPrevented) show('site'); });
+  for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.level === 'site'));
+  const q = /[?&]level=(moon|region)\b/.exec(doc.defaultView.location.search);
+  if (q) setTimeout(() => show(q[1]), 0);
+  return { show, get level() { return level; }, el: seg };
 }
 
-return { MISSION_KEY, ROUTE_KEY, STAGES, readMission, writeMission, hasRoute, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar, NEXT_LABELS, nextSteps };
+return { LEVELS, createMapLevels };
 })();
 __m['boot.js'] = (() => {
 // Loading screen over a page until its map is ready. The build scripts put bootMarkup() and BOOT_CSS into the
@@ -7087,11 +7223,13 @@ function createShell(root, { sites, state, onChange }) {
   // phase 5: the modes and Layers sit in the middle of the top bar in the big layout (ui/mapview.js moves them)
   const topModes = h('div', { class: 'topbar-modes' });
 
+  const levelSlot = h('div', { class: 'topbar-levels' });
   const topbar = h('header', { class: 'topbar' },
     h('div', { class: 'topbar-brand' }, brand('brand-top'),
-      h('div', { class: 'site-picker' }, h('label', { class: 'sr-only', for: siteSelect.id }, 'Landing site'), siteSelect),
-      // the mission's steps across the pages (mission-flow.js): this page is step 2, the rover (with the site analysis)
-      h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'rover', { compact: true }) : null)),
+      h('div', { class: 'site-picker' }, h('label', { class: 'sr-only', for: siteSelect.id }, 'Landing site'), siteSelect)),
+    // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map; then its levels of
+    // detail (Moon, Region, Site: ui/maplevels.js fills levelSlot)
+    h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null, levelSlot),
     h('div', { class: 'topbar-nav' },
       h('nav', { class: 'views', 'aria-label': 'Views' }, viewButtons),
       topModes,
@@ -7182,7 +7320,7 @@ function createShell(root, { sites, state, onChange }) {
     regions: { finding, panorama, elevation, compare, events, evidence, brief, mapTitle, mapFinding, mapCard, pointCard, filtersCard, regionCard, routeCard },
     sheetParts, mapSection,
     tourButton, askButton, settingsButton, topModes,
-    app, sidebar, sideToggle, sideReopen, mapTitleRow: mapSection.querySelector('.title-row'),
+    app, sidebar, sideToggle, sideReopen, levelSlot, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
     sync,
   };
 }
@@ -9877,6 +10015,9 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
       { id: 'fly', label: 'Fly along in 3D', short: 'Fly', icon: 'fly', disabled: !canRoute, hint: 'Choose a route first', onClick: () => callbacks.onFly3d?.() },
       { id: 'inset', label: '3D preview', short: '3D', icon: 'cube', pressed: insetOn(), disabled: !canRoute && !insetOn(), hint: 'Choose a route first', title: 'Show or hide the 3D preview window', onClick: () => { callbacks.onInset3d?.(); renderBar(); } },
       { id: 'save', label: 'Save mission', short: 'Save', icon: 'save', disabled: !mission.ready(), hint: 'Choose a route first', onClick: () => mission.save() },
+      // step 2 of the mission: freeze the plan (site, time, vehicle, this route and its departure) for execution
+      { type: 'divider' },
+      { id: 'finalise', label: 'Finalise mission', short: 'Finalise', icon: 'go', primary: canRoute, title: 'Step 2: check go / no-go and freeze the mission (site, landing time and window, stay, vehicle, this route and its departure)', onClick: () => callbacks.onFinalise?.() },
       { type: 'status', id: 'note', text: barNote });
     return items;
   }
@@ -12851,7 +12992,7 @@ __m['ui/mapview.js'] = (() => {
 // Phase 5 (G, docs/phase4/mock/structure.html): in the big layout the modes and the Layers menu (filters,
 // overlays, weights) sit in the top bar; the right panel is an inspector that follows the selected object
 // (point / route / region); the status line, legend and scale bar go to the time dock (main.js mounts them).
-const { STAGES, NEXT_LABELS, stageUrl, readMission, hasRoute } = __m['mission-flow.js'];
+const { stageUrl, readMission, hasRoute } = __m['mission-flow.js'];
 const { createActionBar } = __m['ui/actionbar.js'];
 const { h, s, clear } = __m['ui/dom.js'];
 const { panelIcon, closeX } = __m['ui/shell.js'];
@@ -13261,7 +13402,12 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
       { id: 'dial', label: 'Sky dial', short: 'Sky dial', icon: 'sun', pressed: dialPressed, title: 'Show or hide the sky dial on the map (K)', cls: 'dial-btn', onClick: () => cb.onDial?.(!dialPressed) },
       { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
       { type: 'divider' },
-      ...STAGES.slice(STAGES.findIndex((st) => st.id === 'site') + 1).map((st) => ({ id: `next-${st.id}`, label: `${NEXT_LABELS[st.id] ?? st.label} →`, short: NEXT_LABELS[st.id]?.split(' ').pop() ?? st.label, icon: 'go', title: st.title, attrs: { 'data-stage': st.id }, href: () => stageUrl(st.id, readMission(), { route: st.id === '3d' && hasRoute() }) })),
+      // planning tools at other levels, then step 2 of the mission (mission-flow.js)
+      { id: 'next-region', label: 'Where to land', short: 'Land', icon: 'details', title: 'The region around the site: landing ellipse scores and better spots nearby (Map, Region level)', onClick: () => cb.onLevel?.('region') },
+      { id: 'next-rover', label: 'Plan the rover route', short: 'Route', icon: 'route', title: 'Plan the rover route from the landing site (route card)', attrs: { 'data-stage': 'rover' }, href: () => stageUrl('rover', readMission()) },
+      { id: 'next-3d', label: 'See it in 3D', short: '3D', icon: 'cube', title: 'The site (or the planned route) on the 3D Moon', attrs: { 'data-stage': '3d' }, href: () => stageUrl('3d', readMission(), { route: hasRoute() }) },
+      { type: 'divider' },
+      { id: 'next-finalise', label: 'Finalise mission', short: 'Finalise', icon: 'go', primary: true, title: 'Step 2: check go / no-go and freeze the mission configuration for execution', attrs: { 'data-stage': 'finalise' }, onClick: () => cb.onFinalise?.() },
     ]);
   }
   const pName = h('button', { type: 'button', class: 'point-name insp-name-btn', title: 'Show the site list', 'aria-controls': 'lsn-sidebar', onclick: () => openSites() });
@@ -21645,7 +21791,8 @@ return { createStoryMode };
 __m['main.js'] = (() => {
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
-const { writeMission, readMission, landedFor, landFromHash, moonKm } = __m['mission-flow.js'];
+const { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } = __m['mission-flow.js'];
+const { createMapLevels } = __m['ui/maplevels.js'];
 const { bootScreen } = __m['boot.js'];
 const { createEphemeris, bodyAzEl } = __m['ephemeris.js'];
 const { summarize, summarizePair, sampleSeries } = __m['windows.js'];
@@ -21792,6 +21939,9 @@ function start() {
   let routePoints = state.routePlan && !state.routePlan.selected ? state.routePlan.points : null;
 
   const shell = createShell(root, { sites, state, onChange: (patch) => update(patch) });
+  // the Map's levels of detail (ui/maplevels.js): the whole Moon and the region in frames over this page;
+  // "Use this site" in the region comes back here with the new site and landing time
+  const levels = createMapLevels(document, { slot: shell.levelSlot, topbar: shell.topbar, getMission: () => readMission(), onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); } });
 
   // ---------- data packs on demand (§4.1, §5.1) ----------
   const packs = {};   // name → 'loading' | 'ok' | 'error'
@@ -21954,6 +22104,8 @@ function start() {
     onDial: (on) => settings.set('skyDial', !!on),
     onLivePref: () => renderMap(),
     onDetails: () => openSheet('overview'),
+    onLevel: (lv) => levels.show(lv),
+    onFinalise: () => goFinalise(),
     onLandNow: () => landHereNow(),
     // phase 6 A: the way out's "Set as alternative" (the slip the time dock offers, −60 to 60 days)
     onSetAlternative: (slipDays) => { if (Number.isInteger(slipDays) && slipDays >= -60 && slipDays <= 60) update({ slipDays }); },
@@ -22052,6 +22204,7 @@ function start() {
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
     // phase 6: hand the selected route and its drive to the 3D globe
     onFly3d: () => openFull3d(),
+    onFinalise: () => goFinalise(),
     // the self-driving planner (route-rrt.js)
     onAutoRun: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility }; runAuto(points, maxSlopeDeg).catch(() => {}); },
     onAutoCancel: () => autoAbort?.abort(),
@@ -22087,6 +22240,8 @@ function start() {
     return payload;
   }
   function openFull3d() { if (writeRoute3d()) window.open('globe.html#route=1', '_blank'); }
+  // step 2 of the mission: the Finalise page reads the mission and the chosen route from the storage
+  function goFinalise() { saveMission(); writeRoute3d(); location.href = stageUrl('finalise', readMission()); }
   // the 3D preview window and the slope legend float over the map's bottom left
   const floats = mapView ? createMapFloats(document) : null;
   const slopeLegend = createSlopeLegend();

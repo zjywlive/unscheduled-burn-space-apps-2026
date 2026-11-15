@@ -181,9 +181,7 @@
 .rp-power .rp-rover-unit { display: none; }
 .rp-power .rp-rover-box { padding: 0 6px; }
 
-/* ---------- mission flow (mission-flow.js) ---------- */
-.topbar-stages { display: none; }
-.is-bigmap .topbar-stages { display: flex; align-items: center; margin-left: 12px; }
+/* ---------- mission flow (mission-flow.js; the top bar's steps are in phase10-flow.css) ---------- */
 .insp-next { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .insp-next a { font-size: var(--fs-small); color: var(--text); text-decoration: none; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--raised) 70%, transparent); }
 .insp-next a:hover { border-color: var(--text); }

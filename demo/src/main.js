@@ -1,6 +1,7 @@
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
-import { writeMission, readMission, landedFor, landFromHash, moonKm } from './mission-flow.js';
+import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } from './mission-flow.js';
+import { createMapLevels } from './ui/maplevels.js';
 import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
 import { summarize, summarizePair, sampleSeries } from './windows.js';
@@ -147,6 +148,9 @@ function start() {
   let routePoints = state.routePlan && !state.routePlan.selected ? state.routePlan.points : null;
 
   const shell = createShell(root, { sites, state, onChange: (patch) => update(patch) });
+  // the Map's levels of detail (ui/maplevels.js): the whole Moon and the region in frames over this page;
+  // "Use this site" in the region comes back here with the new site and landing time
+  const levels = createMapLevels(document, { slot: shell.levelSlot, topbar: shell.topbar, getMission: () => readMission(), onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); } });
 
   // ---------- data packs on demand (§4.1, §5.1) ----------
   const packs = {};   // name → 'loading' | 'ok' | 'error'
@@ -309,6 +313,8 @@ function start() {
     onDial: (on) => settings.set('skyDial', !!on),
     onLivePref: () => renderMap(),
     onDetails: () => openSheet('overview'),
+    onLevel: (lv) => levels.show(lv),
+    onFinalise: () => goFinalise(),
     onLandNow: () => landHereNow(),
     // phase 6 A: the way out's "Set as alternative" (the slip the time dock offers, −60 to 60 days)
     onSetAlternative: (slipDays) => { if (Number.isInteger(slipDays) && slipDays >= -60 && slipDays <= 60) update({ slipDays }); },
@@ -407,6 +413,7 @@ function start() {
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
     // phase 6: hand the selected route and its drive to the 3D globe
     onFly3d: () => openFull3d(),
+    onFinalise: () => goFinalise(),
     // the self-driving planner (route-rrt.js)
     onAutoRun: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility }; runAuto(points, maxSlopeDeg).catch(() => {}); },
     onAutoCancel: () => autoAbort?.abort(),
@@ -442,6 +449,8 @@ function start() {
     return payload;
   }
   function openFull3d() { if (writeRoute3d()) window.open('globe.html#route=1', '_blank'); }
+  // step 2 of the mission: the Finalise page reads the mission and the chosen route from the storage
+  function goFinalise() { saveMission(); writeRoute3d(); location.href = stageUrl('finalise', readMission()); }
   // the 3D preview window and the slope legend float over the map's bottom left
   const floats = mapView ? createMapFloats(document) : null;
   const slopeLegend = createSlopeLegend();

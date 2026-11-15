@@ -35,7 +35,10 @@ export function parseLatLon(text) {
   return { latDeg: lat, lonDeg: L };
 }
 
-export function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getStayStartMs, getCurrent, onLand }) {
+// labels: the two actions' names on the page that hosts it (the Map's region level: "Use this site", "Back to the Map");
+// onClose: called when the planner closes (Esc, the close button)
+export function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getStayStartMs, getCurrent, onLand, onClose = null, labels = {} }) {
+  const L0 = { land: 'Land here', close: 'Back to 3D', closeTitle: 'Back to the 3D view (Esc)', ...labels };
   root.innerHTML = `
     <div class="pl-map">
       <canvas aria-label="Map of the lunar south pole: click to propose a landing point"></canvas>
@@ -510,12 +513,12 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     const target = c ? (c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name) : null;
     const busy = S.pick && !R0;
     actBox.innerHTML = `
-      <button class="ab-btn ab-primary" data-a="land" ${c ? '' : 'disabled'} title="${c ? `Plan the whole mission to ${esc(target)} and its first lit landing window` : 'Pick a point first'}">Land here${c ? `<span class="ab-l">: ${esc(target)}</span>` : ''}</button>
+      <button class="ab-btn ab-primary" data-a="land" ${c ? '' : 'disabled'} title="${c ? `Plan the whole mission to ${esc(target)} and its first lit landing window` : 'Pick a point first'}">${esc(L0.land)}${c ? `<span class="ab-l">: ${esc(target)}</span>` : ''}</button>
       <button class="ab-btn" data-a="search" ${S.pick && !busy ? '' : 'disabled'} title="Search 15 km around your point again">${busy ? 'Searching…' : 'Find better spots'}</button>
       ${R0 ? `<div class="ab-seg" role="group" aria-label="Candidate">${R0.list.map((x, n) => `<button class="ab-opt" data-n="${n}" aria-pressed="${n === S.sel}" title="${esc(x.name)}: ${esc(x.verdict.text)}">${n === 0 ? 'Yours' : n}<span class="pl-dot g-${x.verdict.grade}"></span></button>`).join('')}</div>` : ''}
       <span class="ab-div" aria-hidden="true"></span>
       <button class="ab-btn" data-a="sites" title="The listed landing sites with their grades">Known sites</button>
-      <button class="ab-btn" data-a="close" title="Back to the 3D view (Esc)">Back to 3D</button>`;
+      <button class="ab-btn" data-a="close" title="${esc(L0.closeTitle)}">${esc(L0.close)}</button>`;
     actBox.querySelector('[data-a="land"]').addEventListener('click', () => { if (c) { onLand({ site: c.site, landingMs: c.landingMs }); close(); } });
     actBox.querySelector('[data-a="search"]').addEventListener('click', () => { if (S.pick) setPick(S.pick.latDeg, S.pick.lonDeg); });
     actBox.querySelector('[data-a="sites"]').addEventListener('click', () => renderSites());
@@ -674,7 +677,7 @@ export function createPlanner({ doc = document, root, eph, sites, meta, getDem, 
     else if (S.lastFrom !== getFromMs() || R.startMs !== getStayStartMs()) { siteRes.clear(); scoreSites(); startRegion(); }   // the mission moved: redo both
     S.lastFrom = getFromMs();
   }
-  function close() { root.hidden = true; opened = false; S.token++; }
+  function close() { root.hidden = true; opened = false; S.token++; onClose?.(); }
   window.addEventListener('resize', () => { if (opened) resize(); });
   return { open, close, get isOpen() { return opened; }, setPick, state: S, region: R, siteRes };
 }
