@@ -558,7 +558,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     view.addObject(g); draftObj = g;
   }
   function addDraftPoint(p) {
-    if (!draft) { draft = { pts: [], cursor: null }; say('Route: click to add points · double-click or Enter to finish · Backspace removes the last · Esc cancels'); }
+    if (!draft) { const seed = api.draftSeed?.(); draft = { pts: seed ? [seed] : [], cursor: null }; say('Route: click to add points · double-click or Enter to finish · Backspace removes the last · Esc cancels'); }
     const last = draft.pts[draft.pts.length - 1];
     if (last && Math.abs(last.latDeg - p.latDeg) < 1e-6 && Math.abs(last.lonDeg - p.lonDeg) < 1e-6) return;
     if (draft.pts.length >= 8) { say('At most 8 points: double-click or press Enter to finish.'); return; }
@@ -901,6 +901,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     onFocus: null,
     onLandSpot: null,
     isDrawing: null,
+    draftSeed: null,   // () → { latDeg, lonDeg } | null: the route's start already set (a drawn route continues from it)
     regionFocus: null,   // () → 'A' | 'B' | null: the region to fill (the panel works on it)   // () → a shape is half drawn on the polar map (main.js: mapView.drawing)   // (n) a numbered Where to land spot clicked
     setLanding: (d) => { ready.then(() => setLanding(d)); },   // ({ pick, box, spots: [{ n, latDeg, lonDeg, grade, title }], sel } | null)   // ({ kind: 'region', slot } | { kind: 'route', id }) an outline or a route clicked with the Select tool   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },

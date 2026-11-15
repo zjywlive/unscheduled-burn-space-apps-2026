@@ -5,7 +5,7 @@
 // candidate chooser. The globe draws the point, the search square and the numbered spots (ui/globemap.js).
 //
 // createLandCard({ actionBar }, cb) → { el, update(params) }
-//   cb: { onUse(candidate), onStart(), onSelect(n), onParams(params) }
+//   cb: { onUse(candidate), onRoute(candidate), onStart(), onSelect(n), onParams(params) }
 //   The settings (LAND_FIELDS) sit at the top; nothing runs until Start screening (in the panel and the bar). The
 //   target is a drawn region (Where to land in A/B) or a point (a click on the Moon; the site when the panel opens).
 //   params (each optional; missing keeps what is shown):
@@ -138,6 +138,7 @@ export function createLandCard({ actionBar = null } = {}, cb = {}) {
     const target = c ? (c.site.id === 'custom' ? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}` : c.site.name) : '';
     actionBar.set('land', 'land', [
       { id: 'use', label: c ? `Use this site: ${target}` : 'Use this site', short: 'Use', icon: 'use', primary: !!c, disabled: !c, hint: busy ? 'Searching…' : 'Click the Moon to propose a point', title: c ? `Make ${target} the mission's site, landing ${utc(c.landingMs)}` : undefined, onClick: () => c && cb.onUse?.(c) },
+      { id: 'route', label: 'Plan route from here', short: 'Route', icon: 'route', disabled: !c, hint: 'Screen and choose a spot first', title: c ? `Make ${target} the site and plan the rover route from it (the route planned before is cleared)` : undefined, onClick: () => c && cb.onRoute?.(c) },
       { id: 'start', label: busy ? 'Screening…' : 'Start screening', short: 'Start', icon: 'go', primary: !c && !!(pick || region) && !busy, disabled: !(pick || region) || !!busy, hint: 'Click the Moon or choose a region first', title: region ? `Screen region ${region} with the settings` : 'Search around the point with the settings', onClick: () => cb.onStart?.() },
       { type: 'segmented', id: 'spot', label: 'Candidate', value: result ? String(sel) : null, hint: busy ? `Searching… ${Math.round((busy.stage === 2 ? 50 : 0) + (busy.f ?? 0) * 50)}%` : 'No spots yet',
         options: result ? result.list.map((x, n) => ({ id: String(n), label: result.region ? String(n + 1) : n === 0 ? 'Yours' : String(n), title: `${x.name}: ${x.verdict.text}` })) : [],

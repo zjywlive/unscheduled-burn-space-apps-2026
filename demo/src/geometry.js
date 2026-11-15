@@ -9,6 +9,7 @@ const ZENITH_EPS_RAD = 1e-6;
 const POLE_LIMIT_DEG = 89.9999;
 
 export function normalizeLon(lonDeg) {
+  if (lonDeg >= 0 && lonDeg < 360) return lonDeg;   // in range already: as it is (the +360 round trip adds float noise, 172.5649 → 172.56489999999997)
   const v = ((lonDeg % 360) + 360) % 360;
   return v === 360 ? 0 : v;
 }

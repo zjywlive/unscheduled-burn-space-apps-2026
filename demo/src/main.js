@@ -369,6 +369,8 @@ function start() {
     // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
     globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
     globeMap.onLandSpot = (n) => selectLanding(land.region ? n - 1 : n);
+    // a route drawn on the Moon starts from the start point already set (the landing spot, plan=1)
+    globeMap.draftSeed = () => (rp.points?.length === 1 ? { ...fromXY(rp.points[0][0], rp.points[0][1]) } : null);
     // a click on a region's outline or on a route: the panel turns to it (a candidate route is chosen as well)
     globeMap.isDrawing = () => !!mapView?.drawing;
     // the region to fill: the one the Regions panel works on, or the Where to land target
@@ -603,6 +605,7 @@ function start() {
   let land = { pick: null, region: null, busy: null, result: null, sel: 0, error: null };
   const landCard = mapView ? createLandCard({ actionBar: mapView.actionBar }, {
     onUse: (c) => useLanding(c),
+    onRoute: (c) => useLanding(c, { route: true }),
     onStart: () => runLanding(),
     onSelect: (n) => selectLanding(n),
     onParams: (p) => { landParams = p; try { localStorage.setItem(LAND_KEY, JSON.stringify(p)); } catch { /* not remembered */ } showLanding(); },
@@ -675,14 +678,16 @@ function start() {
     showLanding();
     globeMap?.flyTo({ lat: c.latDeg, lon: c.lonDeg, dist: Math.min(globeMap.camera?.dist ?? 120, 120) });
   }
-  // the chosen spot becomes the mission's site with its first lit landing time (as the planner page's Use this site:
-  // the mission and the hash; the rover route stays)
-  function useLanding(c) {
+  // the chosen spot becomes the mission's site with its first lit landing time (the mission and the hash; the regions
+  // stay). A route planned before belongs to the old site, so it goes. route: open route planning from the spot
+  // (plan=1: the Route tool with the spot as the start; the first click on the Moon continues from it)
+  function useLanding(c, { route = false } = {}) {
     const listed = sites.find((s) => s.id === c.site.id);
+    clearRoute();
     const m = writeMission({ siteId: listed ? listed.id : null, siteName: listed ? listed.name : 'Map point', latDeg: c.latDeg, lonDeg: c.lonDeg, landingMs: c.landingMs, landed: null });
     kind = 'point';
     globeMap?.setLanding(null);
-    const url = stageUrl('map', m), keep = location.hash.match(/(^|[#&])(rp|rpsel|ra|rb)=[^&]*/g) ?? [];
+    const url = stageUrl(route ? 'rover' : 'map', m), keep = location.hash.match(/(^|[#&])(ra|rb)=[^&]*/g) ?? [];
     location.hash = url.slice(url.indexOf('#')) + keep.map((k) => `&${k.replace(/^[#&]/, '')}`).join('');
   }
   function openLanding() {
@@ -701,7 +706,8 @@ function start() {
     slopeLegend.setShown(rp.routeColour !== 'plain' && !!sel?.profile?.x?.length);
     // every route is drawn on the globe itself (the polar picture leaves routes out)
     if (globeMap) {
-      if (!rp.points?.length) globeMap.setGlobalRoute(null);
+      // while Where to land is open the route planned before is out of the way (a spot chosen there replaces it)
+      if (!rp.points?.length || kind === 'land') globeMap.setGlobalRoute(null);
       else {
         const ll = (pts) => (pts ?? []).map(([x, y]) => fromXY(x, y));
         const payload = sel?.profile ? route3dPayload() : null;
@@ -936,6 +942,13 @@ function start() {
     }
     const routes = (rp.plan?.routes ?? []).filter((r) => r.points?.length && (!id || r.id === id));
     mapView?.fitRoute(routes.flatMap((r) => r.points));
+  }
+  // the rover route gone everywhere: the card's points and plan, the hash and the browser's copy, the globe
+  function clearRoute() {
+    clearPlanned();
+    routePoints = null;
+    routePlanCard?.update({ points: null, plan: null, selected: null });
+    redrawRoutes();
   }
   function clearPlanned() {
     rpAbort?.abort();
@@ -1622,10 +1635,12 @@ function start() {
     if ((next?.x ?? null) !== (rp.landed?.x ?? null) || (next?.y ?? null) !== (rp.landed?.y ?? null)) { rp = { ...rp, landed: next }; redrawRoutes(); } else if (moved) redrawRoutes();
   }
   window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
+  let routesHidden = false;   // the globe's route drawing is off while the Where to land panel is open
   function render() {
     syncGlobeSite();
     globeMap?.update();
     try { landMarks(); syncRegionLandBar(); } catch { /* before Where to land exists */ }
+    if ((kind === 'land') !== routesHidden) { routesHidden = kind === 'land'; redrawRoutes(); }
     saveMission();
     syncLanded();
     derived = compute();
@@ -2110,13 +2125,18 @@ function start() {
   // step 2 of the mission (mission-flow.js): arriving with plan=1 opens the Route tool with the landing site as
   // the start; done after the first full render, once the timeline and the map exist
   function openPlanAtSite() {
-    if (!routePlanCard || !state.site || !(state.site.latDeg <= TERRAIN_MAX_LAT)) return;
+    if (!routePlanCard || !state.site) return;   // anywhere on the Moon (routes off the pole plan on the global terrain)
     // the same path as pressing the Route tool (which card the panel shows follows `kind`)
     kind = 'route';
     update({ tool: 'route' });
     entryFold('route');
     // the rover starts where the lander touched down, else at the site
-    if (!rp.points) routePlanCard.update({ points: [rp.landed ? [rp.landed.x, rp.landed.y] : toXY(state.site.latDeg, state.site.lonDeg)] });
+    if (!rp.points) {
+      const start = rp.landed ? [rp.landed.x, rp.landed.y] : toXY(state.site.latDeg, state.site.lonDeg);
+      rp = { ...rp, points: [start] };   // the start alone: shown on the globe; a route drawn on the Moon continues from it
+      routePlanCard.update({ points: [start] });
+      redrawRoutes();
+    }
   }
   if (planOnLoad) openPlanAtSite();
   // the loading screen (boot.js): terrain is in; it lifts when the 2 km map of the stay is done (or after 20 s)
