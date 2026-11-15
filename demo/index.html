@@ -3724,9 +3724,8 @@ function createRouteLayer(view, payload, { roverPx = null, onTop = false } = {})
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setIndex(idx);
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false, depthTest: !onTop }));
-    if (onTop) m.renderOrder = 15;
     m.position.copy(o);
-    m.renderOrder = 3;
+    m.renderOrder = onTop ? 15 : 3;   // onTop: after every terrain tile, which would otherwise paint over parts of it
     return m;
   }
   // lifted a little above the terrain, more when zoomed out (where the tiles are coarser than the heights)
@@ -5867,7 +5866,10 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   const addLabel = (latDeg, lonDeg, text, cls, onClick, extra = {}) => {
     const el = doc.createElement(onClick ? 'button' : 'span');
     el.className = `globe-label ${cls}`; el.textContent = text;
-    if (onClick) { el.type = 'button'; el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); }); }
+    if (onClick) {
+      el.type = 'button'; el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+      el.addEventListener('dblclick', (e) => { e.stopPropagation(); if (getState().tool === 'route') finishDraft(); });   // a route may end on a site
+    }
     labels.appendChild(el);
     labelEls.push({ latDeg, lonDeg, el, cls, ...extra });
     return el;
@@ -6076,11 +6078,13 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     else say('A route needs a start and an end point.');
   }
   window.addEventListener('keydown', (e) => {
-    if (!draft || e.target.closest?.('input, textarea, select')) return;
-    if (e.key === 'Enter') { e.preventDefault(); finishDraft(); }
+    if (!draft) return;
+    // while a route is being drawn, Enter and Esc are the drawing's even with a field focused (Enter there would
+    // plan the card's old points instead); Backspace stays the field's
+    if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finishDraft(); }
     else if (e.key === 'Escape') { e.preventDefault(); draft = null; drawDraft(); say(''); }
-    else if (e.key === 'Backspace') { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
-  });
+    else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
+  }, true);   // capture: before a focused field's own Enter
 
   // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
   // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----
@@ -12711,7 +12715,8 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
   renderResults();
   notes.dataset.base = baseText();
   renderNotes();
-  return { el, update };
+  // plan(): the same as pressing Plan routes (a route just drawn on the map is planned at once)
+  return { el, update, plan: () => submit() };
 }
 
 return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, COVERAGE_BINS, commsLines, havenLines, linkStrip, departuresLine, batteryChart, routeSentence, planMatches, autoLines, createRoutePlanCard };
@@ -24313,7 +24318,8 @@ function start() {
     // the polar map's view follows the ground in sight (it loads the finer terrain and heat for it)
     globeMap.onPolarView = (v) => update({ viewport: v });
     // the globe's own Route tool (anywhere on the Moon)
-    globeMap.onRouteDrawn = (lls) => setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg)));
+    // a route drawn on the globe is planned at once (as pressing Plan routes): its candidates replace the drawn line
+    globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
     globeMap.ready.then(() => redrawRoutes());   // a route from the link shows as soon as the globe exists
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {

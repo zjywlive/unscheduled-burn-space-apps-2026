@@ -331,7 +331,10 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   const addLabel = (latDeg, lonDeg, text, cls, onClick, extra = {}) => {
     const el = doc.createElement(onClick ? 'button' : 'span');
     el.className = `globe-label ${cls}`; el.textContent = text;
-    if (onClick) { el.type = 'button'; el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); }); }
+    if (onClick) {
+      el.type = 'button'; el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+      el.addEventListener('dblclick', (e) => { e.stopPropagation(); if (getState().tool === 'route') finishDraft(); });   // a route may end on a site
+    }
     labels.appendChild(el);
     labelEls.push({ latDeg, lonDeg, el, cls, ...extra });
     return el;
@@ -540,11 +543,13 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     else say('A route needs a start and an end point.');
   }
   window.addEventListener('keydown', (e) => {
-    if (!draft || e.target.closest?.('input, textarea, select')) return;
-    if (e.key === 'Enter') { e.preventDefault(); finishDraft(); }
+    if (!draft) return;
+    // while a route is being drawn, Enter and Esc are the drawing's even with a field focused (Enter there would
+    // plan the card's old points instead); Backspace stays the field's
+    if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finishDraft(); }
     else if (e.key === 'Escape') { e.preventDefault(); draft = null; drawDraft(); say(''); }
-    else if (e.key === 'Backspace') { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
-  });
+    else if (e.key === 'Backspace' && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
+  }, true);   // capture: before a focused field's own Enter
 
   // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
   // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----

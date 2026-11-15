@@ -829,5 +829,6 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
   renderResults();
   notes.dataset.base = baseText();
   renderNotes();
-  return { el, update };
+  // plan(): the same as pressing Plan routes (a route just drawn on the map is planned at once)
+  return { el, update, plan: () => submit() };
 }

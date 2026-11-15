@@ -52,9 +52,8 @@ export function createRouteLayer(view, payload, { roverPx = null, onTop = false 
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setIndex(idx);
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false, depthTest: !onTop }));
-    if (onTop) m.renderOrder = 15;
     m.position.copy(o);
-    m.renderOrder = 3;
+    m.renderOrder = onTop ? 15 : 3;   // onTop: after every terrain tile, which would otherwise paint over parts of it
     return m;
   }
   // lifted a little above the terrain, more when zoomed out (where the tiles are coarser than the heights)

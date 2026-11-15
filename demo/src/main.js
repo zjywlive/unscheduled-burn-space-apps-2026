@@ -351,7 +351,8 @@ function start() {
     // the polar map's view follows the ground in sight (it loads the finer terrain and heat for it)
     globeMap.onPolarView = (v) => update({ viewport: v });
     // the globe's own Route tool (anywhere on the Moon)
-    globeMap.onRouteDrawn = (lls) => setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg)));
+    // a route drawn on the globe is planned at once (as pressing Plan routes): its candidates replace the drawn line
+    globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
     globeMap.ready.then(() => redrawRoutes());   // a route from the link shows as soon as the globe exists
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
