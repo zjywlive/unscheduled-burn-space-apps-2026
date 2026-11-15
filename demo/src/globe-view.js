@@ -98,7 +98,13 @@ function reliefM(n) {
 }
 
 // ---------- the view ----------
-export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {}, capDepth = () => MAX_DEPTH_CAP } = {}) {
+// Options for the Map (index.html), which drapes its own layers on the globe:
+//   canDrag(event) → false leaves a left-button drag to the page (a drawing tool), not the camera
+//   overlays: true adds two draped pictures to the terrain shader, set with setOverlay():
+//     polar   a canvas in south polar stereographic km (terrain.js toXY) over the box { x0, x1, y0, y1 }: the Map's
+//             own picture of the polar cap (heat modes, terrain style, contours, shapes, routes, labels)
+//     global  an equirectangular canvas (0°E at the left, 90°N at the top): the whole-Moon heat layer
+export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = () => {}, initial = {}, onCamera = () => {}, capDepth = () => MAX_DEPTH_CAP, canDrag = () => true, overlays = false } = {}) {
   const THREE = window.THREE;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -116,14 +122,42 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   // contour lines drawn in the fragment shader from the height of each pixel (radius minus the Moon's, without
   // the exaggeration), every uInterval metres, each fifth one stronger; the interval follows the zoom
   const contourU = { uContours: { value: 0 }, uInterval: { value: 50 }, uExag: { value: 3 }, uMoonR: { value: MOON_R_KM } };
+  const blank = () => { const t = new THREE.DataTexture(new Uint8Array(4), 1, 1); t.needsUpdate = true; return t; };
+  const overlayU = {
+    uPolarTex: { value: blank() }, uPolarBox: { value: new THREE.Vector4(-1, 1, -1, 1) }, uPolarOn: { value: 0 }, uPolarMix: { value: 1 },
+    uGlobalTex: { value: blank() }, uGlobalOn: { value: 0 }, uGlobalAlpha: { value: 1 },
+  };
   for (const m of [matCyl, matCap]) {
     m.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, contourU);
+      Object.assign(sh.uniforms, contourU, overlays ? overlayU : {});
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLsnWorld;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLsnWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;')
-        .replace('#include <dithering_fragment>', `#include <dithering_fragment>
-        if (uContours > 0.5) {
+      // the draped pictures: the lit terrain is kept as relief (its brightness) under the picture's colours
+      const drape = overlays ? `
+        float lsnInPolar = 0.0;
+        {
+          vec3 nU = normalize(vLsnWorld);
+          float lat = asin(clamp(nU.y, -1.0, 1.0)), lon = atan(-nU.z, nU.x);
+          float lum = clamp(dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)) / 0.42, 0.25, 1.6);
+          if (uGlobalOn > 0.5) {
+            float u = fract(lon / 6.2831853 + 1.0), vt = (1.5707963 - lat) / 3.1415927;
+            vec4 g = texture2D(uGlobalTex, vec2(u, 1.0 - vt));
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, g.rgb * (0.55 + 0.45 * lum), g.a * uGlobalAlpha);
+          }
+          if (uPolarOn > 0.5 && lat < -1.36) {
+            float rS = 2.0 * uMoonR * tan((1.5707963 + lat) * 0.5);
+            float X = rS * sin(lon), Y = rS * cos(lon);
+            vec2 uv = vec2((X - uPolarBox.x) / (uPolarBox.y - uPolarBox.x), (uPolarBox.w - Y) / (uPolarBox.w - uPolarBox.z));
+            if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
+              vec4 c = texture2D(uPolarTex, vec2(uv.x, 1.0 - uv.y));
+              lsnInPolar = step(0.5, c.a);
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, c.rgb * mix(1.0, 0.7 + 0.3 * lum, 0.6), c.a * uPolarMix);
+            }
+          }
+        }` : '\n        float lsnInPolar = 0.0;';
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 vLsnWorld;\nuniform float uContours, uInterval, uExag, uMoonR;${overlays ? '\nuniform sampler2D uPolarTex, uGlobalTex;\nuniform vec4 uPolarBox;\nuniform float uPolarOn, uPolarMix, uGlobalOn, uGlobalAlpha;' : ''}`)
+        .replace('#include <dithering_fragment>', `#include <dithering_fragment>${drape}
+        if (uContours > 0.5 && lsnInPolar < 0.5) {
           float hm = (length(vLsnWorld) - uMoonR) * 1000.0 / uExag;
           float q = hm / uInterval, w = fwidth(q);
           float d = abs(fract(q + 0.5) - 0.5) / max(w, 1e-5);
@@ -135,6 +169,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   }
 
   const state = { exaggeration: 3, colour: 'shade', contours: false };
+  let realSun = null;
   const cam = { lat: -20, lon: 20, dist: 6200, heading: 0, tilt: 0, ...initial };
   const cache = new Map();   // node id → { mesh, used, stale }
   const top = roots();
@@ -331,7 +366,8 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     // upper left of the screen, so relief reads at every zoom; at whole-Moon scale it gives a gibbous phase.
     const az = (cam.heading - 135) * RAD, el = 30 * RAD;
     const horiz = N.clone().multiplyScalar(Math.cos(az)).add(Ea.clone().multiplyScalar(Math.sin(az)));
-    const L = U.clone().multiplyScalar(Math.sin(el)).addScaledVector(horiz, Math.cos(el)).normalize();
+    const L = realSun ? new THREE.Vector3(realSun[0], realSun[2], -realSun[1]).normalize()
+      : U.clone().multiplyScalar(Math.sin(el)).addScaledVector(horiz, Math.cos(el)).normalize();
     sun.position.copy(tgt).addScaledVector(L, 5000);
     sun.target.position.copy(tgt);
   }
@@ -441,6 +477,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
   const kmPerPx = () => cam.dist / (canvas.clientHeight / (2 * Math.tan((camera.fov / 2) * RAD)));
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('pointerdown', (e) => {
+    if (e.button === 0 && !e.shiftKey && !e.ctrlKey && !canDrag(e)) return;
     canvas.setPointerCapture(e.pointerId);
     drag = { x: e.clientX, y: e.clientY, rotate: e.button === 2 || e.shiftKey || e.ctrlKey };
     fly = null;
@@ -461,7 +498,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     }
     dirty = true;
   });
-  canvas.addEventListener('pointerup', (e) => { drag = null; canvas.releasePointerCapture(e.pointerId); });
+  canvas.addEventListener('pointerup', (e) => { if (!drag) return; drag = null; try { canvas.releasePointerCapture(e.pointerId); } catch { /* not captured */ } });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     cam.dist = Math.max(MIN_DIST_KM, Math.min(14000, cam.dist * Math.exp(e.deltaY * 0.0012)));
@@ -469,6 +506,7 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     fly = null; dirty = true;
   }, { passive: false });
   canvas.addEventListener('dblclick', (e) => {
+    if (!canDrag(e)) return;
     const hit = pick(e.clientX, e.clientY);
     if (hit) flyTo({ lat: hit.latDeg, lon: hit.lonDeg, dist: cam.dist * 0.35 });
   });
@@ -592,6 +630,28 @@ export function createGlobeView(canvas, terrain, { requestSouth = () => {}, onSt
     setExaggeration(v) { state.exaggeration = v; rebuildAll(); },
     setColour(mode) { state.colour = mode; for (const [, e] of cache) e.stale = true; dirty = true; },
     setContours(on) { state.contours = !!on; dirty = true; },
+    // the draped pictures (overlays: true): { polar: { canvas, box, mix } | null, global: { canvas, alpha } | null };
+    // a canvas already set is uploaded again (its pixels changed)
+    setOverlay({ polar, global } = {}) {
+      const put = (u, cv) => {
+        if (!cv) return;
+        const t = u.value;
+        if (t.image === cv) t.needsUpdate = true;
+        else { const n = new THREE.CanvasTexture(cv); n.colorSpace = THREE.SRGBColorSpace; n.minFilter = THREE.LinearFilter; n.generateMipmaps = false; n.anisotropy = 4; u.value = n; }
+      };
+      if (polar !== undefined) {
+        overlayU.uPolarOn.value = polar ? 1 : 0;
+        if (polar) { put(overlayU.uPolarTex, polar.canvas); overlayU.uPolarBox.value.set(polar.box.x0, polar.box.x1, polar.box.y0, polar.box.y1); overlayU.uPolarMix.value = polar.mix ?? 1; }
+      }
+      if (global !== undefined) {
+        overlayU.uGlobalOn.value = global ? 1 : 0;
+        if (global) { put(overlayU.uGlobalTex, global.canvas); overlayU.uGlobalAlpha.value = global.alpha ?? 1; }
+      }
+      dirty = true;
+    },
+    // the light: null = the display light (low, from the upper left of the screen); a unit vector in the
+    // Moon-fixed frame of geometry.js (x 0°E, y 90°E, z north) = the real Sun
+    setSun(dir) { realSun = dir; dirty = true; },
     get contourInterval() { return state.contours ? contourU.uInterval.value : null; },
     maxTilt,
     get canvas() { return canvas; },

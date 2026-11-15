@@ -1,4 +1,4 @@
-/* ---------- mission flow: the steps and the whole Moon in the Map (mission-flow.js, ui/moonlayer.js) ---------- */
+/* ---------- mission flow: the steps and the Map as the 3D Moon (mission-flow.js, ui/globemap.js) ---------- */
 /* the top bar's steps: Plan 1 Map › 2 Finalise · Fly 3 Execute */
 .topbar-stages { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .is-bigmap .topbar-stages { margin-left: 0; flex: none; }
@@ -6,15 +6,23 @@
   .topbar-stages { order: 1; width: 100%; margin: 0 0 8px; overflow-x: auto; scrollbar-width: none; }
   .topbar-stages::-webkit-scrollbar { display: none; }
 }
-/* the whole Moon inside the map (ui/moonlayer.js): over the polar map's canvas, under its tools and zoom buttons
-   (.map-ui, z 5) and the page's panels; the drawing tools and the map modes do not apply to it */
-.moon-layer { position: absolute; inset: 0; z-index: 4; background: #000; border-radius: inherit; overflow: hidden; }
-.moon-layer[hidden] { display: none; }
-.moon-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
-.moon-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); margin: 0; max-width: calc(100% - 24px); text-align: center; pointer-events: none; }
-.is-bigmap .moon-hint { top: calc(var(--big-top, 56px) + 64px); bottom: auto; }
-.map-moon-on .map-ui-tl, .map-moon-on .map-ui-tc, .map-moon-on .map-ui-bl, .map-moon-on .skydial { visibility: hidden; }
-.map-moon-on .topbar-modes { opacity: 0.45; pointer-events: none; }
+/* the Map is the 3D Moon (ui/globemap.js): the globe covers the polar map's canvases (which keep painting the
+   picture draped on it) and sits under the map's tools, zoom buttons, hover card and sky dial */
+.globe-map { position: absolute; inset: 0; z-index: 4; overflow: hidden; border-radius: inherit; background: #000; }
+.globe-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+.globe-map-canvas:active { cursor: grabbing; }
+.app:not([data-tool="select"]) .globe-map-canvas { cursor: crosshair; }
+.globe-map-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.globe-label { position: absolute; left: 0; top: 0; margin: -9px 0 0 -4px; padding: 1px 7px 1px 13px; border-radius: 999px; white-space: nowrap; font: 500 11px/16px Inter, system-ui, sans-serif; color: #e8eaed; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.22); }
+.globe-label::before { content: ""; position: absolute; left: 4px; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+button.globe-label { pointer-events: auto; cursor: pointer; }
+.globe-label.is-feature { background: none; border-color: transparent; color: rgba(232, 234, 237, 0.62); font-size: 10.5px; letter-spacing: 0.02em; padding-left: 4px; }
+.globe-label.is-feature::before { display: none; }
+.globe-label.is-selected { color: #ffd23d; border-color: rgba(255, 210, 61, 0.7); font-weight: 600; }
+.globe-map-note { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; max-width: calc(100% - 24px); text-align: center; pointer-events: none; z-index: 2; }
+.is-bigmap .globe-map-note { bottom: auto; top: calc(var(--big-top, 56px) + 64px); }
+.map-frame .hover-card, #lsn-map-hover { z-index: 7; }
+.map-frame .skydial { z-index: 6; }
 
 /* "Where to land": the planner over the page under the top bar */
 .map-level-layer { position: fixed; left: 0; right: 0; top: var(--level-top, 56px); bottom: 0; z-index: 900; background: #000; }

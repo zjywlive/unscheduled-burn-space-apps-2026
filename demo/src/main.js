@@ -1,7 +1,8 @@
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
 import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } from './mission-flow.js';
-import { createMoonLayer, zoomForDist, POLAR_EDGE_LAT } from './ui/moonlayer.js';
+import { createGlobeMap } from './ui/globemap.js';
+import { createRegionLayer } from './ui/regionlayer.js';
 import { createSiteContexts } from './lander/globalsite.js';
 import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
@@ -169,7 +170,7 @@ function start() {
   const shell = createShell(root, { sites, state, onChange: (patch) => update(patch) });
   // the Map is one view of the whole Moon (ui/moonlayer.js): the globe when zoomed out, this page's polar map when
   // zoomed in over the south pole; made once the map exists (below)
-  let moon = null, pickedOnGlobe = false;
+  let globeMap = null, regionLayer = null, pickedOnMap = false;
 
   // ---------- data packs on demand (§4.1, §5.1) ----------
   const packs = {};   // name → 'loading' | 'ok' | 'error'
@@ -302,7 +303,7 @@ function start() {
       topModes: shell.topModes, pickHome, chrome: () => [dock?.el, sheet?.isOpen() ? sheet.el : null, settingsSheet?.isOpen() ? settingsSheet.el : null].filter(Boolean),
     },
   }, { coarseGrid: grid, pyramid, features, sites }, {
-    onPick: (picked) => pickOnMap(picked),
+    onPick: (picked) => { pickedOnMap = true; pickOnMap(picked); pickedOnMap = false; },
     onBest: (cell) => update({ site: cellPoint(grid, cell) }),
     onRegionBest: (slot) => {
       const r = plan.region(slot);
@@ -332,9 +333,8 @@ function start() {
     onDial: (on) => settings.set('skyDial', !!on),
     onLivePref: () => renderMap(),
     onDetails: () => openSheet('overview'),
-    onLevel: () => moon?.openRegion(),
-    onBeyondEdge: () => { const v = mapView.frame.view, c = fromXY(v.cx, v.cy); moon?.showMoon({ latDeg: c.latDeg, lonDeg: c.lonDeg, distKm: 1000 }); },
-    onZoomOverride: (dir) => moon?.zoom(dir) ?? false,
+    onLevel: () => regionLayer?.open(),
+    onZoomOverride: (dir) => globeMap?.zoom(dir) ?? false,
     onFinalise: () => goFinalise(),
     onLandNow: () => landHereNow(),
     // phase 6 A: the way out's "Set as alternative" (the slip the time dock offers, −60 to 60 days)
@@ -346,31 +346,34 @@ function start() {
     describe: (xKm, yKm, target) => describe(xKm, yKm, target),
   }) : null;
   if (mapView) {
-    moon = createMoonLayer(document, {
-      host: mapView.frame.el, app: shell.app, topbar: shell.topbar, getMission: () => readMission(),
-      // a click on the globe: that point becomes the site, anywhere on the Moon (the globe stays where it is)
-      onPick: ({ latDeg, lonDeg }) => { const r = parseCustomSite(String(latDeg), String(lonDeg)); if (r.ok) { pickedOnGlobe = true; update({ site: r.site }); pickedOnGlobe = false; } },
-      // zoomed in over the south pole: the polar map at the same place and about the same scale
-      onEnterPolar: ({ latDeg, lonDeg, distKm }) => { const [x, y] = toXY(latDeg, lonDeg); update({ viewport: { cx: x, cy: y, zoom: zoomForDist(distKm) } }); },
-      // "Use this site" in Where to land
+    // the Map is the 3D Moon (ui/globemap.js): the polar map runs underneath and is draped on it inside 80°S
+    globeMap = createGlobeMap(document, {
+      frame: mapView.frame, pyramid, eph, sites, getState: () => state,
+      // a click north of 80°S (or on a listed site's label there): that point or site becomes the site
+      onPickOutside: (picked) => { pickedOnMap = true; pickOnMap(picked); pickedOnMap = false; },
+      onCamera: () => placeDial(),
+    });
+    // the polar map's view follows the ground in sight (it loads the finer terrain and heat for it)
+    globeMap.onPolarView = (v) => update({ viewport: v });
+    globalThis.__globeMap = globeMap;   // for inspection from the console
+    regionLayer = createRegionLayer(document, {
+      topbar: shell.topbar, getMission: () => readMission(),
       onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); },
     });
   }
-  // a new site: outside the polar map the globe shows it; on it, a globe that is showing flies down and hands over
-  let moonSiteKey = null;
-  function syncMoonSite() {
+  // a site chosen from a list, a link or Where to land: the camera goes to it (a click on the map does not move it)
+  let globeSiteKey = null;
+  function syncGlobeSite() {
     const s0 = state.site;
-    if (!moon || !s0) return;
+    if (!globeMap || !s0) return;
     const key = `${s0.latDeg},${s0.lonDeg}`;
-    if (key === moonSiteKey) return;
-    const first = moonSiteKey === null;
-    moonSiteKey = key;
-    moon.mark(s0);
-    if (pickedOnGlobe) return;
-    const cam = { latDeg: s0.latDeg, lonDeg: s0.lonDeg };
-    if (s0.latDeg > POLAR_EDGE_LAT) { if (moon.isMoon) moon.flyTo({ ...cam, distKm: 420 }); else moon.showMoon({ ...cam, distKm: first ? 1600 : 420 }); }
-    else if (moon.isMoon) moon.flyTo({ ...cam, distKm: 380 });
+    if (key === globeSiteKey) return;
+    const first = globeSiteKey === null;
+    globeSiteKey = key;
+    if (first || pickedOnMap) return;   // the first view comes from the state; a map click keeps the camera
+    globeMap.ready.then(() => globeMap.flyTo({ lat: s0.latDeg, lon: s0.lonDeg, dist: s0.latDeg <= TERRAIN_MAX_LAT ? 140 : 450 }));
   }
+
   // ---------- phase 4: the workflow cards in the right panel's folds ----------
   // Each card works only while its fold is open; refreshFolds() runs after every map render and cursor move.
   // fix L5: the cards start from the hash and write their inputs back to it (only the cards' exported
@@ -1317,9 +1320,10 @@ function start() {
   }
   function placeDial() {
     if (!dial || !mapView || !dialVisible()) return;
-    const [x, y] = toXY(state.site.latDeg, state.site.lonDeg);
-    const [px, py] = mapView.frame.toPx(x, y);
-    dial.moveTo(px, py);
+    // on the globe: where the site is on screen (hidden when it is out of sight)
+    const at = globeMap ? globeMap.toFramePx(state.site.latDeg, state.site.lonDeg) : mapView.frame.toPx(...toXY(state.site.latDeg, state.site.lonDeg));
+    if (dial.el) dial.el.style.visibility = at ? '' : 'hidden';
+    if (at) dial.moveTo(at[0], at[1]);
   }
 
   let lastView = state.view;
@@ -1369,7 +1373,8 @@ function start() {
   }
   window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
   function render() {
-    syncMoonSite();
+    syncGlobeSite();
+    globeMap?.update();
     saveMission();
     syncLanded();
     derived = compute();

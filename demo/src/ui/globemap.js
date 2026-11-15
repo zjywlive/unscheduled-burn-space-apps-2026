@@ -1,0 +1,383 @@
+// The Map is the 3D Moon (mission step 1). One globe, zoomed continuously from the whole Moon down to 20 m at the
+// south pole, carries everything the south-pole map shows:
+//   - inside 80°S, the polar map engine (ui/mapframe.js) keeps running underneath, unseen, with its view following
+//     the camera to the ground in sight; what it paints (heat modes, PSR, terrain style, contours, graticule,
+//     names, sites, best cells, regions, routes and their slope colours, havens, stops, waypoints, the self-driving
+//     search, station coverage, the Sun and Earth arrows) is copied into a picture draped on the terrain;
+//   - outside it, the same heat modes from the ephemeris with a smooth horizon (globalheat.js), the listed sites and
+//     the major named features as labels, and the terrain style (Topo = height colours, Real light = the Sun at the
+//     playhead) and contours of the globe itself.
+// Input goes the other way: a click or a drawing gesture on the globe is turned into the polar map's own pointer
+// events at the same ground point, so its picking, snapping, hover card and drawing tools (rectangle, circle,
+// polygon, route) work unchanged on the 3D surface. North of 80°S a click picks the site; drawing needs the polar
+// terrain (the region statistics and the rover planner run on it).
+import { createGlobeTerrain, MOON_R_KM } from '../globe-terrain.js';
+import { createGlobeView } from '../globe-view.js';
+import { toXY, fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
+import { loadData } from '../data-loader.js';
+import { globalGrid, globalFractions, globalStates } from '../globalheat.js';
+import { heatColour, readColours } from '../map/layers.js';
+import { GAZETTEER } from '../lander/gazetteer.js';
+
+const RAD = Math.PI / 180;
+const POLAR_LAT = TERRAIN_MAX_LAT;      // the polar engine's data edge
+const COMPOSITE_MAX = 3072;             // longest side of the draped polar picture, device px
+const MAX_HALF = 320;                   // the polar map's square, km (map/view.js MAP_HALF_KM)
+
+// The polar map's view {cx, cy, zoom} that covers a ground box (km) in a frame of the given geometry (geo of
+// mapframe.js: W × H CSS px, view centre at Cx, Cy, Sref px for ±320 km at zoom 1). Pure.
+export function viewCovering(box, geo) {
+  const bw = Math.max(0.05, box.x1 - box.x0), bh = Math.max(0.05, box.y1 - box.y0);
+  const k = Math.max(bw / geo.W, bh / geo.H);                 // km per CSS px
+  const zoom = Math.min(32, Math.max(1, (2 * MAX_HALF) / (k * geo.Sref)));
+  const kk = (2 * MAX_HALF) / (zoom * geo.Sref);
+  // the box centred in the frame (the frame's view centre is not its middle in the big layout)
+  const mx = (box.x0 + box.x1) / 2, my = (box.y0 + box.y1) / 2;
+  return { cx: mx + (geo.Cx - geo.W / 2) * kk, cy: my - (geo.Cy - geo.H / 2) * kk, zoom };
+}
+
+// The camera heading that puts 0°E at the top of the screen near the south pole, as the polar map draws it (so
+// its names read upright); elsewhere north up.
+export const northUp = (latDeg, lonDeg) => (latDeg <= -60 ? (360 - (((lonDeg % 360) + 360) % 360)) % 360 : 0);
+
+// The camera distance (km) whose view shows about the polar map's view: the inverse of the frame's scale.
+export const distForZoom = (zoom, geo) => ((2 * MAX_HALF) / (zoom * geo.Sref)) * geo.H / (2 * Math.tan(20 * RAD));
+
+export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onCamera = () => {}, sites = [] }) {
+  const host = frame.el;
+  const layer = doc.createElement('div');
+  layer.className = 'globe-map';
+  const canvas = doc.createElement('canvas');
+  canvas.className = 'globe-map-canvas';
+  canvas.style.touchAction = 'none';
+  const labels = doc.createElement('div');
+  labels.className = 'globe-map-labels';
+  const note = doc.createElement('p');
+  note.className = 'map-chip globe-map-note';
+  note.hidden = true;
+  layer.append(canvas, labels, note);
+  host.insertBefore(layer, host.querySelector('.map-canvas'));
+  // the polar map's own pointer handlers must not see the globe's raw events (they get mapped copies instead)
+  for (const t of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'pointerleave', 'click', 'dblclick', 'wheel', 'contextmenu']) {
+    layer.addEventListener(t, (e) => e.stopPropagation(), t === 'wheel' ? { passive: true } : undefined);
+  }
+
+  // ---- terrain: the global LOLA levels, and the polar pyramid the map already loads for its view ----
+  let view = null;
+  const terrain = createGlobeTerrain({
+    load: (name) => loadData(name, { timeoutMs: 60000 }),
+    south: () => pyramid.levels,
+    onChange: ({ level, r, c }) => view?.invalidate({ latMin: 90 - (r + 1) * level.tileDeg, latMax: 90 - r * level.tileDeg, lonMin: c * level.tileDeg, lonMax: (c + 1) * level.tileDeg }),
+  });
+  const ready = terrain.init().then(() => {
+    const st = getState(), s0 = st.site;
+    const polar = s0 && s0.latDeg <= POLAR_LAT;
+    const geo = frame.geo;
+    const initial = polar
+      ? { lat: -89.999, lon: 0, heading: 0, tilt: 0, dist: geo.W ? distForZoom(st.viewport?.zoom ?? 1, geo) : 850 }
+      : { lat: s0?.latDeg ?? 0, lon: s0?.lonDeg ?? 0, heading: 0, tilt: 0, dist: 1600 };
+    if (polar && st.viewport && (st.viewport.cx || st.viewport.cy)) { const c = fromXY(st.viewport.cx, st.viewport.cy); initial.lat = c.latDeg; initial.lon = c.lonDeg; initial.heading = northUp(c.latDeg, c.lonDeg); }
+    view = createGlobeView(canvas, terrain, {
+      overlays: true, initial,
+      canDrag: () => (getState().tool ?? 'select') === 'select',
+      onCamera: (c) => { cameraMoved(c); onCamera(c); },
+    });
+    view.setExaggeration(2);
+    api.view = view;
+    view.onFrame(frameTick);
+    refreshGlobal(true);
+    return view;
+  });
+
+  // ---- the camera → the polar map's view, once the camera rests ----
+  let restTimer = 0, gesturing = false, lastCam = null;
+  function cameraMoved(c) {
+    lastCam = c;
+    clearTimeout(restTimer);
+    restTimer = setTimeout(syncPolarView, 180);
+    placeLabels();
+  }
+  function syncPolarView() {
+    if (!view || gesturing) return;
+    // the ground in sight: a grid over the polar square projected to the screen, kept where it lands on it, and
+    // refined once around what is visible (so a close view still gets a tight box)
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    if (!W || !H) return;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, n = 0;
+    const scan = (ax, bx, ay, by, N) => {
+      for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+        const x = ax + ((bx - ax) * i) / N, y = ay + ((by - ay) * j) / N;
+        if (Math.hypot(x, y) > 306) continue;
+        const ll = fromXY(x, y), p = view.project(ll.latDeg, ll.lonDeg);
+        if (!p || p.x < 0 || p.y < 0 || p.x > W || p.y > H) continue;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); n++;
+      }
+    };
+    scan(-MAX_HALF, MAX_HALF, -MAX_HALF, MAX_HALF, 40);
+    if (n && n < 60) {
+      // few hits: a close view; look again finely around them (one coarse cell beyond)
+      const c = (2 * MAX_HALF) / 40, a0 = x0 - c, a1 = x1 + c, b0 = y0 - c, b1 = y1 + c;
+      x0 = Infinity; x1 = -Infinity; y0 = Infinity; y1 = -Infinity; n = 0;
+      scan(a0, a1, b0, b1, 40);
+    }
+    if (!n) {
+      // closer still: the view centre and the ground under the screen corners
+      const c = view.camera;
+      if (c.lat <= POLAR_LAT + 0.6) {
+        const [cx, cy] = toXY(c.lat, c.lon), r = Math.max(0.2, c.dist * 0.8);
+        x0 = cx - r; x1 = cx + r; y0 = cy - r; y1 = cy + r; n = 1;
+      }
+    }
+    // a tilted view sees far across the cap: keep the picture to the ground near the camera's target (about eight
+    // camera distances across), so it stays sharp where the user looks; farther ground keeps the globe's own layers
+    const cam = view.camera;
+    if (n && cam.lat <= POLAR_LAT + 0.6 && cam.tilt > 20) {
+      const [tx, ty] = toXY(cam.lat, cam.lon), R = Math.max(1, cam.dist * 4);
+      x0 = Math.max(x0, tx - R); x1 = Math.min(x1, tx + R); y0 = Math.max(y0, ty - R); y1 = Math.min(y1, ty + R);
+      if (!(x1 > x0 && y1 > y0)) n = 0;
+    }
+    polarInView = n > 0;
+    if (!polarInView) { view.setOverlay({ polar: null }); return; }
+    const pad = 0.04 * Math.max(x1 - x0, y1 - y0);
+    const want = viewCovering({ x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad }, frame.geo);
+    const cur = frame.view;
+    const same = Math.abs(cur.zoom - want.zoom) / want.zoom < 0.04 && Math.hypot(cur.cx - want.cx, cur.cy - want.cy) < 0.02 * (2 * MAX_HALF) / want.zoom;
+    if (!same) { requested = want; api.onPolarView?.(want); }
+    else requested = { ...cur };
+    schedule(60);
+  }
+  let polarInView = true;
+  let requested = null;   // the polar view the camera last asked for
+  // the polar map moved by itself (fit to a planned route, a story step, the Coordinates fold): the camera follows
+  function followPolarView() {
+    if (!view || gesturing || !requested) return;
+    const v = frame.view, geo = frame.geo;
+    if (!geo.W) return;
+    const near = Math.abs(v.zoom - requested.zoom) / requested.zoom < 0.08 && Math.hypot(v.cx - requested.cx, v.cy - requested.cy) < 0.05 * (2 * MAX_HALF) / v.zoom;
+    if (near) return;
+    requested = { ...v };
+    // the camera looks at the middle of the frame's picture, from the distance that shows about the same ground
+    const kk = (2 * MAX_HALF) / (v.zoom * geo.Sref);
+    const mx = v.cx - (geo.Cx - geo.W / 2) * kk, my = v.cy + (geo.Cy - geo.H / 2) * kk;
+    const c = fromXY(mx, my);
+    view.flyTo({ lat: c.latDeg, lon: c.lonDeg, dist: distForZoom(v.zoom, geo), tilt: 0, heading: northUp(c.latDeg, c.lonDeg), ms: 900 });
+  }
+
+  // ---- the polar map's picture, draped ----
+  const comp = doc.createElement('canvas');
+  const cctx = comp.getContext('2d');
+  let compTimer = 0, compBusy = false, compAgain = false;
+  function schedule(ms = 250) { clearTimeout(compTimer); compTimer = setTimeout(composite, ms); }
+  // an SVG layer as an image, with its computed styles written into a copy (the page's CSS does not travel)
+  const STYLE_PROPS = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 'opacity', 'font-size', 'font-weight', 'font-family', 'paint-order', 'text-anchor', 'dominant-baseline', 'display', 'visibility', 'letter-spacing'];
+  function svgImage(svg) {
+    const r = svg.getBoundingClientRect();
+    if (!r.width || !r.height || getComputedStyle(svg).display === 'none') return Promise.resolve(null);
+    const copy = svg.cloneNode(true);
+    const src = [svg, ...svg.querySelectorAll('*')], dst = [copy, ...copy.querySelectorAll('*')];
+    for (let i = 0; i < src.length; i++) {
+      const cs = getComputedStyle(src[i]);
+      let style = '';
+      for (const k of STYLE_PROPS) { const v = cs.getPropertyValue(k); if (v) style += `${k}:${v};`; }
+      dst[i].setAttribute('style', style);
+      dst[i].removeAttribute('class');
+    }
+    copy.setAttribute('width', String(r.width)); copy.setAttribute('height', String(r.height));
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const xml = new XMLSerializer().serializeToString(copy);
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ img, r });
+      img.onerror = () => resolve(null);
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
+    });
+  }
+  async function composite() {
+    if (!view) return;
+    if (compBusy) { compAgain = true; return; }
+    compBusy = true;
+    try {
+      const fr = host.getBoundingClientRect();
+      if (!fr.width || !polarInView) return;
+      const dpr = Math.min(2, Math.max(1, COMPOSITE_MAX / Math.max(fr.width, fr.height), 1));
+      const s = Math.min(dpr, window.devicePixelRatio || 1, COMPOSITE_MAX / Math.max(fr.width, fr.height));
+      const w = Math.round(fr.width * s), h = Math.round(fr.height * s);
+      if (comp.width !== w || comp.height !== h) { comp.width = w; comp.height = h; } else cctx.clearRect(0, 0, w, h);
+      const put = (el) => { const r = el.getBoundingClientRect(); if (r.width && el.width) cctx.drawImage(el, (r.left - fr.left) * s, (r.top - fr.top) * s, r.width * s, r.height * s); };
+      for (const c of host.querySelectorAll(':scope > canvas.map-canvas')) if (getComputedStyle(c).display !== 'none') put(c);
+      const imgs = await Promise.all([...host.querySelectorAll(':scope > svg.map-overlay, :scope > svg.map-shapes, :scope > svg.map-sky')].map(svgImage));
+      for (const it of imgs) if (it) cctx.drawImage(it.img, (it.r.left - fr.left) * s, (it.r.top - fr.top) * s, it.r.width * s, it.r.height * s);
+      const box = frame.boundsFor(frame.view);
+      if (box) view.setOverlay({ polar: { canvas: comp, box, mix: 1 } });
+    } finally {
+      compBusy = false;
+      if (compAgain) { compAgain = false; schedule(80); }
+    }
+  }
+  // the polar map repaints after data arrives and in slices: copy again whenever its layers change
+  const mo = new MutationObserver(() => schedule(gesturing ? 40 : 200));
+  for (const el of host.querySelectorAll(':scope > svg')) mo.observe(el, { childList: true, subtree: true, attributes: true });
+  let lastSharp = '';
+  let lastUpd = 0;
+  function frameTick() {
+    const now = performance.now();
+    if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); }
+    const k = `${host.dataset.sharp ?? ''}|${host.dataset.redrawMs ?? ''}|${host.dataset.moveMs ?? ''}|${pyramid.version ?? ''}`;
+    if (k !== lastSharp) { lastSharp = k; schedule(120); }
+    if (pyramid.version !== pyrV) { pyrV = pyramid.version; view.invalidate({ pole: 'S' }); }
+  }
+  let pyrV = pyramid.version;
+
+  // ---- the heat modes over the whole Moon (smooth horizon) ----
+  const grid = globalGrid(1);
+  const gcv = doc.createElement('canvas');
+  gcv.width = grid.w; gcv.height = grid.h;
+  const gctx = gcv.getContext('2d');
+  let gKey = '', fracCache = new Map();
+  function fractions(startMs, days) {
+    const k = `${startMs}:${days}`;
+    if (!fracCache.has(k)) { if (fracCache.size > 6) fracCache.clear(); fracCache.set(k, globalFractions(grid, eph, startMs, startMs + days * 86400e3, { stepMs: 2 * 3600e3 })); }
+    return fracCache.get(k);
+  }
+  function refreshGlobal(force = false) {
+    if (!view) return;
+    const st = getState();
+    const mode = st.mapMode ?? 'both';
+    const hour = Math.floor((st.cursorMs ?? st.landingMs ?? 0) / 3600e3);
+    const key = `${mode}|${st.landingMs}|${st.stayDays}|${st.slipDays}|${mode === 'now' ? hour : ''}|${st.windowOn}`;
+    if (!force && key === gKey) return;
+    gKey = key;
+    const colours = readColours();
+    const img = gctx.createImageData(grid.w, grid.h), d = img.data;
+    const N = grid.w * grid.h;
+    let pick = null;
+    if (mode === 'now' || !st.windowOn || !Number.isFinite(st.landingMs)) {
+      const states = globalStates(grid, eph, st.cursorMs ?? st.landingMs ?? eph.startMs);
+      pick = (c) => heatColour('now', { state: states[c] }, colours);
+    } else if (mode === 'change') {
+      const a = fractions(st.landingMs, st.stayDays), b = fractions(st.landingMs + (st.slipDays ?? 0) * 86400e3, st.stayDays);
+      pick = (c) => heatColour('change', { delta: b.both[c] - a.both[c] }, colours);
+    } else if (mode === 'both' || mode === 'sun' || mode === 'earth') {
+      const f = fractions(st.landingMs, st.stayDays);
+      const arr = f[mode];
+      pick = (c) => heatColour(mode, { value: arr[c] }, colours);
+    }
+    for (let c = 0; c < N; c++) {
+      const hc = pick ? pick(c) : null;
+      if (!hc) continue;
+      const [[r, g, b], a] = hc;
+      d[c * 4] = r; d[c * 4 + 1] = g; d[c * 4 + 2] = b; d[c * 4 + 3] = Math.round(a * 255);
+    }
+    gctx.putImageData(img, 0, 0);
+    view.setOverlay({ global: { canvas: gcv, alpha: 0.85 } });
+  }
+
+  // ---- terrain style and contours of the globe (the polar picture carries its own) ----
+  let tsKey = '';
+  function refreshTerrain() {
+    if (!view) return;
+    const ts = frame.terrain ?? {}, st = getState();
+    const key = `${ts.style}|${ts.contours}|${ts.style === 'real' ? Math.floor((st.cursorMs ?? 0) / 600e3) : ''}`;
+    if (key === tsKey) return;
+    tsKey = key;
+    view.setColour(ts.style === 'topo' ? 'height' : 'shade');
+    view.setContours(!!ts.contours);
+    const d = ts.style === 'real' ? eph.at(st.cursorMs ?? st.landingMs) : null;
+    view.setSun(d ? d.sun : null);
+  }
+
+  // ---- labels outside the polar picture: listed sites and the major named features ----
+  const labelEls = [];
+  const addLabel = (latDeg, lonDeg, text, cls, onClick) => {
+    const el = doc.createElement(onClick ? 'button' : 'span');
+    el.className = `globe-label ${cls}`; el.textContent = text;
+    if (onClick) { el.type = 'button'; el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); }); }
+    labels.appendChild(el);
+    labelEls.push({ latDeg, lonDeg, el, cls });
+    return el;
+  };
+  for (const s of sites) if (s.latDeg > POLAR_LAT) addLabel(s.latDeg, s.lonDeg, s.name, 'is-site', () => onPickOutside?.({ site: s }));
+  for (const g of GAZETTEER) if (g.latDeg > POLAR_LAT) addLabel(g.latDeg, g.lonDeg, g.name, `is-feature is-${g.type}`, null);
+  const selEl = addLabel(0, 0, '', 'is-selected', null);
+  function placeLabels() {
+    if (!view) return;
+    const dist = view.camera.dist, st = getState(), s0 = st.site;
+    if (s0) { selEl.textContent = s0.name ?? 'Site'; const it = labelEls.find((x) => x.el === selEl); it.latDeg = s0.latDeg; it.lonDeg = s0.lonDeg; }
+    for (const L of labelEls) {
+      const show = L.el === selEl ? s0 && s0.latDeg > POLAR_LAT : L.cls.startsWith('is-feature') ? dist > 300 && dist < 9000 : dist < 9000;
+      const p = show ? view.project(L.latDeg, L.lonDeg) : null;
+      L.el.hidden = !p;
+      if (p) L.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+    }
+  }
+
+  // ---- input: globe points → the polar map's own events ----
+  const frameClient = (latDeg, lonDeg) => {
+    const [x, y] = toXY(latDeg, lonDeg), [px, py] = frame.toPx(x, y), g = frame.geo, r = host.getBoundingClientRect();
+    return { clientX: r.left + (px * r.width) / g.W, clientY: r.top + (py * r.height) / g.H, xKm: x, yKm: y };
+  };
+  const send = (type, at, extra = {}) => {
+    const Ctor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+    host.dispatchEvent(new Ctor(type, { bubbles: false, cancelable: true, clientX: at.clientX, clientY: at.clientY, button: 0, buttons: type === 'pointermove' ? extra.buttons ?? 0 : type === 'pointerdown' ? 1 : 0, pointerId: 1, pointerType: 'mouse', isPrimary: true, detail: extra.detail ?? 1 }));
+  };
+  const hit = (e) => (view ? view.pick(e.clientX, e.clientY) : null);
+  let down = null, moveAt = 0;
+  const say = (text) => { note.textContent = text; note.hidden = !text; clearTimeout(say.t); if (text) say.t = setTimeout(() => { note.hidden = true; }, 3500); };
+  canvas.addEventListener('pointerdown', (e) => {
+    down = { x: e.clientX, y: e.clientY, tool: getState().tool ?? 'select' };
+    if (down.tool === 'select' || e.button !== 0) return;
+    const h = hit(e);
+    if (!h || h.latDeg > POLAR_LAT) { say('Drawing needs the polar terrain: draw south of 80°S (the region statistics and the rover planner run on it).'); down = null; return; }
+    gesturing = true;
+    send('pointerdown', frameClient(h.latDeg, h.lonDeg));
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    const now = performance.now();
+    if (now - moveAt < 30) return;
+    moveAt = now;
+    const h = hit(e);
+    if (!h) return;
+    if (h.latDeg > POLAR_LAT) { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); return; }
+    const at = frameClient(h.latDeg, h.lonDeg);
+    send('pointermove', at, { buttons: gesturing ? 1 : 0 });
+    // the hover card sits by the real pointer, not where the event was replayed
+    const card = host.querySelector('.hover-card, #lsn-map-hover');
+    if (card) { const r = host.getBoundingClientRect(); card.style.transform = `translate(${Math.round(e.clientX - r.left + 14)}px, ${Math.round(e.clientY - r.top + 14)}px)`; }
+    if (gesturing) schedule(30);
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    const d = down; down = null;
+    if (!d) return;
+    const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4;
+    const h = hit(e);
+    if (d.tool !== 'select') {
+      if (h && h.latDeg <= POLAR_LAT) send('pointerup', frameClient(h.latDeg, h.lonDeg));
+      gesturing = false; schedule(30);
+      return;
+    }
+    if (moved || !h) return;
+    if (h.latDeg > POLAR_LAT) { onPickOutside?.({ point: { latDeg: +h.latDeg.toFixed(4), lonDeg: +h.lonDeg.toFixed(4) } }); return; }
+    send('click', frameClient(h.latDeg, h.lonDeg));
+    schedule(300);
+  });
+  canvas.addEventListener('dblclick', (e) => {
+    if ((getState().tool ?? 'select') === 'select') return;   // the globe zooms in itself
+    const h = hit(e);
+    if (h && h.latDeg <= POLAR_LAT) { send('dblclick', frameClient(h.latDeg, h.lonDeg), { detail: 2 }); schedule(40); }
+  });
+  canvas.addEventListener('pointerleave', () => { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); });
+
+  const api = {
+    view: null, ready, el: layer,
+    onPolarView: null,
+    // screen position (frame CSS px) of a ground point, for the sky dial; null when out of sight
+    toFramePx(latDeg, lonDeg) { const p = view?.project(latDeg, lonDeg); return p ? [p.x, p.y] : null; },
+    flyTo(cam) { view?.flyTo({ tilt: 0, heading: northUp(cam.lat, cam.lon), ms: 1400, ...cam }); },
+    zoom(dir) { if (!view) return false; const c = view.camera; view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.05, Math.min(14000, c.dist * (dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 400 }); return true; },
+    // the page re-rendered (mode, window, terrain style, site, playhead): bring the globe's own layers up to date
+    update() { refreshGlobal(); refreshTerrain(); placeLabels(); followPolarView(); schedule(150); },
+    get camera() { return view?.camera ?? null; },
+  };
+  void lastCam;
+  return api;
+}
