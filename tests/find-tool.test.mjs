@@ -206,3 +206,52 @@ test('find: exact skyline rejection becomes an exact_check near miss, never a ca
   assert.equal(r.candidates.length, 0); assert.equal(r.feasibility.status, 'infeasible'); monotone(r);
   assert.ok(r.near_misses.some((m) => m.fails === 'exact_check' && m.check === 'both_continuous_h_min'));
 });
+
+test('find: Monte Carlo touchdowns for every candidate, on the finest terrain there; an optional floor', async () => {
+  const { core } = coreFor();
+  const base = { landing: '2027-10-07', criteria: STRICT };
+  const r = good(await run(core, base));
+  assert.ok(r.candidates.length >= 1);
+  for (const c of r.candidates) {
+    const t = c.touchdown;
+    assert.ok(t, `${c.ref} has touchdown`);
+    assert.ok(t.p_safe >= 0 && t.p_safe <= 1);
+    assert.equal(t.landings, 2000);
+    assert.deepEqual(t.ellipse_m, { downrange: 150, crossrange: 100 });
+    assert.equal(t.slope_limit_deg, 10);
+    assert.ok([5, 10, 20, 40, 120, 240].includes(t.dem_m), `DEM ${t.dem_m} m (240 m beyond dem_120m's ±156 km)`);
+  }
+  assert.ok(r.assumed.some((a) => /Monte Carlo/.test(a)));
+  // the same query gives the same answer
+  const again = good(await run(core, base));
+  assert.deepEqual(again.candidates.map((c) => c.touchdown.p_safe), r.candidates.map((c) => c.touchdown.p_safe));
+  // a floor: only candidates at or above it, and the funnel says how many fell
+  const floor = good(await run(core, { ...base, touchdown: { min_p_safe: 0.99, downrange_m: 300, crossrange_m: 200 } }));
+  for (const c of floor.candidates) { assert.ok(c.touchdown.p_safe >= 0.99); assert.deepEqual(c.touchdown.ellipse_m, { downrange: 300, crossrange: 200 }); }
+  const stage = floor.funnel.find((f) => f.stage === 'touchdown');
+  assert.ok(stage && Number.isInteger(stage.cells), JSON.stringify(floor.funnel));
+  monotone(floor);
+  // bad input is a user error
+  assert.ok((await run(core, { ...base, touchdown: { min_p_safe: 2 } })).error);
+});
+
+test('find: without point terrain the touchdowns are left out and say so', async () => {
+  const { core } = coreFor(tiny());
+  const r = good(await run(core, { landing_window: { from: '2027-01-02', to: '2027-01-03' }, criteria: { slope_max_deg: 5 }, refine: false }));
+  for (const c of r.candidates) assert.equal(c.touchdown, null);
+  assert.ok(r.assumed.some((a) => /touchdown.*not available/i.test(a)));
+});
+
+test('core context: terrain around a point, finest first (high-resolution patch, 20 m and 40 m tiles, 120 m)', async () => {
+  const ctx = context();
+  assert.equal(typeof ctx.siteTerrain, 'function');
+  const shack = ctx.sites.find((s) => s.id === 'shackleton');
+  const t = await ctx.siteTerrain(shack);
+  const [x, y] = toXY(shack.latDeg, shack.lonDeg);
+  assert.ok(Number.isFinite(t.sample(x, y)));
+  assert.ok(t.finestKm <= 0.02, `finest ${t.finestKm} km at Shackleton`);
+  const mid = await ctx.siteTerrain({ latDeg: -86.5, lonDeg: 120 });   // inside dem_120m (±156 km), no tiles there
+  assert.equal(mid.finestKm, 0.12);
+  const far = await ctx.siteTerrain({ latDeg: -84, lonDeg: 120 });     // beyond it: dem_240m
+  assert.equal(far.finestKm, 0.24);
+});

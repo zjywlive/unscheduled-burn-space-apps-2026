@@ -126,7 +126,7 @@ Requests execute serially; tool calls are limited to 60 per second per process. 
 
 | Name | Purpose |
 | --- | --- |
-| `find_landing_sites` | Search the south-polar cap (or a region) for sites that meet `criteria` on a landing date, a window or any date, optionally robust to a slip; funnel, candidates `S1…`, near misses, feasibility |
+| `find_landing_sites` | Search the south-polar cap (or a region) for sites that meet `criteria` on a landing date, a window or any date, optionally robust to a slip; funnel, candidates `S1…`, near misses, feasibility. Each candidate has `touchdown`: the chance of a safe landing from 2000 Monte Carlo touchdowns in the landing ellipse (Gaussian, 3σ = the ellipse, default 150 × 100 m; safe = slope ≤ 10° on the finest terrain at the point, 5–240 m, and outside permanent shadow); `touchdown: { downrange_m, crossrange_m, slope_max_deg, min_p_safe }` sets the ellipse and limit and can drop finalists below a floor |
 | `check_slip_robustness` | For given places (default: curated terrain sites), check `criteria` at every slip offset; survivors, first failure, worst values |
 | `landing_windows` | For one place, every landing time span that meets `criteria`, robust windows, and the slip budget of a planned date |
 | `mission_open` | Load a mission exported from the page (record, config or GeoJSON file, pasted JSON, or a share link) and name its points (`landing`, `W1…`, `stop1…`, `haven1…`, …) |

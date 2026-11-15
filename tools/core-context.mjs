@@ -16,12 +16,18 @@
 //     fine        () → the 1 km cell grid { grid, slope, shadow } (horizon_1km, slope_1km, shadow_1km)
 //     ice         () → ice.js createIce over ice.json and its packs, or null when they are not built
 //     readText    (path) → { text } | { error }: a local JSON file the user named (mission_open), ≤ 5 MB
+//     siteTerrain (site, { halfKm }) → { sample(xKm, yKm) → m, finestKm }: the terrain around a point, finest first,
+//                 as the page's lander/terrain-local.js builds it: the high-resolution patch (hires.json, 5–20 m),
+//                 the 20 m and 40 m tiles, dem_120m, dem_240m (find_landing_sites' Monte Carlo touchdowns). Packs
+//                 are read from the .bin files, or from the page's data/js packs where there is no .bin
 // A missing file leaves its ctx entry out; the tools then say "not available" instead of guessing.
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEphemeris } from '../demo/src/ephemeris.js';
-import { createDem } from '../demo/src/terrain.js';
+import { createDem, createTiledDem, tilesIn, toXY } from '../demo/src/terrain.js';
+import { createHiresSet } from '../demo/src/hires.js';
+import { hiresPatchFor } from '../demo/src/lander/terrain-local.js';
 import { createHeatGrid } from '../demo/src/heat.js';
 import { staticGrid } from '../demo/src/score.js';
 import { createPsr } from '../demo/src/psr.js';
@@ -40,6 +46,42 @@ function reader(dataDir) {
     json: (name) => JSON.parse(readFileSync(path(name), 'utf8')),
     // a fresh buffer at offset 0, so Int16Array views work (as data-loader.js readData gives the page)
     bytes: (name) => new Uint8Array(readFileSync(path(name))),
+    // a data pack by name: <name>.bin, or the page's data/js/<name>.js (one window.__lsnData("name","base64") line)
+    pack: (name) => {
+      if (existsSync(path(`${name}.bin`))) return new Uint8Array(readFileSync(path(`${name}.bin`)));
+      const text = readFileSync(path(`js/${name}.js`), 'utf8'), i = text.indexOf(',"') + 2;
+      return new Uint8Array(Buffer.from(text.slice(i, text.indexOf('"', i)), 'base64'));
+    },
+  };
+}
+
+// The terrain around a point, finest first (see the header). Levels and tiles are read once and kept.
+function siteTerrainFor(r, meta) {
+  const plain = new Map(), tiled = new Map(), triedTiles = new Set();
+  const hires = r.has('hires.json') ? createHiresSet(r.json('hires.json'), async (name) => r.pack(name)) : null;
+  const plainLevel = (lv) => { if (!plain.has(lv.name)) plain.set(lv.name, r.has(lv.file) ? demLevel(r, lv) : null); return plain.get(lv.name); };
+  return async (site, { halfKm = 1 } = {}) => {
+    const [x, y] = toXY(site.latDeg, site.lonDeg);
+    const box = { x0: x - halfKm, x1: x + halfKm, y0: y - halfKm, y1: y + halfKm };
+    const chain = [];
+    let patch = null;
+    try { patch = await hiresPatchFor(hires, site); } catch { patch = null; }
+    if (patch) chain.push(patch);
+    for (const lv of (meta.levels ?? []).filter((l) => l.tiled)) {
+      if (!tiled.has(lv.name)) tiled.set(lv.name, createTiledDem({ name: lv.name, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, tilePx: lv.tilePx, apronPx: lv.apronPx, halfKm: lv.halfKm, tiles: lv.tiles }));
+      const dem = tiled.get(lv.name), tiles = tilesIn(lv, box);
+      for (const t of tiles) {
+        if (triedTiles.has(t.pack)) continue;
+        triedTiles.add(t.pack);
+        try { dem.addTile(t, r.pack(t.pack)); } catch { /* a tile not shipped: the coarser levels answer */ }
+      }
+      if (tiles.length) chain.push(dem);
+    }
+    for (const lv of (meta.levels ?? []).filter((l) => !l.tiled && l.kmPerPixel <= 0.24)) { const d = plainLevel(lv); if (d) chain.push(d); }
+    chain.sort((a, b) => a.kmPerPixel - b.kmPerPixel);
+    const answers = chain.filter((d) => Number.isFinite(d.sample(x, y)));
+    const sample = (xKm, yKm) => { for (const d of answers) { const v = d.sample(xKm, yKm); if (v === v) return v; } return NaN; };
+    return { sample, finestKm: answers[0]?.kmPerPixel ?? null };
   };
 }
 
@@ -90,6 +132,7 @@ export function loadCoreContext({ dataDir = DEFAULT_DATA_DIR, terrain = true, ex
     ctx.fine = () => (fine ??= { grid: createHeatGrid({ horizon: r.bytes(h1.file), ...h1 }), label: '1 km', slope: staticGrid(r.bytes(slope1.file), slope1.scale ?? 0.25), shadow: staticGrid(r.bytes(shadow1.file), 1) });
     ctx.files.push(h1.file, slope1.file, shadow1.file);
   }
+  ctx.siteTerrain = siteTerrainFor(r, meta);
   if (r.has('ice.json')) {
     let ice;
     ctx.ice = () => {

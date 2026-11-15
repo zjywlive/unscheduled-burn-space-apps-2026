@@ -457,3 +457,26 @@ judged on simulated touchdowns in the dispersion ellipse, as on the Mars landers
   figures' grades) and landeval (robust on every grid point, the slip and safe figures on every spot, none with the
   window off). Full suite 865: 849 pass, 16 skipped, 0 fail. Checked in headless Chrome at 1440 × 900: both cases,
   table width 284 px in a 284 px column, no console errors.
+
+## MCP: the new server in the workspace, and Monte Carlo touchdowns in find_landing_sites (15 Nov, evening)
+
+- **Which server Claude Code ran.** The workspace's `.mcp.json` (in `~/Developer/NASA2026`, outside this repo) started
+  `NASA2026/mcp/server.mjs`, a copy from 13 Nov with the 13 v1 tools and no `find_landing_sites`. It now starts this
+  repo's `mcp/server.mjs` (v2, 18 tools). Checked over stdio with the exact command from `.mcp.json`: initialize,
+  `tools/list` (18 tools), `find_landing_sites` with a touchdown floor, `site_summary`, prompts (7) and resources (6),
+  no stderr. The old copy in `NASA2026/mcp/` is left in place, unused. A running session keeps the server it started
+  with: reconnect it in the session's MCP servers or start a new session.
+- **Monte Carlo touchdowns** (`demo/src/tools-v2/find.js`): every candidate gets `touchdown` (`p_safe`, the steep,
+  shadow and no-data shares, the share outside 3σ, mean and 95th-percentile slope, the ellipse, the limit, the DEM
+  used), by the page's `touchdownMC` on the finest terrain at the point. Optional input `touchdown: { downrange_m,
+  crossrange_m, slope_max_deg, min_p_safe }`; a floor checks the best 200 finalists and drops those below it before
+  the spaced picks (funnel stage `touchdown`). Slip robustness was already there (`slip`, `rank_by: "robustness"`).
+- **Point terrain in Node** (`tools/core-context.mjs` `siteTerrain`): the high-resolution patch (`hires.json`, read
+  from the page's `data/js` packs), the 20 m and 40 m tiles, `dem_120m` (±156 km) and `dem_240m`, finest first, read
+  once and kept.
+- Example: within 40 km of the Shackleton ridge, landings 8–20 Jan 2027, `lander_dte`: without a floor the four
+  candidates have p_safe 0.29 / 0.82 / 0.48 / 0.23 (steep ground or permanent shadow at 5–40 m); with
+  `min_p_safe: 0.95` the search returns one candidate at 89.5°S 12.7°E with p_safe 1.0 on the 20 m DEM.
+- Tests (`tests/find-tool.test.mjs`): touchdown on every real candidate, deterministic, a floor with custom ellipse,
+  input errors, no point terrain → null with a note; `siteTerrain` finest first (5 m at Shackleton, 120 m and 240 m
+  away from the tiles).

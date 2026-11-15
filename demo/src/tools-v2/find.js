@@ -1,15 +1,23 @@
 // MCP v2 A1: find_landing_sites, a read-only cap/region search over the shared terrain and ephemeris.
 // T0 coverage → T1 static → T2 hourly series/slip → T3 four 1 km children + exact skyline → T4 spacing.
 // Returns evaluated candidates, diagnostic near misses/relaxations, and a held search reference.
+// Every candidate also gets Monte Carlo touchdowns (lander/siteplan.js touchdownMC, the page's Where to land method):
+// 2000 landings scattered as a 2-D Gaussian whose 3σ is the landing ellipse, safe on ground within the touchdown slope
+// limit (two pixels of the finest terrain at the point, ctx.siteTerrain) and outside permanent shadow; an optional
+// touchdown.min_p_safe drops finalists below it before the spaced picks.
 import { resolveCriteria, activeChecks, evaluate, onlyFailure, CRITERIA_SCHEMA } from '../criteria.js';
 import { pointTimeline, pointMetrics, staticMetrics } from '../point-eval.js';
 import { toXY } from '../terrain.js';
 import { bodyAzEl } from '../ephemeris.js';
 import { STATIC_IDS, sampleSeries, seriesMetrics, scanLandings, landingSet, checkMargin, inRegion, spacedPicks } from '../search.js';
+import { touchdownMC, ELLIPSE } from '../lander/siteplan.js';
+import { mapScale } from '../lander/landing.js';
+import { VEHICLE_DEFAULTS } from '../lander/vehicle.js';
 
 const H = 3600e3, D = 24 * H;
 const SCREEN_BUDGET = 80_000_000, DIAGNOSTIC_BUDGET = 2_000_000, LANDING_BUDGET = 4_000_000;
 const REFINE_CELLS = 60;
+const MC_LANDINGS = 2000, TOUCHDOWN_ROWS = 200;   // Monte Carlo landings per place; finalists checked against a floor
 const PROXY = 'ice data not loaded: PSR distance used as a proxy for possible ice (no temperature data)';
 const LIMIT = 'a first-look screen, not a certified landing analysis';
 // Light changes over a few hundred metres on ridges and rims (Shackleton's ridge is lit while the 2 km cell centre
@@ -52,6 +60,7 @@ export function findTools(kit) {
     criteria: CRITERIA_SCHEMA, rank_by: { type: 'string', enum: ['margin', 'both_continuous', 'robustness', 'ice_distance'] },
     count: { type: 'integer', minimum: 1, maximum: 60 }, min_spacing_km: num(0, 1000), refine: { type: 'boolean' },
     detail: { type: 'string', enum: ['brief', 'standard', 'full'] },
+    touchdown: obj({ downrange_m: num(10, 5000), crossrange_m: num(10, 5000), slope_max_deg: num(1, 45), min_p_safe: num(0, 1) }),
   });
 
   async function find(input) {
@@ -257,7 +266,7 @@ export function findTools(kit) {
           row.screenedVsExact = Object.fromEntries(['both_continuous_h', 'both_from_landing_h', 'longest_both_h', 'both_total_h', 'longest_dark_h'].map((key) => [key, { screened: r1(screen.metrics[key]), exact: r1(row.result.metrics[key]) }]));
           if (detail === 'full') row.matrix = landingSet(read, ground, { ...options, full: true }, row.result.landingMs).matrix;
         }
-        if (scan.best) { finalists.push(row); if (isMiss) exactMiss++; }
+        if (scan.best) { finalists.push(Object.assign(row, { rescued: isMiss })); if (isMiss) exactMiss++; }
         else if (row.result && onlyFailure(evaluate(criteria, row.result.worst))) misses.push(row);
       }
       // The funnel's main path stays monotone; screen near misses checked at a point are a side branch.
@@ -265,7 +274,42 @@ export function findTools(kit) {
       if (refinedMiss) funnel.push({ stage: 'refined_near_misses', cells: refinedMiss, branch: true }, { stage: 'exact_near_misses', cells: exactMiss, branch: true });
     }
     timing.T3_refine = performance.now() - tick; tick = performance.now();
+    // Monte Carlo touchdowns (the safe-landing chance in the ellipse), on the finest terrain at each place
+    const td = input.touchdown ?? {}, terrainAt = ctx.siteTerrain ?? null;
+    const tdSpec = { downrangeM: td.downrange_m ?? ELLIPSE.downrangeM, crossrangeM: td.crossrange_m ?? ELLIPSE.crossrangeM, limitDeg: td.slope_max_deg ?? VEHICLE_DEFAULTS.touchdown.maxSlopeDeg };
+    if (terrainAt) assumed.push(`touchdown: ${MC_LANDINGS} Monte Carlo landings per candidate, a 2-D Gaussian whose 3σ is the ${tdSpec.downrangeM} × ${tdSpec.crossrangeM} m landing ellipse (down-range along the meridian; assumed); safe = slope ≤ ${tdSpec.limitDeg}° over two pixels of the finest terrain at the point (5–240 m; an assumed touchdown limit) and outside permanent shadow; rocks are not modelled`);
+    else assumed.push('touchdown safety not available: no point terrain loaded');
+    if (td.min_p_safe != null && !terrainAt) return kit.err('touchdown.min_p_safe needs the point terrain (demo/data DEM levels); it is not loaded.');
+    const r3 = (v) => (Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null);
+    async function touchdownOf(row) {
+      if (row.touchdown !== undefined) return row.touchdown;
+      row.touchdown = null;
+      if (!terrainAt || row.site.latDeg > -80) return null;
+      const t = await terrainAt(row.site);
+      if (!t?.finestKm) return null;
+      const mc = touchdownMC(row.site.xKm, row.site.yKm, {
+        sample: t.sample, k: mapScale(row.site.latDeg), n: MC_LANDINGS, baselineKm: Math.max(0.005, t.finestKm),
+        limitDeg: tdSpec.limitDeg, downrangeM: tdSpec.downrangeM, crossrangeM: tdSpec.crossrangeM,
+        isPsr: ctx.psr ? (x, y) => ctx.psr.isPsr(x, y) : null,
+      });
+      row.touchdown = {
+        p_safe: r3(mc.pSafe), steep: r3(mc.steep), psr: r3(mc.psr), no_data: r3(mc.unknown), outside_3sigma: r3(mc.outside),
+        mean_slope_deg: r1(mc.meanDeg), p95_slope_deg: r1(mc.p95Deg), landings: MC_LANDINGS,
+        ellipse_m: { downrange: tdSpec.downrangeM, crossrange: tdSpec.crossrangeM }, slope_limit_deg: tdSpec.limitDeg, dem_m: Math.round(t.finestKm * 1000),
+      };
+      return row.touchdown;
+    }
+    if (td.min_p_safe != null) {
+      // best first, up to TOUCHDOWN_ROWS; those below the floor drop out before the spacing
+      const ordered = [...finalists].sort(compare), checked = ordered.slice(0, TOUCHDOWN_ROWS);
+      if (ordered.length > checked.length) { partial = true; limits.push(`Touchdown floor checked on the best ${TOUCHDOWN_ROWS} of ${ordered.length} finalists.`); }
+      for (const row of checked) await touchdownOf(row);
+      finalists = checked.filter((row) => (row.touchdown?.p_safe ?? -1) >= td.min_p_safe);
+      // main path: the finalists from the screen (screen near misses rescued at a point stay a side branch)
+      funnel.push({ stage: 'touchdown', cells: finalists.filter((row) => !row.rescued).length });
+    }
     const picks = spacedPicks(finalists, count, spacing);
+    for (const row of picks) await touchdownOf(row);
     for (const row of picks) if (!row.exact) {
       if (targetCriteria.ice) row.scienceTarget = staticMetrics(sources, row.site, targetCriteria).ice_target;
       if (detail === 'full') {
@@ -281,6 +325,7 @@ export function findTools(kit) {
         ...(mode === 'landing' ? { landing: iso(r.landingMs) } : { best_landing: iso(r.landingMs) }), passing_landings: row.scan.passingLandings,
         eval: { ...evaluateOut(criteria, r), screened: !row.exact }, metrics: rounded(m), metrics_landing: iso(r.landingMs + offsetsH[0] * H), screened_vs_exact: row.screenedVsExact ?? null,
         slip: { survives_all: r.pass, worst: rounded(r.worst), first_fail_h: r.firstFailH, fail_reason: r.failReason },
+        touchdown: row.touchdown ?? null,
         science_target: target ? { kind: target.cls ?? criteria.ice?.class ?? 'psr_proxy', lat_deg: r1(target.latDeg), lon_deg: r1(target.lonDeg), dist_km: r1(target.distKm), source: row.ground.ice_source } : null,
         headline: `Candidate S${i + 1} passes ${row.exact ? 'point-skyline' : 'hourly grid'} checks with ${r1(r.metrics.both_continuous_h)} h of continuous Sun and Earth visibility.`,
         ...(detail === 'full' ? { landing_checks: row.matrix?.map((v) => ({ offset_h: v.offset_h, metrics: rounded(v.metrics), eval: evaluateOut(criteria, { worst: v.metrics }) })) ?? [] } : {}),
@@ -299,7 +344,7 @@ export function findTools(kit) {
     if (partial) limits.push(`Deterministic budgets (${SCREEN_BUDGET} hourly samples, ${LANDING_BUDGET} landing/offset evaluations): searched ${selected.length} of ${survivors.length} static survivors (${ranked ? `those with the highest NASA 18.6-year ${needSun && needEarth ? 'Sun-and-Earth' : needEarth ? 'Earth' : 'Sun'} share first` : 'spread evenly across the region'}); refinement may also be limited. This is not an exhaustive result.`);
     const about = kit.about({
       units: { hours: 'h', angles: 'degrees', distances: 'polar stereographic map km', nasa_avg: 'fraction, 0–1', times: 'UTC' },
-      resolution: { screen: '2 km cells, 1 h samples', refine: refine ? 'four 1 km children per top cell; 480 m point skyline, 15 min scan, crossings to 1 min' : 'disabled' },
+      resolution: { screen: '2 km cells, 1 h samples', refine: refine ? 'four 1 km children per top cell; 480 m point skyline, 15 min scan, crossings to 1 min' : 'disabled', touchdown: terrainAt ? `${MC_LANDINGS} Monte Carlo landings on the finest point terrain (5–240 m)` : 'not available' },
       conventions: [kit.conv.VISIBLE_CONV, 'Each hourly sample is at the LEFT endpoint and represents [t,t+1h); touchdown uses that instant, totals and runs weight the final fractional hour.', 'Continuous checks are clipped to each stay; available_both_from_landing_h is a separate, span-limited diagnostic.', 'Complete stay and slip coverage is required; the last eligible any-date landing precedes the ephemeris end.', 'Candidate metrics use the first requested slip offset (metrics_landing); eval uses the worst value per check over every offset.', 'Margin ranking uses the minimum raw relative check margin; robustness ranks the last passing tested offset then that margin; other stable ties use grid index then earliest landing.'], limits,
     });
     about.timing_ms = Object.fromEntries(Object.entries(timing).map(([k, v]) => [k, r1(v)]));
@@ -312,7 +357,7 @@ export function findTools(kit) {
     return {
       search_id: searchId, query_echo: { search_id: searchId, detail: 'brief' }, assumed: ['Resolved defaults and assumptions held with search_id.', ...(assumed.includes(PROXY) ? [PROXY] : [])],
       headline, partial, candidates: candidates.slice(0, 5).map((c) => c.ref),
-      numbers: { candidates: candidates.length, screened: selected.length, exact: exactChecked, best_both_h: candidates[0]?.metrics.both_continuous_h ?? null },
+      numbers: { candidates: candidates.length, screened: selected.length, exact: exactChecked, best_both_h: candidates[0]?.metrics.both_continuous_h ?? null, best_p_safe: candidates[0]?.touchdown?.p_safe ?? null },
       feasibility: { status: feasibility.status, binding: feasibility.binding },
       about: { units: { best_both_h: 'h' }, resolution: '2 km hourly; refined 1 km + 480 m/15 min', limits: [LIMIT], timing_ms: { total: r1(timing.total) } },
     };
