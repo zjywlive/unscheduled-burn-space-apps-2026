@@ -3507,6 +3507,444 @@ const southFrom = (pyramid) => () => pyramid.levels;
 
 return { MOON_R_KM, DN_TO_M, G0, G1, G2, TILED, NORTH, SOUTH_MAX_LAT, normLon, toXYNorth, deltaDecode, gunzip, decodePack, tileName, tileOf, tilesInBox, sampleG0, sampleTile, createGlobeTerrain, southFrom };
 })();
+__m['route3d.js'] = (() => {
+// Phase 6 (docs/PHASES.md): a planned route and its simulated drive, handed from the navigator to the 3D
+// globe (demo/globe.html#route=1) through localStorage, and the rover's state at any time on it. Pure; no
+// DOM, no three.js (globe-route.js draws it).
+//
+// Payload v1 = {
+//   v: 1, label, routeId, lengthKm, departMs, arriveMs | null, reserve (0–1),
+//   pts: [[latDeg, lonDeg, km, tMs | null, soc (0–1) | null, flags, gradeDeg | null, heightM | null], …]
+//        flags: 1 lit, 2 Earth in view, 4 station link, 8 one-way stretch (going down more steeply than the
+//        climb limit); gradeDeg: grade along the way (+ uphill), heightM: terrain height (both optional; older
+//        payloads stop at flags)
+//   stops: [{ latDeg, lonDeg, km, fromMs, toMs }], havens: [{ latDeg, lonDeg }], emptyAt: { latDeg, lonDeg, km, tMs } | null
+//   wps: [{ latDeg, lonDeg }]   the planned start, waypoints and end (optional)
+//   traps: { cellKm, cells: [[latDeg, lonDeg], …] } | null   ground the rover could drive into but not out of
+// }
+const { fromXY, toXY } = __m['terrain.js'];
+
+const ROUTE3D_KEY = 'lsn-route3d';
+const FLAGS = Object.freeze({ lit: 1, earth: 2, station: 4, oneWay: 8 });
+
+// The payload from a planned route (route-plan.js), its drive (route-energy.js), station links (comms.js),
+// havens (contingency.js). Keeps at most maxPts points (every k-th sample, plus the last one reached).
+// heightAtXY(xKm, yKm) → metres adds the terrain height per point; waypoints ([[x, y], …]) and traps (the plan's
+// { cellKm, cells: [[x, y], …] }, thinned to maxTrapCells) go along for the 3D view and saved missions.
+function buildPayload({ route, drive = null, links = null, havens = null, power = null, mobility = null, heightAtXY = null, waypoints = null, traps = null, maxPts = 400, maxTrapCells = 2500 }) {
+  const p = route.profile, n = p.km.length, per = drive?.perSample ?? null;
+  const cap = power?.batteryWh ?? null;
+  const onWay = new Uint8Array(n);
+  if (route.oneWay?.length) {
+    // a sample is one-way when it lies on a one-way segment (segments are straight runs along the line)
+    for (let i = 0; i < n; i++) for (const [[ax, ay], [bx, by]] of route.oneWay) {
+      const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      const t = L2 > 0 ? ((p.x[i] - ax) * dx + (p.y[i] - ay) * dy) / L2 : 0;
+      if (t >= -0.01 && t <= 1.01 && Math.hypot(p.x[i] - ax - t * dx, p.y[i] - ay - t * dy) < 0.05) { onWay[i] = 1; break; }
+    }
+  }
+  const step = Math.max(1, Math.ceil(n / maxPts));
+  const pts = [];
+  let km = 0;
+  for (let i = 0; i < n; i++) {
+    const reached = per ? Number.isFinite(per.tMs[i]) : true;
+    if (i % step === 0 || i === n - 1 || (per && reached && !Number.isFinite(per.tMs[i + 1] ?? NaN))) {
+      const { latDeg, lonDeg } = fromXY(p.x[i], p.y[i]);
+      const flags = (per?.lit[i] ? FLAGS.lit : 0) | (per?.earth[i] ? FLAGS.earth : 0) | (links?.ok[i] ? FLAGS.station : 0) | (onWay[i] ? FLAGS.oneWay : 0);
+      const grade = Number.isFinite(p.pitch?.[i]) ? +(Math.atan(p.pitch[i]) * 180 / Math.PI).toFixed(2) : null;
+      const h = heightAtXY ? heightAtXY(p.x[i], p.y[i]) : null;
+      pts.push([+latDeg.toFixed(6), +lonDeg.toFixed(6), +km.toFixed(4), reached && per ? Math.round(per.tMs[i]) : null, per && cap && reached ? +(per.socWh[i] / cap).toFixed(4) : null, flags, grade, Number.isFinite(h) ? Math.round(h * 10) / 10 : null]);
+    }
+    km += p.km[i];
+  }
+  const ll = (x, y) => { const q = fromXY(x, y); return { latDeg: +q.latDeg.toFixed(6), lonDeg: +q.lonDeg.toFixed(6) }; };
+  const seen = new Set(), hv = [];
+  for (const c of havens?.checkpoints ?? []) {
+    if (!c.haven) continue;
+    const k = `${c.haven.x.toFixed(2)},${c.haven.y.toFixed(2)}`;
+    if (!seen.has(k)) { seen.add(k); hv.push(ll(c.haven.x, c.haven.y)); }
+  }
+  return {
+    v: 1, label: route.label, routeId: route.id, lengthKm: route.lengthKm,
+    limits: mobility ? { climbDeg: mobility.climbDeg, descentDeg: mobility.descentDeg, crossDeg: mobility.crossDeg } : null,
+    departMs: drive?.departMs ?? null, arriveMs: drive?.ok ? drive.arriveMs : null, reserve: power?.reserve ?? null,
+    pts,
+    stops: (drive?.stops ?? []).map((st) => ({ ...ll(st.x, st.y), km: st.km, fromMs: st.fromMs, toMs: st.toMs })),
+    havens: hv,
+    emptyAt: drive?.emptyAt ? { ...ll(drive.emptyAt.x, drive.emptyAt.y), km: drive.emptyAt.km, tMs: drive.emptyAt.tMs } : null,
+    wps: (waypoints ?? []).map(([x, y]) => ll(x, y)),
+    traps: traps?.cells?.length ? { cellKm: traps.cellKm, cells: thin(traps.cells, maxTrapCells).map(([x, y]) => { const q = ll(x, y); return [+q.latDeg.toFixed(5), +q.lonDeg.toFixed(5)]; }) } : null,
+  };
+}
+
+// Every k-th item so that at most max remain.
+const thin = (a, max) => (a.length <= max ? a : a.filter((_, i) => i % Math.ceil(a.length / max) === 0));
+
+// A payload read back (from JSON); null when it is not one.
+function parsePayload(text) {
+  try {
+    const p = typeof text === 'string' ? JSON.parse(text) : text;
+    if (!p || p.v !== 1 || !Array.isArray(p.pts) || p.pts.length < 2) return null;
+    if (!p.pts.every((q) => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1]) && Number.isFinite(q[2]))) return null;
+    return p;
+  } catch { return null; }
+}
+
+// The span of the drive in time: [departMs, end], end = arrival, or when the battery ran out, or the last time.
+function timeSpan(p) {
+  const ts = p.pts.map((q) => q[3]).filter(Number.isFinite);
+  if (!ts.length || !Number.isFinite(p.departMs)) return null;
+  const end = p.arriveMs ?? p.emptyAt?.tMs ?? ts[ts.length - 1];
+  return [p.departMs, Math.max(end, ts[ts.length - 1])];
+}
+
+// The rover at time tMs: { latDeg, lonDeg, km, soc, flags, state: 'ready' | 'driving' | 'parked' | 'arrived'
+// | 'empty', i (the point before it) }. Positions are interpolated linearly in lat/lon (points are ≤ ~150 m apart).
+function roverAt(p, tMs) {
+  const pts = p.pts, timed = pts.filter((q) => Number.isFinite(q[3]));
+  const at = (q, state, i) => ({ latDeg: q[0], lonDeg: q[1], km: q[2], soc: q[4], flags: q[5], state, i });
+  if (!timed.length) return at(pts[0], 'ready', 0);
+  if (!(tMs > (p.departMs ?? timed[0][3]))) return at(pts[0], 'ready', 0);
+  for (const st of p.stops ?? []) if (tMs >= st.fromMs && tMs < st.toMs) {
+    const i = Math.max(0, pts.findIndex((q) => q[2] >= st.km) - 1);
+    return { latDeg: st.latDeg, lonDeg: st.lonDeg, km: st.km, soc: pts[i]?.[4] ?? null, flags: pts[i]?.[5] ?? 0, state: 'parked', i };
+  }
+  const last = timed[timed.length - 1];
+  if (tMs >= last[3]) {
+    const i = pts.indexOf(last);
+    if (p.emptyAt) return { ...at(last, 'empty', i), latDeg: p.emptyAt.latDeg, lonDeg: p.emptyAt.lonDeg, km: p.emptyAt.km };
+    return at(pts[pts.length - 1], p.arriveMs ? 'arrived' : 'driving', pts.length - 1);
+  }
+  // first timed point → depart: interpolate from the start
+  let i = 0;
+  while (i + 1 < pts.length && !(Number.isFinite(pts[i + 1][3]) && pts[i + 1][3] > tMs)) i++;
+  const a = pts[i], b = pts[i + 1];
+  const ta = Number.isFinite(a[3]) ? a[3] : p.departMs, tb = b[3];
+  // a stop between a and b: the rover waits at the stop, so drive the remaining time only
+  const stop = (p.stops ?? []).find((st) => st.km >= a[2] - 1e-6 && st.km <= b[2] + 1e-6 && st.toMs <= tb);
+  const t0 = stop && tMs >= stop.toMs ? stop.toMs : ta;
+  const f = tb > t0 ? Math.min(1, Math.max(0, (tMs - t0) / (tb - t0))) : 1;
+  let dl = b[1] - a[1];
+  if (dl > 180) dl -= 360; else if (dl < -180) dl += 360;
+  return {
+    latDeg: a[0] + (b[0] - a[0]) * f, lonDeg: (a[1] + dl * f + 360) % 360, km: a[2] + (b[2] - a[2]) * f,
+    soc: a[4] !== null && b[4] !== null ? a[4] + (b[4] - a[4]) * f : a[4] ?? b[4], flags: f < 0.5 ? a[5] : b[5], state: 'driving', i,
+  };
+}
+
+// A camera that frames the whole route: centre and distance (km) for globe-view.js flyTo.
+function frameRoute(p) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const q of p.pts) { const [x, y] = toXY(q[0], q[1]); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const c = fromXY((x0 + x1) / 2, (y0 + y1) / 2);
+  const extent = Math.max(x1 - x0, y1 - y0, 2);
+  return { lat: c.latDeg, lon: c.lonDeg, dist: extent * 1.6, tilt: 45, heading: 0 };
+}
+
+return { ROUTE3D_KEY, FLAGS, buildPayload, parsePayload, timeSpan, roverAt, frameRoute };
+})();
+__m['slope-colours.js'] = (() => {
+// The slope colour scale shared by the 2D map and the 3D globe: a route coloured by the grade along the way
+// (its absolute value, uphill or downhill), in the bands a rover driver reads at a glance. Pure; no DOM.
+const SLOPE_BANDS = Object.freeze([
+  { maxDeg: 2, colour: '#22d3ee', label: '0–2°' },
+  { maxDeg: 5, colour: '#4ade80', label: '2–5°' },
+  { maxDeg: 8, colour: '#facc15', label: '5–8°' },
+  { maxDeg: 12, colour: '#fb923c', label: '8–12°' },
+  { maxDeg: 15, colour: '#ef4444', label: '12–15°' },
+  { maxDeg: Infinity, colour: '#d946ef', label: 'over 15°' },
+]);
+const SLOPE_UNKNOWN = '#9aa0a6';
+
+// The band of a grade in degrees (sign ignored); null or NaN → the unknown colour.
+function slopeBand(deg) {
+  if (!Number.isFinite(deg)) return null;
+  const a = Math.abs(deg);
+  return SLOPE_BANDS.find((b) => a < b.maxDeg) ?? SLOPE_BANDS[SLOPE_BANDS.length - 1];
+}
+const slopeColour = (deg) => slopeBand(deg)?.colour ?? SLOPE_UNKNOWN;
+
+// '#rrggbb' → [r, g, b] in 0–1 (for three.js vertex colours).
+const rgb01 = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+
+return { SLOPE_BANDS, SLOPE_UNKNOWN, slopeBand, slopeColour, rgb01 };
+})();
+__m['globe-route.js'] = (() => {
+// Phase 6: a planned route on the 3D globe (route3d.js payload): a ribbon draped on the terrain, coloured by
+// what the drive met (sunlit, in shadow, one-way, battery under the reserve, not reached) or by slope,
+// markers for the havens, parking stops and where the battery ran out, the no-go ground (traps) as
+// translucent red volumes, the self-driving planner's search (trees, candidates, chosen path) when the payload
+// has one, and the rover: a six-wheeled model at its real size (2.2 m) standing on the terrain with its pitch and
+// roll, with its coordinate frames (base_link, mast_cam, wheels) for the labels, and a locator ring (screen-sized,
+// drawn over the terrain) while the real-size model is too small to see. Marker sizes follow the zoom.
+const { FLAGS } = __m['route3d.js'];
+const { slopeColour, rgb01 } = __m['slope-colours.js'];
+
+const COLORS = { lit: [0.96, 0.96, 0.96], dark: [0.36, 0.45, 0.66], oneWay: [1, 0.62, 0.26], low: [1, 0.32, 0.32], unreached: [0.35, 0.35, 0.35] };
+const RAD = Math.PI / 180;
+const ROVER_LEN_M = 2.2;   // model length in metres
+
+// roverPx: draw the rover that many pixels long instead of at its real size (the navigator's small preview)
+function createRouteLayer(view, payload, { roverPx = null } = {}) {
+  const THREE = view.THREE;
+  const group = new THREE.Group();
+  view.addObject(group);
+  let ribbon = null, built = null, colourBy = 'state';
+  const reserve = payload.reserve ?? 0.2, timed = payload.pts.some((q) => Number.isFinite(q[3]));
+  const show = { traps: true, search: true, frames: false };
+
+  function colourOf(q) {
+    if (colourBy === 'slope') return rgb01(slopeColour(q[6]));
+    if (timed && !Number.isFinite(q[3])) return COLORS.unreached;
+    if (q[5] & FLAGS.oneWay) return COLORS.oneWay;
+    if (q[4] !== null && q[4] < reserve) return COLORS.low;
+    return !timed || q[5] & FLAGS.lit ? COLORS.lit : COLORS.dark;
+  }
+
+  // a strip of width w km through lat/lon points, lifted above the terrain, vertices relative to the first point
+  function strip(ll, w, colours, lift, opacity = 0.95) {
+    const n = ll.length;
+    const P = ll.map(([la, lo]) => new THREE.Vector3(...view.surface(la, lo, lift)));
+    const o = P[0].clone();
+    const pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3), idx = [];
+    for (let i = 0; i < n; i++) {
+      const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)];
+      const t = b.clone().sub(a).normalize(), up = P[i].clone().normalize();
+      const side = new THREE.Vector3().crossVectors(t, up).normalize().multiplyScalar(w / 2);
+      const L = P[i].clone().sub(side).sub(o), R = P[i].clone().add(side).sub(o);
+      pos.set([L.x, L.y, L.z, R.x, R.y, R.z], i * 6);
+      const c = colours(i);
+      col.set([...c, ...c], i * 6);
+      if (i + 1 < n) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(idx);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false }));
+    m.position.copy(o);
+    m.renderOrder = 3;
+    return m;
+  }
+  // lifted a little above the terrain, more when zoomed out (where the tiles are coarser than the heights)
+  const liftFor = (w) => Math.min(0.012 * view.exaggeration, 0.0003 + w * 0.6);
+  const buildRibbon = (w) => strip(payload.pts.map((q) => [q[0], q[1]]), w, (i) => colourOf(payload.pts[i]), liftFor(w));
+  const dispose = (o) => { if (!o) return; group.remove(o); o.traverse?.((c) => { c.geometry?.dispose(); c.material?.dispose(); }); };
+
+  // ---- no-go volumes: each trap cell a translucent red box standing on the ground ----
+  let traps = null;
+  function buildTraps() {
+    const cells = payload.traps?.cells ?? [];
+    if (!cells.length) return null;
+    const c = payload.traps.cellKm ?? 0.24, hKm = 0.035 * view.exaggeration;
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(c * 0.96, hKm, c * 0.96), new THREE.MeshBasicMaterial({ color: 0xff3b3b, transparent: true, opacity: 0.3, depthWrite: false }), cells.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1);
+    const o = new THREE.Vector3(...view.surface(cells[0][0], cells[0][1], 0));
+    cells.forEach(([la, lo], i) => {
+      const p = new THREE.Vector3(...view.surface(la, lo, hKm / 2 - 0.004));
+      q.setFromUnitVectors(up, p.clone().normalize());
+      m.compose(p.sub(o), q, s);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.position.copy(o);
+    mesh.renderOrder = 4;
+    const g = new THREE.Group(); g.add(mesh);
+    return g;
+  }
+
+  // ---- the self-driving planner's search (payload.autonav from route-rrt.js) ----
+  let search = null;
+  function buildSearch(w) {
+    const a = payload.autonav;
+    if (!a) return null;
+    const g = new THREE.Group(), lift = liftFor(w) + w * 0.1;
+    const o = new THREE.Vector3(...view.surface(payload.pts[0][0], payload.pts[0][1], 0));
+    const V = (la, lo, extra = 0) => new THREE.Vector3(...view.surface(la, lo, lift + extra)).sub(o);
+    if (a.trees?.length) {
+      const pos = new Float32Array(a.trees.length * 6);
+      a.trees.forEach(([la1, lo1, la2, lo2], i) => { const p = V(la1, lo1), q = V(la2, lo2); pos.set([p.x, p.y, p.z, q.x, q.y, q.z], i * 6); });
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x5b7cfa, transparent: true, opacity: 0.35, depthWrite: false }));
+      lines.position.copy(o); lines.renderOrder = 2; g.add(lines);
+    }
+    for (const c of a.candidates ?? []) {
+      if (c.length < 2) continue;
+      const geo = new THREE.BufferGeometry().setFromPoints(c.map(([la, lo]) => V(la, lo, w * 0.2)));
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x3b5bdb, transparent: true, opacity: 0.85, depthWrite: false }));
+      line.position.copy(o); line.renderOrder = 3; g.add(line);
+    }
+    if (a.trajectory?.length > 1) {
+      const t = strip(a.trajectory, w * 0.7, () => [0.13, 0.83, 0.93], lift + w * 0.5, 0.95);
+      g.add(t);
+    }
+    return g;
+  }
+
+  // ---- markers: spheres scaled with the zoom ----
+  const markers = [];
+  function marker(lat, lon, color, r = 1, cls = '') {
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color }));
+    mesh.userData = { lat, lon, r, cls };
+    group.add(mesh); markers.push(mesh);
+    return mesh;
+  }
+  const first = payload.pts[0], last = payload.pts[payload.pts.length - 1];
+  marker(first[0], first[1], 0xffffff, 1.1, 'start');
+  marker(last[0], last[1], 0xffffff, 1.1, 'end');
+  for (const h of payload.havens ?? []) marker(h.latDeg, h.lonDeg, 0x7ee08a, 0.8, 'haven');
+  for (const st of payload.stops ?? []) marker(st.latDeg, st.lonDeg, 0x8ab4f8, 1, 'stop');
+  if (payload.emptyAt) marker(payload.emptyAt.latDeg, payload.emptyAt.lonDeg, 0xff5252, 1.3, 'empty');
+  for (const w of payload.wps ?? []) marker(w.latDeg, w.lonDeg, 0xffffff, 0.75, 'waypoint');
+
+  // ---- the rover model, in its own frame: x forward, y left, z up (ROS base_link), metres ----
+  const rover = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: 0.6, metalness: 0.2 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2b2f, roughness: 0.9 });
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0x3a62d0, roughness: 0.4, metalness: 0.25, emissive: 0x0b1a44 });
+  const accent = new THREE.MeshBasicMaterial({ color: 0xffd23d });
+  const box = (x, y, z, sx, sy, sz, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); m.position.set(x, y, z); rover.add(m); return m; };
+  box(0, 0, 0.72, 1.9, 1.25, 0.42, bodyMat);                     // chassis
+  box(-0.1, 0, 0.97, 1.7, 1.45, 0.04, panelMat);                 // solar deck
+  box(0.98, 0, 0.72, 0.06, 1.0, 0.18, accent);                   // front bumper (shows which way it faces)
+  const wheels = {};
+  for (const [name, x, y] of [['wheel_fl', 0.75, 0.82], ['wheel_fr', 0.75, -0.82], ['wheel_ml', 0, 0.86], ['wheel_mr', 0, -0.86], ['wheel_rl', -0.75, 0.82], ['wheel_rr', -0.75, -0.82]]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.2, 18), darkMat);
+    w.position.set(x, y, 0.26); rover.add(w); wheels[name] = w;   // a cylinder's axis is its y: the axle, left–right
+    box(x, y * 0.86, 0.5, 0.08, 0.08, 0.42, darkMat);              // suspension leg
+  }
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.0, 10), bodyMat);
+  mast.rotation.x = Math.PI / 2; mast.position.set(0.62, 0.38, 1.45); rover.add(mast);
+  box(0.66, 0.38, 2.0, 0.22, 0.42, 0.16, bodyMat);                // mast camera head
+  box(0.78, 0.30, 2.0, 0.02, 0.07, 0.07, darkMat); box(0.78, 0.46, 2.0, 0.02, 0.07, 0.07, darkMat);   // camera eyes
+  const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.06, 0.08, 20), bodyMat);
+  dish.rotation.x = Math.PI / 2; dish.position.set(-0.7, -0.35, 1.3); rover.add(dish);
+  box(-0.7, -0.35, 1.12, 0.04, 0.04, 0.3, darkMat);
+  // the x-ray outline: the same parts in flat gold drawn over everything, shown while terrain hides the rover
+  const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false });
+  const ghost = new THREE.Group();
+  for (const m of [...rover.children]) {
+    if (!m.isMesh) continue;
+    const g = new THREE.Mesh(m.geometry, ghostMat);
+    g.position.copy(m.position); g.quaternion.copy(m.quaternion); g.scale.copy(m.scale); g.renderOrder = 20;
+    ghost.add(g);
+  }
+  ghost.visible = false;
+  rover.add(ghost);
+  // frame axes (x red, y green, z blue), shown with the labels
+  const axes = new THREE.Group();
+  const axis = (x, y, z, dir, color, len) => {
+    const a = new THREE.ArrowHelper(new THREE.Vector3(...dir), new THREE.Vector3(x, y, z), len, color, len * 0.22, len * 0.12);
+    axes.add(a);
+  };
+  for (const [x, y, z, len] of [[0, 0, 0.72, 1.6], [0.78, 0.38, 2.0, 0.7]]) {
+    axis(x, y, z, [1, 0, 0], 0xff5252, len); axis(x, y, z, [0, 1, 0], 0x7ee08a, len); axis(x, y, z, [0, 0, 1], 0x5b9bff, len);
+  }
+  axes.visible = false;
+  rover.add(axes);
+  const FRAMES = { base_link: [0, 0, 0.72], mast_cam: [0.78, 0.38, 2.0], wheel_fl: [0.75, 0.82, 0.26], wheel_rr: [-0.75, -0.82, 0.26] };
+  // drawn after the route ribbon (which does not write depth), so the ribbon under its wheels never paints over it
+  rover.traverse((m) => { if (m.isMesh && m.material !== ghostMat) { m.material.transparent = true; m.renderOrder = 12; } });
+  group.add(rover);
+  // the locator: a ring with a heading chevron, flat on the ground, a fixed size on screen, never hidden by terrain
+  const locMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const locator = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.72, 1, 40), locMat);
+  const chev = new THREE.Shape(); chev.moveTo(0.62, 0); chev.lineTo(-0.34, 0.36); chev.lineTo(-0.16, 0); chev.lineTo(-0.34, -0.36); chev.closePath();
+  const arrow = new THREE.Mesh(new THREE.ShapeGeometry(chev), locMat);
+  for (const m of [ring, arrow]) { m.renderOrder = 21; locator.add(m); }
+  group.add(locator);
+  let roverAt = { latDeg: first[0], lonDeg: first[1] }, att = { headingDeg: 0, pitchDeg: 0, rollDeg: 0 }, roverScale = 0.001, modelPx = 0;
+
+  function place(obj, lat, lon, size, lift = 0) {
+    const [x, y, z] = view.surface(lat, lon, lift);
+    obj.position.set(x, y, z);
+    obj.scale.setScalar(size);
+  }
+  // the rover's basis: forward along the heading, up along the local vertical, then pitched and rolled
+  const basis = new THREE.Matrix4();
+  function orientRover() {
+    const la = roverAt.latDeg * RAD, lo = roverAt.lonDeg * RAD;
+    const U = new THREE.Vector3(Math.cos(la) * Math.cos(lo), Math.sin(la), -Math.cos(la) * Math.sin(lo));
+    const N = new THREE.Vector3(-Math.sin(la) * Math.cos(lo), Math.cos(la), Math.sin(la) * Math.sin(lo));
+    const E = new THREE.Vector3(-Math.sin(lo), 0, -Math.cos(lo));
+    const h = att.headingDeg * RAD;
+    let f = N.clone().multiplyScalar(Math.cos(h)).addScaledVector(E, Math.sin(h)).normalize();
+    let right = f.clone().cross(U).normalize();
+    let up = U.clone();
+    locator.quaternion.setFromRotationMatrix(basis.makeBasis(f, right.clone().negate(), up));   // flat, along the heading
+    // pitch and roll as drawn: the terrain is drawn with its heights exaggerated, so the model takes the drawn
+    // slope (atan(E · tan)) and sits flush on it; the panels on the left give the real angles
+    const ex = view.exaggeration;
+    const p = Math.atan(ex * Math.tan((att.pitchDeg || 0) * RAD)), r = Math.atan(ex * Math.tan((att.rollDeg || 0) * RAD));
+    f.applyAxisAngle(right, p); up.applyAxisAngle(right, p);            // nose up
+    right.applyAxisAngle(f, -r); up.applyAxisAngle(f, -r);              // right side up
+    const left = right.clone().negate();
+    basis.makeBasis(f, left, up);
+    rover.quaternion.setFromRotationMatrix(basis);
+  }
+
+  // per frame: keep sizes in step with the zoom, rebuild what is draped when the zoom, exaggeration or terrain changes
+  function frame(terrainStamp) {
+    // about 5 px wide, down to 0.8 m close up, under a metre off the ground (the rover is 2.2 m long, 2 m tall)
+    const kpp = view.kmPerPx(), w = Math.min(3, Math.max(0.0008, kpp * 5));
+    const key = `${terrainStamp}:${view.exaggeration}:${colourBy}`;
+    if (!built || built.key !== key || w / built.w > 1.35 || built.w / w > 1.35) {
+      dispose(ribbon); ribbon = buildRibbon(w); group.add(ribbon);
+      dispose(search); search = buildSearch(w); if (search) { search.visible = show.search; group.add(search); }
+      if (!built || built.key !== key) { dispose(traps); traps = buildTraps(); if (traps) { traps.visible = show.traps; group.add(traps); } }
+      built = { key, w };
+    }
+    const s = kpp * 5;
+    for (const m of markers) place(m, m.userData.lat, m.userData.lon, s * m.userData.r, s * m.userData.r);
+    // real size (km per model metre), or roverPx long for the preview
+    roverScale = roverPx ? Math.max(0.001, (kpp * roverPx) / ROVER_LEN_M) : 0.001;
+    place(rover, roverAt.latDeg, roverAt.lonDeg, roverScale, roverPx ? 0.001 * view.exaggeration : 0.0002);
+    modelPx = (roverScale * ROVER_LEN_M) / kpp;
+    // the locator while the model is under ~18 px long: 26 px across, fading out as the model grows
+    locator.visible = !roverPx && modelPx < 18;
+    if (locator.visible) { place(locator, roverAt.latDeg, roverAt.lonDeg, kpp * 13, 0.0004); locMat.opacity = Math.min(0.95, 0.35 + (18 - modelPx) / 12); }
+    orientRover();
+  }
+
+  const colours = { state: 0xffd23d };
+  return {
+    frame,
+    setRover(r, color = 0xffd23d, attitude = null) {
+      roverAt = r;
+      if (attitude) att = attitude;
+      accent.color.setHex(color);
+      colours.state = color;
+      view.redraw();
+    },
+    setColourBy(mode) { colourBy = mode === 'slope' ? 'slope' : 'state'; built = null; view.redraw(); },
+    setVisible(what, on) {
+      show[what] = !!on;
+      if (what === 'traps' && traps) traps.visible = !!on;
+      if (what === 'search' && search) search.visible = !!on;
+      if (what === 'frames') axes.visible = !!on;
+      view.redraw();
+    },
+    // world positions (km) of the rover's frames, for their labels
+    frames() {
+      if (modelPx < 50) return [];   // too small for its frames to be told apart
+      rover.updateMatrixWorld(true);
+      return Object.entries(FRAMES).map(([name, [x, y, z]]) => ({ name, p: new THREE.Vector3(x, y, z).applyMatrix4(rover.matrixWorld) }));
+    },
+    get scaleUp() { return roverScale / 0.001; },
+    // the model's length on screen, px
+    get modelPx() { return modelPx; },
+    // the top of the mast above the ground, km (as drawn), for line-of-sight checks
+    get topKm() { return roverScale * 2.1; },
+    setHidden(on) { if (ghost.visible !== !!on) { ghost.visible = !!on; view.redraw(); } },
+    get hidden() { return ghost.visible; },
+    hasTraps: !!payload.traps?.cells?.length,
+    hasSearch: !!payload.autonav,
+    dispose() { view.removeObject(group); },
+  };
+}
+
+return { createRouteLayer };
+})();
 __m['globe-view.js'] = (() => {
 // 3D globe of the global terrain model (phase 1). three.js comes from vendor/three.classic.js (window.THREE).
 //
@@ -5102,7 +5540,8 @@ __m['ui/globemap.js'] = (() => {
 // events at the same ground point, so its picking, snapping, hover card and drawing tools (rectangle, circle,
 // polygon, route) work unchanged on the 3D surface. North of 80°S a click picks the site; drawing needs the polar
 // terrain (the region statistics and the rover planner run on it).
-const { createGlobeTerrain, MOON_R_KM } = __m['globe-terrain.js'];
+const { createGlobeTerrain, MOON_R_KM, G2 } = __m['globe-terrain.js'];
+const { createRouteLayer } = __m['globe-route.js'];
 const { createGlobeView } = __m['globe-view.js'];
 const { toXY, fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
 const { loadData } = __m['data-loader.js'];
@@ -5324,6 +5763,8 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   let lastUpd = 0;
   function frameTick() {
     const now = performance.now();
+    if (gRoute?.layer) gRoute.layer.frame(`${terrain.version ?? 0}`);
+    if (draft && getState().tool !== 'route') { draft = null; drawDraft(); }
     if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); placeLabels(); }
     // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
     const st = getState();
@@ -5510,9 +5951,9 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   const say = (text) => { note.textContent = text; note.hidden = !text; clearTimeout(say.t); if (text) say.t = setTimeout(() => { note.hidden = true; }, 3500); };
   canvas.addEventListener('pointerdown', (e) => {
     down = { x: e.clientX, y: e.clientY, tool: getState().tool ?? 'select' };
-    if (down.tool === 'select' || e.button !== 0) return;
+    if (down.tool === 'select' || down.tool === 'route' || e.button !== 0) return;   // the Route tool draws on the globe itself
     const h = hit(e);
-    if (!h || h.latDeg > POLAR_LAT) { say('Drawing needs the polar terrain: draw south of 80°S (the region statistics and the rover planner run on it).'); down = null; return; }
+    if (!h || h.latDeg > POLAR_LAT) { say('Regions need the polar data (south of 80°S): its Sun and Earth grids give their statistics. Routes can be drawn anywhere.'); down = null; return; }
     gesturing = true;
     send('pointerdown', frameClient(h.latDeg, h.lonDeg));
   });
@@ -5522,6 +5963,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     moveAt = now;
     const h = hit(e);
     if (!h) return;
+    if (draft) { draft.cursor = snapped(e, h); drawDraft(); }
     if (h.latDeg > POLAR_LAT) { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); return; }
     const at = frameClient(h.latDeg, h.lonDeg);
     send('pointermove', at, { buttons: gesturing ? 1 : 0 });
@@ -5535,6 +5977,7 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     if (!d) return;
     const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4;
     const h = hit(e);
+    if (d.tool === 'route') { if (!moved && h) addDraftPoint(snapped(e, h)); return; }
     if (d.tool !== 'select') {
       if (h && h.latDeg <= POLAR_LAT) send('pointerup', frameClient(h.latDeg, h.lonDeg));
       gesturing = false; schedule(30);
@@ -5547,13 +5990,130 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
   });
   canvas.addEventListener('dblclick', (e) => {
     if ((getState().tool ?? 'select') === 'select') return;   // the globe zooms in itself
+    if (getState().tool === 'route') { finishDraft(); return; }
     const h = hit(e);
     if (h && h.latDeg <= POLAR_LAT) { send('dblclick', frameClient(h.latDeg, h.lonDeg), { detail: 2 }); schedule(40); }
   });
   canvas.addEventListener('pointerleave', () => { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); });
 
+  // ---- the Route tool on the globe, anywhere on the Moon: click to add points (a click near a listed site snaps to
+  // it), double-click or Enter to finish, Backspace to drop the last point, Esc to cancel ----
+  let draft = null, draftObj = null;
+  function snapped(e, h) {
+    const r = canvas.getBoundingClientRect();
+    let best = null, bd = 14;
+    for (const s0 of sites) {
+      const p = view.project(s0.latDeg, s0.lonDeg);
+      if (!p) continue;
+      const d = Math.hypot(p.x - (e.clientX - r.left), p.y - (e.clientY - r.top));
+      if (d < bd) { bd = d; best = s0; }
+    }
+    return best ? { latDeg: best.latDeg, lonDeg: best.lonDeg, name: best.name } : { latDeg: +h.latDeg.toFixed(5), lonDeg: +h.lonDeg.toFixed(5) };
+  }
+  // a line along the surface through lat/lon points (great-circle steps), drawn over the terrain
+  function surfaceLine(lls, color, { dashed = false, opacity = 0.95 } = {}) {
+    const T = view.THREE, pts = [];
+    for (let i = 0; i + 1 < lls.length; i++) {
+      const a = lls[i], b = lls[i + 1];
+      const n = Math.max(2, Math.ceil(Math.hypot(b.latDeg - a.latDeg, ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * Math.cos(a.latDeg * RAD)) * 8));
+      for (let k = 0; k <= n; k++) {
+        const f = k / n, la = a.latDeg + (b.latDeg - a.latDeg) * f, lo = a.lonDeg + ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * f;
+        pts.push(new T.Vector3(...view.surface(la, lo, 0.02)));
+      }
+    }
+    const g = new T.BufferGeometry().setFromPoints(pts);
+    const m = dashed ? new T.LineDashedMaterial({ color, dashSize: 2, gapSize: 1.5, depthTest: false, transparent: true, opacity }) : new T.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity });
+    const line = new T.Line(g, m);
+    if (dashed) line.computeLineDistances();
+    line.renderOrder = 20;
+    return line;
+  }
+  function surfaceDots(lls, color, px = 7) {
+    const T = view.THREE;
+    const g = new T.BufferGeometry().setFromPoints(lls.map((p) => new T.Vector3(...view.surface(p.latDeg, p.lonDeg, 0.03))));
+    const pts = new T.Points(g, new T.PointsMaterial({ color, size: px, sizeAttenuation: false, depthTest: false, transparent: true }));
+    pts.renderOrder = 21;
+    return pts;
+  }
+  function clearObj(o) { if (!o) return; view.removeObject(o); o.traverse((x) => { x.geometry?.dispose?.(); x.material?.dispose?.(); }); }
+  function drawDraft() {
+    clearObj(draftObj); draftObj = null;
+    if (!draft) return;
+    const T = view.THREE, g = new T.Group();
+    const lls = draft.cursor ? [...draft.pts, draft.cursor] : draft.pts;
+    if (lls.length >= 2) g.add(surfaceLine(lls, 0xffffff));
+    if (draft.pts.length) g.add(surfaceDots(draft.pts, 0xffffff, 8));
+    view.addObject(g); draftObj = g;
+  }
+  function addDraftPoint(p) {
+    if (!draft) { draft = { pts: [], cursor: null }; say('Route: click to add points · double-click or Enter to finish · Backspace removes the last · Esc cancels'); }
+    const last = draft.pts[draft.pts.length - 1];
+    if (last && Math.abs(last.latDeg - p.latDeg) < 1e-6 && Math.abs(last.lonDeg - p.lonDeg) < 1e-6) return;
+    if (draft.pts.length >= 8) { say('At most 8 points: double-click or press Enter to finish.'); return; }
+    draft.pts.push(p); drawDraft();
+  }
+  function finishDraft() {
+    if (!draft) return;
+    const pts = draft.pts;
+    draft = null; drawDraft(); say('');
+    if (pts.length >= 2) api.onRouteDrawn?.(pts);
+    else say('A route needs a start and an end point.');
+  }
+  window.addEventListener('keydown', (e) => {
+    if (!draft || e.target.closest?.('input, textarea, select')) return;
+    if (e.key === 'Enter') { e.preventDefault(); finishDraft(); }
+    else if (e.key === 'Escape') { e.preventDefault(); draft = null; drawDraft(); say(''); }
+    else if (e.key === 'Backspace') { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
+  });
+
+  // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
+  // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----
+  let gRoute = null;   // { layer, extras }
+  function setGlobalRoute(data) {
+    if (!view) return;
+    if (gRoute) { gRoute.layer?.dispose(); clearObj(gRoute.extras); gRoute = null; }
+    if (!data) { view.redraw(); return; }
+    const T = view.THREE, extras = new T.Group();
+    let lay = null;
+    if (data.payload) {
+      lay = createRouteLayer(view, data.payload);
+      if (data.colourBy) lay.setColourBy(data.colourBy);
+      const q = data.payload.pts[0];
+      lay.setRover({ latDeg: q[0], lonDeg: q[1], km: 0, state: 'ready', soc: q[4] }, 0xffd23d, { headingDeg: 0, pitchDeg: 0, rollDeg: 0 });
+    }
+    for (const c of data.candidates ?? []) if (c.points.length >= 2) extras.add(surfaceLine(c.points, 0xbfc5cc, { dashed: true, opacity: 0.8 }));
+    if (data.hand?.length >= 2) extras.add(surfaceLine(data.hand, 0xffffff));
+    const wps = data.waypoints ?? data.hand ?? [];
+    if (wps.length) extras.add(surfaceDots(wps, 0xffffff, 9));
+    view.addObject(extras);
+    gRoute = { layer: lay, extras };
+  }
+
   const api = {
     view: null, ready, el: layer,
+    onRouteDrawn: null,
+    setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
+    // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
+    heightAt: (la, lo) => terrain.heightAt(la, lo),
+    need: (latMin, latMax, lonMin, lonMax) => terrain.need(G2, latMin, latMax, lonMin, lonMax, { max: 160 }),
+    // share of the planned stay with the Sun above a smooth horizon at a place (globalheat.js), or NaN
+    sunShare(la, lo) {
+      const st = getState();
+      if (!Number.isFinite(st.landingMs)) return NaN;
+      const f = fractions(st.landingMs, st.stayDays);
+      const j = Math.min(grid.h - 1, Math.max(0, Math.floor((90 - la) / grid.stepDeg))), i = Math.floor(((((lo % 360) + 360) % 360)) / grid.stepDeg) % grid.w;
+      return f.sun[j * grid.w + i];
+    },
+    // frame a set of points on the globe
+    flyToPoints(lls) {
+      if (!view || !lls.length) return;
+      let x = 0, y = 0, z = 0;
+      for (const p of lls) { const c = Math.cos(p.latDeg * RAD); x += c * Math.cos(p.lonDeg * RAD); y += c * Math.sin(p.lonDeg * RAD); z += Math.sin(p.latDeg * RAD); }
+      const lat = Math.asin(z / Math.hypot(x, y, z)) / RAD, lon = (Math.atan2(y, x) / RAD + 360) % 360;
+      let ext = 1;
+      for (const p of lls) ext = Math.max(ext, MOON_R_KM * RAD * Math.hypot(p.latDeg - lat, ((p.lonDeg - lon + 540) % 360 - 180) * Math.cos(lat * RAD)));
+      view.flyTo({ lat, lon, dist: Math.max(6, ext * 3.2), tilt: 0, heading: northUp(lat, lon), ms: 1200 });
+    },
     get picture() { return comp; },   // the draped polar picture (for inspection)
     onPolarView: null,
     // screen position (frame CSS px) of a ground point, for the sky dial; null when out of sight
@@ -5623,6 +6183,87 @@ function createRegionLayer(doc, { topbar, getMission, onSite }) {
 }
 
 return { createRegionLayer };
+})();
+__m['localframe.js'] = (() => {
+// Route planning anywhere on the Moon (pure; browser and Node). The route planner (route-plan.js) works in the
+// south polar stereographic plane of terrain.js (toXY / fromXY): node spacing, slopes and the stereographic
+// scale correction all follow from it. A local frame turns the sphere so that a chosen centre sits at the south
+// pole; in that frame the same stereographic formulas hold exactly (an oblique stereographic projection tangent
+// at the centre), so the planner runs unchanged on a DEM sampled from the global LOLA terrain around the centre.
+// Its results are turned back into lat/lon (and so into the Map's polar km, which cover the whole sphere bar the
+// north pole).
+const { toXY, fromXY } = __m['terrain.js'];
+
+const RAD = Math.PI / 180, DEG = 180 / Math.PI;
+const unit = (lat, lon) => { const c = Math.cos(lat * RAD); return [c * Math.cos(lon * RAD), c * Math.sin(lon * RAD), Math.sin(lat * RAD)]; };
+const ll = (v) => { const r = Math.hypot(v[0], v[1], v[2]); let lon = Math.atan2(v[1], v[0]) * DEG; if (lon < 0) lon += 360; return { latDeg: Math.asin(Math.max(-1, Math.min(1, v[2] / r))) * DEG, lonDeg: lon }; };
+
+// The rotation (3×3, row-major) that takes the centre to the south pole (0, 0, −1), by Rodrigues' formula.
+function createLocalFrame(latDeg, lonDeg) {
+  const c = unit(latDeg, lonDeg), s = [0, 0, -1];
+  let ax = [c[1] * s[2] - c[2] * s[1], c[2] * s[0] - c[0] * s[2], c[0] * s[1] - c[1] * s[0]];
+  const sin = Math.hypot(...ax), cos = c[0] * s[0] + c[1] * s[1] + c[2] * s[2];
+  let M;
+  if (sin < 1e-12) M = cos > 0 ? [1, 0, 0, 0, 1, 0, 0, 0, 1] : [1, 0, 0, 0, -1, 0, 0, 0, -1];   // already the south pole, or the north pole (turn about x)
+  else {
+    ax = ax.map((v) => v / sin);
+    const [x, y, z] = ax, t = 1 - cos;
+    M = [cos + x * x * t, x * y * t - z * sin, x * z * t + y * sin,
+      y * x * t + z * sin, cos + y * y * t, y * z * t - x * sin,
+      z * x * t - y * sin, z * y * t + x * sin, cos + z * z * t];
+  }
+  const mul = (v) => [M[0] * v[0] + M[1] * v[1] + M[2] * v[2], M[3] * v[0] + M[4] * v[1] + M[5] * v[2], M[6] * v[0] + M[7] * v[1] + M[8] * v[2]];
+  const mulT = (v) => [M[0] * v[0] + M[3] * v[1] + M[6] * v[2], M[1] * v[0] + M[4] * v[1] + M[7] * v[2], M[2] * v[0] + M[5] * v[1] + M[8] * v[2]];
+  return {
+    centre: { latDeg, lonDeg },
+    toLocal(la, lo) { const p = ll(mul(unit(la, lo))); return toXY(p.latDeg, p.lonDeg); },
+    fromLocal(x, y) { const p = fromXY(x, y); return ll(mulT(unit(p.latDeg, p.lonDeg))); },
+  };
+}
+
+// The centre for a route: the mean direction of its points (lat/lon).
+function centreOf(points) {
+  const v = [0, 0, 0];
+  for (const p of points) { const u = unit(p.latDeg, p.lonDeg); v[0] += u[0]; v[1] += u[1]; v[2] += u[2]; }
+  return ll(v);
+}
+
+// A DEM level for route-plan.js in a local frame: the grid of `kmPerPixel` over ±halfKm, heights from
+// heightAt(lat, lon) (metres, NaN or null where unknown).
+function localDem(frame, { halfKm, kmPerPixel, heightAt }) {
+  const size = Math.round((2 * halfKm) / kmPerPixel);
+  return {
+    size, kmPerPixel, halfKm: (size * kmPerPixel) / 2,
+    heightAtXY(x, y) {
+      if (Math.abs(x) > halfKm || Math.abs(y) > halfKm) return null;
+      const p = frame.fromLocal(x, y);
+      const h = heightAt(p.latDeg, p.lonDeg);
+      return Number.isFinite(h) ? h : null;
+    },
+  };
+}
+
+// A plan from route-plan.js with every map-km coordinate passed through f([x, y]) → [x', y'] (local km to the Map's
+// polar km). Route profiles keep their ground km and grades (they do not depend on the projection).
+function mapPlan(plan, f) {
+  if (!plan) return plan;
+  const pts = (a) => (Array.isArray(a) ? a.map((p) => f(p)) : a);
+  const out = { ...plan, waypoints: pts(plan.waypoints) };
+  if (plan.traps?.cells) out.traps = { ...plan.traps, cells: pts(plan.traps.cells) };
+  out.routes = (plan.routes ?? []).map((r) => {
+    const q = { ...r, points: pts(r.points) };
+    if (r.oneWay) q.oneWay = r.oneWay.map((seg) => seg.map((p) => f(p)));
+    if (r.profile?.x) {
+      const n = r.profile.x.length, X = new Float32Array(n), Y = new Float32Array(n);
+      for (let i = 0; i < n; i++) { const [a, b] = f([r.profile.x[i], r.profile.y[i]]); X[i] = a; Y[i] = b; }
+      q.profile = { ...r.profile, x: X, y: Y };
+    }
+    return q;
+  });
+  return out;
+}
+
+return { createLocalFrame, centreOf, localDem, mapPlan };
 })();
 __m['lander/skyline.js'] = (() => {
 // The local skyline anywhere on the Moon: highest terrain elevation angle in each azimuth, seen from 2 m above
@@ -12039,32 +12680,6 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
 
 return { coordText, readRows, rowsFromPoints, rowTag, routeFigures, roverLines, energyLines, COVERAGE_BINS, commsLines, havenLines, linkStrip, departuresLine, batteryChart, routeSentence, planMatches, autoLines, createRoutePlanCard };
 })();
-__m['slope-colours.js'] = (() => {
-// The slope colour scale shared by the 2D map and the 3D globe: a route coloured by the grade along the way
-// (its absolute value, uphill or downhill), in the bands a rover driver reads at a glance. Pure; no DOM.
-const SLOPE_BANDS = Object.freeze([
-  { maxDeg: 2, colour: '#22d3ee', label: '0–2°' },
-  { maxDeg: 5, colour: '#4ade80', label: '2–5°' },
-  { maxDeg: 8, colour: '#facc15', label: '5–8°' },
-  { maxDeg: 12, colour: '#fb923c', label: '8–12°' },
-  { maxDeg: 15, colour: '#ef4444', label: '12–15°' },
-  { maxDeg: Infinity, colour: '#d946ef', label: 'over 15°' },
-]);
-const SLOPE_UNKNOWN = '#9aa0a6';
-
-// The band of a grade in degrees (sign ignored); null or NaN → the unknown colour.
-function slopeBand(deg) {
-  if (!Number.isFinite(deg)) return null;
-  const a = Math.abs(deg);
-  return SLOPE_BANDS.find((b) => a < b.maxDeg) ?? SLOPE_BANDS[SLOPE_BANDS.length - 1];
-}
-const slopeColour = (deg) => slopeBand(deg)?.colour ?? SLOPE_UNKNOWN;
-
-// '#rrggbb' → [r, g, b] in 0–1 (for three.js vertex colours).
-const rgb01 = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-
-return { SLOPE_BANDS, SLOPE_UNKNOWN, slopeBand, slopeColour, rgb01 };
-})();
 __m['map/routes-layer.js'] = (() => {
 // Planned route candidates on the map (phase 4 §6 R): the three candidates of route-plan.js and their
 // waypoints, drawn into one SVG <g>. The selected candidate is a solid line over a dark casing; the others
@@ -16498,142 +17113,6 @@ function findHavens({ dem, mob, power: p0 = {}, profile, drive, sky, opts = {} }
 }
 
 return { HAVEN_DEFAULTS, bearing, relAngle, isHaven, checkpoints, findHavens };
-})();
-__m['route3d.js'] = (() => {
-// Phase 6 (docs/PHASES.md): a planned route and its simulated drive, handed from the navigator to the 3D
-// globe (demo/globe.html#route=1) through localStorage, and the rover's state at any time on it. Pure; no
-// DOM, no three.js (globe-route.js draws it).
-//
-// Payload v1 = {
-//   v: 1, label, routeId, lengthKm, departMs, arriveMs | null, reserve (0–1),
-//   pts: [[latDeg, lonDeg, km, tMs | null, soc (0–1) | null, flags, gradeDeg | null, heightM | null], …]
-//        flags: 1 lit, 2 Earth in view, 4 station link, 8 one-way stretch (going down more steeply than the
-//        climb limit); gradeDeg: grade along the way (+ uphill), heightM: terrain height (both optional; older
-//        payloads stop at flags)
-//   stops: [{ latDeg, lonDeg, km, fromMs, toMs }], havens: [{ latDeg, lonDeg }], emptyAt: { latDeg, lonDeg, km, tMs } | null
-//   wps: [{ latDeg, lonDeg }]   the planned start, waypoints and end (optional)
-//   traps: { cellKm, cells: [[latDeg, lonDeg], …] } | null   ground the rover could drive into but not out of
-// }
-const { fromXY, toXY } = __m['terrain.js'];
-
-const ROUTE3D_KEY = 'lsn-route3d';
-const FLAGS = Object.freeze({ lit: 1, earth: 2, station: 4, oneWay: 8 });
-
-// The payload from a planned route (route-plan.js), its drive (route-energy.js), station links (comms.js),
-// havens (contingency.js). Keeps at most maxPts points (every k-th sample, plus the last one reached).
-// heightAtXY(xKm, yKm) → metres adds the terrain height per point; waypoints ([[x, y], …]) and traps (the plan's
-// { cellKm, cells: [[x, y], …] }, thinned to maxTrapCells) go along for the 3D view and saved missions.
-function buildPayload({ route, drive = null, links = null, havens = null, power = null, mobility = null, heightAtXY = null, waypoints = null, traps = null, maxPts = 400, maxTrapCells = 2500 }) {
-  const p = route.profile, n = p.km.length, per = drive?.perSample ?? null;
-  const cap = power?.batteryWh ?? null;
-  const onWay = new Uint8Array(n);
-  if (route.oneWay?.length) {
-    // a sample is one-way when it lies on a one-way segment (segments are straight runs along the line)
-    for (let i = 0; i < n; i++) for (const [[ax, ay], [bx, by]] of route.oneWay) {
-      const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
-      const t = L2 > 0 ? ((p.x[i] - ax) * dx + (p.y[i] - ay) * dy) / L2 : 0;
-      if (t >= -0.01 && t <= 1.01 && Math.hypot(p.x[i] - ax - t * dx, p.y[i] - ay - t * dy) < 0.05) { onWay[i] = 1; break; }
-    }
-  }
-  const step = Math.max(1, Math.ceil(n / maxPts));
-  const pts = [];
-  let km = 0;
-  for (let i = 0; i < n; i++) {
-    const reached = per ? Number.isFinite(per.tMs[i]) : true;
-    if (i % step === 0 || i === n - 1 || (per && reached && !Number.isFinite(per.tMs[i + 1] ?? NaN))) {
-      const { latDeg, lonDeg } = fromXY(p.x[i], p.y[i]);
-      const flags = (per?.lit[i] ? FLAGS.lit : 0) | (per?.earth[i] ? FLAGS.earth : 0) | (links?.ok[i] ? FLAGS.station : 0) | (onWay[i] ? FLAGS.oneWay : 0);
-      const grade = Number.isFinite(p.pitch?.[i]) ? +(Math.atan(p.pitch[i]) * 180 / Math.PI).toFixed(2) : null;
-      const h = heightAtXY ? heightAtXY(p.x[i], p.y[i]) : null;
-      pts.push([+latDeg.toFixed(6), +lonDeg.toFixed(6), +km.toFixed(4), reached && per ? Math.round(per.tMs[i]) : null, per && cap && reached ? +(per.socWh[i] / cap).toFixed(4) : null, flags, grade, Number.isFinite(h) ? Math.round(h * 10) / 10 : null]);
-    }
-    km += p.km[i];
-  }
-  const ll = (x, y) => { const q = fromXY(x, y); return { latDeg: +q.latDeg.toFixed(6), lonDeg: +q.lonDeg.toFixed(6) }; };
-  const seen = new Set(), hv = [];
-  for (const c of havens?.checkpoints ?? []) {
-    if (!c.haven) continue;
-    const k = `${c.haven.x.toFixed(2)},${c.haven.y.toFixed(2)}`;
-    if (!seen.has(k)) { seen.add(k); hv.push(ll(c.haven.x, c.haven.y)); }
-  }
-  return {
-    v: 1, label: route.label, routeId: route.id, lengthKm: route.lengthKm,
-    limits: mobility ? { climbDeg: mobility.climbDeg, descentDeg: mobility.descentDeg, crossDeg: mobility.crossDeg } : null,
-    departMs: drive?.departMs ?? null, arriveMs: drive?.ok ? drive.arriveMs : null, reserve: power?.reserve ?? null,
-    pts,
-    stops: (drive?.stops ?? []).map((st) => ({ ...ll(st.x, st.y), km: st.km, fromMs: st.fromMs, toMs: st.toMs })),
-    havens: hv,
-    emptyAt: drive?.emptyAt ? { ...ll(drive.emptyAt.x, drive.emptyAt.y), km: drive.emptyAt.km, tMs: drive.emptyAt.tMs } : null,
-    wps: (waypoints ?? []).map(([x, y]) => ll(x, y)),
-    traps: traps?.cells?.length ? { cellKm: traps.cellKm, cells: thin(traps.cells, maxTrapCells).map(([x, y]) => { const q = ll(x, y); return [+q.latDeg.toFixed(5), +q.lonDeg.toFixed(5)]; }) } : null,
-  };
-}
-
-// Every k-th item so that at most max remain.
-const thin = (a, max) => (a.length <= max ? a : a.filter((_, i) => i % Math.ceil(a.length / max) === 0));
-
-// A payload read back (from JSON); null when it is not one.
-function parsePayload(text) {
-  try {
-    const p = typeof text === 'string' ? JSON.parse(text) : text;
-    if (!p || p.v !== 1 || !Array.isArray(p.pts) || p.pts.length < 2) return null;
-    if (!p.pts.every((q) => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1]) && Number.isFinite(q[2]))) return null;
-    return p;
-  } catch { return null; }
-}
-
-// The span of the drive in time: [departMs, end], end = arrival, or when the battery ran out, or the last time.
-function timeSpan(p) {
-  const ts = p.pts.map((q) => q[3]).filter(Number.isFinite);
-  if (!ts.length || !Number.isFinite(p.departMs)) return null;
-  const end = p.arriveMs ?? p.emptyAt?.tMs ?? ts[ts.length - 1];
-  return [p.departMs, Math.max(end, ts[ts.length - 1])];
-}
-
-// The rover at time tMs: { latDeg, lonDeg, km, soc, flags, state: 'ready' | 'driving' | 'parked' | 'arrived'
-// | 'empty', i (the point before it) }. Positions are interpolated linearly in lat/lon (points are ≤ ~150 m apart).
-function roverAt(p, tMs) {
-  const pts = p.pts, timed = pts.filter((q) => Number.isFinite(q[3]));
-  const at = (q, state, i) => ({ latDeg: q[0], lonDeg: q[1], km: q[2], soc: q[4], flags: q[5], state, i });
-  if (!timed.length) return at(pts[0], 'ready', 0);
-  if (!(tMs > (p.departMs ?? timed[0][3]))) return at(pts[0], 'ready', 0);
-  for (const st of p.stops ?? []) if (tMs >= st.fromMs && tMs < st.toMs) {
-    const i = Math.max(0, pts.findIndex((q) => q[2] >= st.km) - 1);
-    return { latDeg: st.latDeg, lonDeg: st.lonDeg, km: st.km, soc: pts[i]?.[4] ?? null, flags: pts[i]?.[5] ?? 0, state: 'parked', i };
-  }
-  const last = timed[timed.length - 1];
-  if (tMs >= last[3]) {
-    const i = pts.indexOf(last);
-    if (p.emptyAt) return { ...at(last, 'empty', i), latDeg: p.emptyAt.latDeg, lonDeg: p.emptyAt.lonDeg, km: p.emptyAt.km };
-    return at(pts[pts.length - 1], p.arriveMs ? 'arrived' : 'driving', pts.length - 1);
-  }
-  // first timed point → depart: interpolate from the start
-  let i = 0;
-  while (i + 1 < pts.length && !(Number.isFinite(pts[i + 1][3]) && pts[i + 1][3] > tMs)) i++;
-  const a = pts[i], b = pts[i + 1];
-  const ta = Number.isFinite(a[3]) ? a[3] : p.departMs, tb = b[3];
-  // a stop between a and b: the rover waits at the stop, so drive the remaining time only
-  const stop = (p.stops ?? []).find((st) => st.km >= a[2] - 1e-6 && st.km <= b[2] + 1e-6 && st.toMs <= tb);
-  const t0 = stop && tMs >= stop.toMs ? stop.toMs : ta;
-  const f = tb > t0 ? Math.min(1, Math.max(0, (tMs - t0) / (tb - t0))) : 1;
-  let dl = b[1] - a[1];
-  if (dl > 180) dl -= 360; else if (dl < -180) dl += 360;
-  return {
-    latDeg: a[0] + (b[0] - a[0]) * f, lonDeg: (a[1] + dl * f + 360) % 360, km: a[2] + (b[2] - a[2]) * f,
-    soc: a[4] !== null && b[4] !== null ? a[4] + (b[4] - a[4]) * f : a[4] ?? b[4], flags: f < 0.5 ? a[5] : b[5], state: 'driving', i,
-  };
-}
-
-// A camera that frames the whole route: centre and distance (km) for globe-view.js flyTo.
-function frameRoute(p) {
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (const q of p.pts) { const [x, y] = toXY(q[0], q[1]); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-  const c = fromXY((x0 + x1) / 2, (y0 + y1) / 2);
-  const extent = Math.max(x1 - x0, y1 - y0, 2);
-  return { lat: c.latDeg, lon: c.lonDeg, dist: extent * 1.6, tilt: 45, heading: 0 };
-}
-
-return { ROUTE3D_KEY, FLAGS, buildPayload, parsePayload, timeSpan, roverAt, frameRoute };
 })();
 __m['ui/inset3d.js'] = (() => {
 // Floating map extras, bottom left over the map: the slope legend (a frosted chip) and the 3D preview window
@@ -23450,6 +23929,7 @@ __m['main.js'] = (() => {
 const { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } = __m['mission-flow.js'];
 const { createGlobeMap } = __m['ui/globemap.js'];
 const { createRegionLayer } = __m['ui/regionlayer.js'];
+const { createLocalFrame, centreOf, localDem, mapPlan } = __m['localframe.js'];
 const { createSiteContexts } = __m['lander/globalsite.js'];
 const { bootScreen } = __m['boot.js'];
 const { createEphemeris, bodyAzEl } = __m['ephemeris.js'];
@@ -23765,13 +24245,7 @@ function start() {
     onClear: (what) => { if (what === 'route') { clearPlanned(); api.setRoute(null); } else api.setRegion(what, null); },
     onShape: (shape) => {
       if (shape.type !== 'route') { kind = 'region'; api.setRegion(state.slot, shape); return; }
-      kind = 'route';
-      // a route drawn by hand also fills the Route plan card's points (planning waits for its Plan button)
-      plannedRoute = null;
-      rp = { ...rp, points: shape.points, plan: null, selected: null };
-      routePlanCard?.update({ points: shape.points, plan: null, selected: null });
-      api.setRoute(shape.points);
-      persistRoutePlan();
+      setHandRoute(shape.points);
     },
     onViewport: (viewport) => update({ viewport }),
     onFilters: ({ maxSlope, maxDark }) => update({ maxSlope, maxDark }),
@@ -23802,6 +24276,8 @@ function start() {
     });
     // the polar map's view follows the ground in sight (it loads the finer terrain and heat for it)
     globeMap.onPolarView = (v) => update({ viewport: v });
+    // the globe's own Route tool (anywhere on the Moon)
+    globeMap.onRouteDrawn = (lls) => setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg)));
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
       topbar: shell.topbar, getMission: () => readMission(),
@@ -23893,7 +24369,7 @@ function start() {
   // fix L5: a planned route in the hash is planned again once the first heat map is in
   let rpRestore = state.routePlan?.selected ? { ...state.routePlan } : null;
   function persistRoutePlan() { persist({ routePlan: cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null) }); }
-  const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar }, {
+  const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar, maxLatDeg: 90 }, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
     onPlan: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility, departMs: null }; routePlanCard.update({ departures: null }); runPlan(points, maxSlopeDeg).catch(() => {}); },
@@ -23904,7 +24380,7 @@ function start() {
       const g = plan?.fine?.grid ?? coarse?.grid;
       if (!r?.profile || !rp.plan.mobility || !g) return;
       const fromMs = Math.max(eph.startMs, state.landingMs ?? timelineNow());
-      const scan = scanDepartures(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, sky: skyFromGrid(g, eph, bodyAzEl, fromXY), fromMs, toMs: Math.min(eph.endMs, fromMs + 60 * 86400e3) });
+      const scan = scanDepartures(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, sky: skyAny(g), fromMs, toMs: Math.min(eph.endMs, fromMs + 60 * 86400e3) });
       routePlanCard.update({ departures: { routeId: r.id, scan } });
     },
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
@@ -23993,11 +24469,45 @@ function start() {
     mapView?.frame.redrawShapes({ routePlan: rp });
     const sel = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
     slopeLegend.setShown(rp.routeColour !== 'plain' && !!sel?.profile?.x?.length);
+    // a route away from the polar picture: drawn on the globe itself
+    if (globeMap) {
+      if (!isGlobalRoute(rp.points)) globeMap.setGlobalRoute(null);
+      else {
+        const ll = (pts) => (pts ?? []).map(([x, y]) => fromXY(x, y));
+        const payload = sel?.profile ? route3dPayload() : null;
+        globeMap.setGlobalRoute({
+          payload, colourBy: rp.routeColour === 'plain' ? 'state' : 'slope',
+          candidates: rp.plan?.ok ? rp.plan.routes.filter((r) => r.id !== rp.selected && r.points?.length && !r.sameAs).map((r) => ({ points: ll(r.points) })) : [],
+          hand: rp.plan?.ok ? null : ll(rp.points), waypoints: ll(rp.plan?.waypoints ?? rp.points),
+        });
+      }
+    }
   }
   function dem240() {
     const l = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
     if (l) return Promise.resolve(l);
     return loadData('dem_240m').then((bytes) => { if (!pyramid.levels.some((x) => !x.tiled && x.kmPerPixel === 0.24)) onPack('dem_240m', bytes); packs.dem_240m = 'ok'; return pyramid.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24); });
+  }
+  // the same planner on the global LOLA terrain (474 m) around the route, in a local frame centred on it; the Sun
+  // share for the sunny candidate from the ephemeris with a smooth horizon (globalheat.js); no PSR outside the poles
+  async function planGlobal(points, maxSlopeDeg, signal) {
+    const lls = points.map(([x, y]) => fromXY(x, y));
+    const c = centreOf(lls), frameL = createLocalFrame(c.latDeg, c.lonDeg);
+    const loc = lls.map((p) => frameL.toLocal(p.latDeg, p.lonDeg));
+    const halfKm = Math.min(420, Math.max(...loc.flat().map(Math.abs)) + 45);
+    const pad = halfKm / 30.3, la0 = Math.max(-90, Math.min(...lls.map((p) => p.latDeg)) - pad), la1 = Math.min(90, Math.max(...lls.map((p) => p.latDeg)) + pad);
+    const lonPad = Math.min(180, pad / Math.max(0.05, Math.cos(Math.max(Math.abs(la0), Math.abs(la1)) * Math.PI / 180)));
+    const lons = lls.map((p) => p.lonDeg), lo0 = Math.min(...lons) - lonPad, lo1 = Math.max(...lons) + lonPad;
+    routePlanCard.update({ progress: 0.02 });
+    await globeMap.need(la0, la1, lo0, lo1);
+    if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const dem = localDem(frameL, { halfKm, kmPerPixel: 0.474, heightAt: (la, lo) => globeMap.heightAt(la, lo) });
+    const sunAt = (x, y) => { const p = frameL.fromLocal(x, y); return globeMap.sunShare(p.latDeg, p.lonDeg); };
+    const result = await planRoutes({ points: loc, dem, sunAt, isPsr: null, maxSlopeDeg, mobility: rp.mobility ?? {} },
+      { signal, onProgress: (f) => routePlanCard.update({ progress: f }) });
+    const back = mapPlan(result, ([x, y]) => { const p = frameL.fromLocal(x, y); return toXY(p.latDeg, p.lonDeg); });
+    back.global = { terrainM: 474, centre: c };
+    return back;
   }
   async function runPlan(points, maxSlopeDeg, { pick = 'short', fit = true } = {}) {
     rpAbort?.abort();
@@ -24005,6 +24515,14 @@ function start() {
     rpAbort = ac;
     routePlanCard.update({ points, maxSlopeDeg, running: true, progress: 0 });
     try {
+      if (globeMap && isGlobalRoute(points)) {
+        const result = await planGlobal(points, maxSlopeDeg, ac.signal);
+        const first = result.ok ? (result.routes.some((r) => r.id === pick && r.points?.length) ? pick : 'short') : null;
+        rp = { ...rp, points, maxSlopeDeg, plan: result, selected: first, hovered: null };
+        routePlanCard.update({ running: false, plan: result, selected: rp.selected, hovered: null });
+        if (result.ok) { pickPlanned(first); if (fit) fitPlanned(null); } else { redrawRoutes(); persistRoutePlan(); }
+        return result;
+      }
       const dem = await dem240();
       if (ac.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
       loadExtras();
@@ -24092,10 +24610,10 @@ function start() {
   function updateEnergy() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
     const g = plan?.fine?.grid ?? coarse?.grid;
-    if (!r?.profile || !rp.plan.mobility || !g) { rp = { ...rp, energy: null }; routePlanCard?.update({ energy: null }); return; }
+    if (!r?.profile || !rp.plan.mobility || (!g && !rp.plan.global)) { rp = { ...rp, energy: null }; routePlanCard?.update({ energy: null }); return; }
     const departMs = rp.departMs ?? timelineNow();
-    const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
-    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id, skyKm: g.cellKm } };
+    const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyAny(g) });
+    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id, skyKm: rp.plan.global ? null : g.cellKm } };
     routePlanCard?.update({ energy: rp.energy });
     updateHavens();
     updateComms();
@@ -24110,8 +24628,9 @@ function start() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
     const dem240 = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
     const g = plan?.fine?.grid ?? coarse?.grid;
-    if (!r?.profile || !rp.energy || !dem240 || !g) { rp = { ...rp, havens: null }; routePlanCard?.update({ havens: null }); return; }
-    const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
+    // (havens are searched on the polar 240 m grid: not for a route planned on the global terrain)
+    if (!r?.profile || !rp.energy || !dem240 || !g || rp.plan.global) { rp = { ...rp, havens: null }; routePlanCard?.update({ havens: null }); return; }
+    const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyAny(g) });
     rp = { ...rp, havens: { routeId: r.id, result, stamp: Date.now() } };
     routePlanCard?.update({ havens: rp.havens });
     pushInset();
@@ -24120,7 +24639,21 @@ function start() {
   function terrainHeight(x, y) {
     const ls = pyramid?.levels ?? [];
     for (let i = ls.length - 1; i >= 0; i--) { const v = ls[i].sample(x, y); if (v === v) return v; }
+    // away from the polar data: the global LOLA terrain
+    if (globeMap) { const p = fromXY(x, y), h = globeMap.heightAt(p.latDeg, p.lonDeg); if (Number.isFinite(h)) return h; }
     return null;
+  }
+  // the Sun and Earth over the local skyline for the drive: the polar horizon grid where it exists, elsewhere a
+  // smooth horizon from the ephemeris (labelled in the route card's note)
+  function skyAny(g) {
+    const polar = g ? skyFromGrid(g, eph, bodyAzEl, fromXY) : null;
+    return (x, y, tMs) => {
+      const s0 = polar ? polar(x, y, tMs) : null;
+      if (s0 && Number.isFinite(s0.sunDeg)) return s0;
+      const { latDeg, lonDeg } = fromXY(x, y), r = bodyAzEl(eph, { latDeg, lonDeg }, tMs);
+      if (!r) return null;
+      return { sunDeg: r.sun.elDeg, earthDeg: r.earth.elDeg, azDeg: r.sun.azDeg, elDeg: r.sun.elDeg, earthAzDeg: r.earth.azDeg, earthElDeg: r.earth.elDeg };
+    };
   }
   function updateComms() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
@@ -24147,8 +24680,27 @@ function start() {
   }
   // fix L3: ease the map to the candidates (all of them after planning, the picked one on a click), in the
   // space between the open panels and bars; the panels stay as they are
+  // a route drawn by hand (the polar map's Route tool, or the globe's anywhere on the Moon) fills the Route plan card's
+  // points; planning waits for its Plan button
+  function setHandRoute(points) {
+    kind = 'route';
+    plannedRoute = null;
+    rp = { ...rp, points, plan: null, selected: null };
+    routePlanCard?.update({ points, plan: null, selected: null });
+    api.setRoute(points);
+    persistRoutePlan();
+    redrawRoutes();
+  }
+  // a route with a point outside the polar data (north of 80°S) is planned on the global LOLA terrain in a local
+  // frame (localframe.js) and drawn on the globe itself
+  const isGlobalRoute = (pts) => (pts ?? []).some((p) => fromXY(p[0], p[1]).latDeg > TERRAIN_MAX_LAT);
   function fitPlanned(id) {
     if (!mapView) return;
+    if (globeMap && isGlobalRoute(rp.points)) {
+      const routes = (rp.plan?.routes ?? []).filter((r) => r.points?.length && (!id || r.id === id));
+      globeMap.flyToPoints(routes.flatMap((r) => r.points).map(([x, y]) => fromXY(x, y)));
+      return;
+    }
     const routes = (rp.plan?.routes ?? []).filter((r) => r.points?.length && (!id || r.id === id));
     mapView?.fitRoute(routes.flatMap((r) => r.points));
   }

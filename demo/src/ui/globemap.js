@@ -11,7 +11,8 @@
 // events at the same ground point, so its picking, snapping, hover card and drawing tools (rectangle, circle,
 // polygon, route) work unchanged on the 3D surface. North of 80°S a click picks the site; drawing needs the polar
 // terrain (the region statistics and the rover planner run on it).
-import { createGlobeTerrain, MOON_R_KM } from '../globe-terrain.js';
+import { createGlobeTerrain, MOON_R_KM, G2 } from '../globe-terrain.js';
+import { createRouteLayer } from '../globe-route.js';
 import { createGlobeView } from '../globe-view.js';
 import { toXY, fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { loadData } from '../data-loader.js';
@@ -233,6 +234,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   let lastUpd = 0;
   function frameTick() {
     const now = performance.now();
+    if (gRoute?.layer) gRoute.layer.frame(`${terrain.version ?? 0}`);
+    if (draft && getState().tool !== 'route') { draft = null; drawDraft(); }
     if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); placeLabels(); }
     // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
     const st = getState();
@@ -419,9 +422,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   const say = (text) => { note.textContent = text; note.hidden = !text; clearTimeout(say.t); if (text) say.t = setTimeout(() => { note.hidden = true; }, 3500); };
   canvas.addEventListener('pointerdown', (e) => {
     down = { x: e.clientX, y: e.clientY, tool: getState().tool ?? 'select' };
-    if (down.tool === 'select' || e.button !== 0) return;
+    if (down.tool === 'select' || down.tool === 'route' || e.button !== 0) return;   // the Route tool draws on the globe itself
     const h = hit(e);
-    if (!h || h.latDeg > POLAR_LAT) { say('Drawing needs the polar terrain: draw south of 80°S (the region statistics and the rover planner run on it).'); down = null; return; }
+    if (!h || h.latDeg > POLAR_LAT) { say('Regions need the polar data (south of 80°S): its Sun and Earth grids give their statistics. Routes can be drawn anywhere.'); down = null; return; }
     gesturing = true;
     send('pointerdown', frameClient(h.latDeg, h.lonDeg));
   });
@@ -431,6 +434,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     moveAt = now;
     const h = hit(e);
     if (!h) return;
+    if (draft) { draft.cursor = snapped(e, h); drawDraft(); }
     if (h.latDeg > POLAR_LAT) { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); return; }
     const at = frameClient(h.latDeg, h.lonDeg);
     send('pointermove', at, { buttons: gesturing ? 1 : 0 });
@@ -444,6 +448,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     if (!d) return;
     const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4;
     const h = hit(e);
+    if (d.tool === 'route') { if (!moved && h) addDraftPoint(snapped(e, h)); return; }
     if (d.tool !== 'select') {
       if (h && h.latDeg <= POLAR_LAT) send('pointerup', frameClient(h.latDeg, h.lonDeg));
       gesturing = false; schedule(30);
@@ -456,13 +461,130 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   });
   canvas.addEventListener('dblclick', (e) => {
     if ((getState().tool ?? 'select') === 'select') return;   // the globe zooms in itself
+    if (getState().tool === 'route') { finishDraft(); return; }
     const h = hit(e);
     if (h && h.latDeg <= POLAR_LAT) { send('dblclick', frameClient(h.latDeg, h.lonDeg), { detail: 2 }); schedule(40); }
   });
   canvas.addEventListener('pointerleave', () => { if (!gesturing) host.dispatchEvent(new PointerEvent('pointerleave')); });
 
+  // ---- the Route tool on the globe, anywhere on the Moon: click to add points (a click near a listed site snaps to
+  // it), double-click or Enter to finish, Backspace to drop the last point, Esc to cancel ----
+  let draft = null, draftObj = null;
+  function snapped(e, h) {
+    const r = canvas.getBoundingClientRect();
+    let best = null, bd = 14;
+    for (const s0 of sites) {
+      const p = view.project(s0.latDeg, s0.lonDeg);
+      if (!p) continue;
+      const d = Math.hypot(p.x - (e.clientX - r.left), p.y - (e.clientY - r.top));
+      if (d < bd) { bd = d; best = s0; }
+    }
+    return best ? { latDeg: best.latDeg, lonDeg: best.lonDeg, name: best.name } : { latDeg: +h.latDeg.toFixed(5), lonDeg: +h.lonDeg.toFixed(5) };
+  }
+  // a line along the surface through lat/lon points (great-circle steps), drawn over the terrain
+  function surfaceLine(lls, color, { dashed = false, opacity = 0.95 } = {}) {
+    const T = view.THREE, pts = [];
+    for (let i = 0; i + 1 < lls.length; i++) {
+      const a = lls[i], b = lls[i + 1];
+      const n = Math.max(2, Math.ceil(Math.hypot(b.latDeg - a.latDeg, ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * Math.cos(a.latDeg * RAD)) * 8));
+      for (let k = 0; k <= n; k++) {
+        const f = k / n, la = a.latDeg + (b.latDeg - a.latDeg) * f, lo = a.lonDeg + ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * f;
+        pts.push(new T.Vector3(...view.surface(la, lo, 0.02)));
+      }
+    }
+    const g = new T.BufferGeometry().setFromPoints(pts);
+    const m = dashed ? new T.LineDashedMaterial({ color, dashSize: 2, gapSize: 1.5, depthTest: false, transparent: true, opacity }) : new T.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity });
+    const line = new T.Line(g, m);
+    if (dashed) line.computeLineDistances();
+    line.renderOrder = 20;
+    return line;
+  }
+  function surfaceDots(lls, color, px = 7) {
+    const T = view.THREE;
+    const g = new T.BufferGeometry().setFromPoints(lls.map((p) => new T.Vector3(...view.surface(p.latDeg, p.lonDeg, 0.03))));
+    const pts = new T.Points(g, new T.PointsMaterial({ color, size: px, sizeAttenuation: false, depthTest: false, transparent: true }));
+    pts.renderOrder = 21;
+    return pts;
+  }
+  function clearObj(o) { if (!o) return; view.removeObject(o); o.traverse((x) => { x.geometry?.dispose?.(); x.material?.dispose?.(); }); }
+  function drawDraft() {
+    clearObj(draftObj); draftObj = null;
+    if (!draft) return;
+    const T = view.THREE, g = new T.Group();
+    const lls = draft.cursor ? [...draft.pts, draft.cursor] : draft.pts;
+    if (lls.length >= 2) g.add(surfaceLine(lls, 0xffffff));
+    if (draft.pts.length) g.add(surfaceDots(draft.pts, 0xffffff, 8));
+    view.addObject(g); draftObj = g;
+  }
+  function addDraftPoint(p) {
+    if (!draft) { draft = { pts: [], cursor: null }; say('Route: click to add points · double-click or Enter to finish · Backspace removes the last · Esc cancels'); }
+    const last = draft.pts[draft.pts.length - 1];
+    if (last && Math.abs(last.latDeg - p.latDeg) < 1e-6 && Math.abs(last.lonDeg - p.lonDeg) < 1e-6) return;
+    if (draft.pts.length >= 8) { say('At most 8 points: double-click or press Enter to finish.'); return; }
+    draft.pts.push(p); drawDraft();
+  }
+  function finishDraft() {
+    if (!draft) return;
+    const pts = draft.pts;
+    draft = null; drawDraft(); say('');
+    if (pts.length >= 2) api.onRouteDrawn?.(pts);
+    else say('A route needs a start and an end point.');
+  }
+  window.addEventListener('keydown', (e) => {
+    if (!draft || e.target.closest?.('input, textarea, select')) return;
+    if (e.key === 'Enter') { e.preventDefault(); finishDraft(); }
+    else if (e.key === 'Escape') { e.preventDefault(); draft = null; drawDraft(); say(''); }
+    else if (e.key === 'Backspace') { e.preventDefault(); draft.pts.pop(); if (!draft.pts.length) draft = null; drawDraft(); }
+  });
+
+  // ---- a route away from the polar picture, on the globe itself: the chosen route as a ribbon coloured by the
+  // drive or by slope (globe-route.js), the other candidates dashed, or the hand-drawn line with its points ----
+  let gRoute = null;   // { layer, extras }
+  function setGlobalRoute(data) {
+    if (!view) return;
+    if (gRoute) { gRoute.layer?.dispose(); clearObj(gRoute.extras); gRoute = null; }
+    if (!data) { view.redraw(); return; }
+    const T = view.THREE, extras = new T.Group();
+    let lay = null;
+    if (data.payload) {
+      lay = createRouteLayer(view, data.payload);
+      if (data.colourBy) lay.setColourBy(data.colourBy);
+      const q = data.payload.pts[0];
+      lay.setRover({ latDeg: q[0], lonDeg: q[1], km: 0, state: 'ready', soc: q[4] }, 0xffd23d, { headingDeg: 0, pitchDeg: 0, rollDeg: 0 });
+    }
+    for (const c of data.candidates ?? []) if (c.points.length >= 2) extras.add(surfaceLine(c.points, 0xbfc5cc, { dashed: true, opacity: 0.8 }));
+    if (data.hand?.length >= 2) extras.add(surfaceLine(data.hand, 0xffffff));
+    const wps = data.waypoints ?? data.hand ?? [];
+    if (wps.length) extras.add(surfaceDots(wps, 0xffffff, 9));
+    view.addObject(extras);
+    gRoute = { layer: lay, extras };
+  }
+
   const api = {
     view: null, ready, el: layer,
+    onRouteDrawn: null,
+    setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
+    // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
+    heightAt: (la, lo) => terrain.heightAt(la, lo),
+    need: (latMin, latMax, lonMin, lonMax) => terrain.need(G2, latMin, latMax, lonMin, lonMax, { max: 160 }),
+    // share of the planned stay with the Sun above a smooth horizon at a place (globalheat.js), or NaN
+    sunShare(la, lo) {
+      const st = getState();
+      if (!Number.isFinite(st.landingMs)) return NaN;
+      const f = fractions(st.landingMs, st.stayDays);
+      const j = Math.min(grid.h - 1, Math.max(0, Math.floor((90 - la) / grid.stepDeg))), i = Math.floor(((((lo % 360) + 360) % 360)) / grid.stepDeg) % grid.w;
+      return f.sun[j * grid.w + i];
+    },
+    // frame a set of points on the globe
+    flyToPoints(lls) {
+      if (!view || !lls.length) return;
+      let x = 0, y = 0, z = 0;
+      for (const p of lls) { const c = Math.cos(p.latDeg * RAD); x += c * Math.cos(p.lonDeg * RAD); y += c * Math.sin(p.lonDeg * RAD); z += Math.sin(p.latDeg * RAD); }
+      const lat = Math.asin(z / Math.hypot(x, y, z)) / RAD, lon = (Math.atan2(y, x) / RAD + 360) % 360;
+      let ext = 1;
+      for (const p of lls) ext = Math.max(ext, MOON_R_KM * RAD * Math.hypot(p.latDeg - lat, ((p.lonDeg - lon + 540) % 360 - 180) * Math.cos(lat * RAD)));
+      view.flyTo({ lat, lon, dist: Math.max(6, ext * 3.2), tilt: 0, heading: northUp(lat, lon), ms: 1200 });
+    },
     get picture() { return comp; },   // the draped polar picture (for inspection)
     onPolarView: null,
     // screen position (frame CSS px) of a ground point, for the sky dial; null when out of sight

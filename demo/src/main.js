@@ -3,6 +3,7 @@
 import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } from './mission-flow.js';
 import { createGlobeMap } from './ui/globemap.js';
 import { createRegionLayer } from './ui/regionlayer.js';
+import { createLocalFrame, centreOf, localDem, mapPlan } from './localframe.js';
 import { createSiteContexts } from './lander/globalsite.js';
 import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
@@ -318,13 +319,7 @@ function start() {
     onClear: (what) => { if (what === 'route') { clearPlanned(); api.setRoute(null); } else api.setRegion(what, null); },
     onShape: (shape) => {
       if (shape.type !== 'route') { kind = 'region'; api.setRegion(state.slot, shape); return; }
-      kind = 'route';
-      // a route drawn by hand also fills the Route plan card's points (planning waits for its Plan button)
-      plannedRoute = null;
-      rp = { ...rp, points: shape.points, plan: null, selected: null };
-      routePlanCard?.update({ points: shape.points, plan: null, selected: null });
-      api.setRoute(shape.points);
-      persistRoutePlan();
+      setHandRoute(shape.points);
     },
     onViewport: (viewport) => update({ viewport }),
     onFilters: ({ maxSlope, maxDark }) => update({ maxSlope, maxDark }),
@@ -355,6 +350,8 @@ function start() {
     });
     // the polar map's view follows the ground in sight (it loads the finer terrain and heat for it)
     globeMap.onPolarView = (v) => update({ viewport: v });
+    // the globe's own Route tool (anywhere on the Moon)
+    globeMap.onRouteDrawn = (lls) => setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg)));
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
       topbar: shell.topbar, getMission: () => readMission(),
@@ -446,7 +443,7 @@ function start() {
   // fix L5: a planned route in the hash is planned again once the first heat map is in
   let rpRestore = state.routePlan?.selected ? { ...state.routePlan } : null;
   function persistRoutePlan() { persist({ routePlan: cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null) }); }
-  const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar }, {
+  const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar, maxLatDeg: 90 }, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
     onPlan: ({ points, maxSlopeDeg, mobility }) => { rp = { ...rp, mobility, departMs: null }; routePlanCard.update({ departures: null }); runPlan(points, maxSlopeDeg).catch(() => {}); },
@@ -457,7 +454,7 @@ function start() {
       const g = plan?.fine?.grid ?? coarse?.grid;
       if (!r?.profile || !rp.plan.mobility || !g) return;
       const fromMs = Math.max(eph.startMs, state.landingMs ?? timelineNow());
-      const scan = scanDepartures(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, sky: skyFromGrid(g, eph, bodyAzEl, fromXY), fromMs, toMs: Math.min(eph.endMs, fromMs + 60 * 86400e3) });
+      const scan = scanDepartures(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, sky: skyAny(g), fromMs, toMs: Math.min(eph.endMs, fromMs + 60 * 86400e3) });
       routePlanCard.update({ departures: { routeId: r.id, scan } });
     },
     onUseDeparture: (ms) => { rp = { ...rp, departMs: ms }; updateEnergy(); },
@@ -546,11 +543,45 @@ function start() {
     mapView?.frame.redrawShapes({ routePlan: rp });
     const sel = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
     slopeLegend.setShown(rp.routeColour !== 'plain' && !!sel?.profile?.x?.length);
+    // a route away from the polar picture: drawn on the globe itself
+    if (globeMap) {
+      if (!isGlobalRoute(rp.points)) globeMap.setGlobalRoute(null);
+      else {
+        const ll = (pts) => (pts ?? []).map(([x, y]) => fromXY(x, y));
+        const payload = sel?.profile ? route3dPayload() : null;
+        globeMap.setGlobalRoute({
+          payload, colourBy: rp.routeColour === 'plain' ? 'state' : 'slope',
+          candidates: rp.plan?.ok ? rp.plan.routes.filter((r) => r.id !== rp.selected && r.points?.length && !r.sameAs).map((r) => ({ points: ll(r.points) })) : [],
+          hand: rp.plan?.ok ? null : ll(rp.points), waypoints: ll(rp.plan?.waypoints ?? rp.points),
+        });
+      }
+    }
   }
   function dem240() {
     const l = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
     if (l) return Promise.resolve(l);
     return loadData('dem_240m').then((bytes) => { if (!pyramid.levels.some((x) => !x.tiled && x.kmPerPixel === 0.24)) onPack('dem_240m', bytes); packs.dem_240m = 'ok'; return pyramid.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24); });
+  }
+  // the same planner on the global LOLA terrain (474 m) around the route, in a local frame centred on it; the Sun
+  // share for the sunny candidate from the ephemeris with a smooth horizon (globalheat.js); no PSR outside the poles
+  async function planGlobal(points, maxSlopeDeg, signal) {
+    const lls = points.map(([x, y]) => fromXY(x, y));
+    const c = centreOf(lls), frameL = createLocalFrame(c.latDeg, c.lonDeg);
+    const loc = lls.map((p) => frameL.toLocal(p.latDeg, p.lonDeg));
+    const halfKm = Math.min(420, Math.max(...loc.flat().map(Math.abs)) + 45);
+    const pad = halfKm / 30.3, la0 = Math.max(-90, Math.min(...lls.map((p) => p.latDeg)) - pad), la1 = Math.min(90, Math.max(...lls.map((p) => p.latDeg)) + pad);
+    const lonPad = Math.min(180, pad / Math.max(0.05, Math.cos(Math.max(Math.abs(la0), Math.abs(la1)) * Math.PI / 180)));
+    const lons = lls.map((p) => p.lonDeg), lo0 = Math.min(...lons) - lonPad, lo1 = Math.max(...lons) + lonPad;
+    routePlanCard.update({ progress: 0.02 });
+    await globeMap.need(la0, la1, lo0, lo1);
+    if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const dem = localDem(frameL, { halfKm, kmPerPixel: 0.474, heightAt: (la, lo) => globeMap.heightAt(la, lo) });
+    const sunAt = (x, y) => { const p = frameL.fromLocal(x, y); return globeMap.sunShare(p.latDeg, p.lonDeg); };
+    const result = await planRoutes({ points: loc, dem, sunAt, isPsr: null, maxSlopeDeg, mobility: rp.mobility ?? {} },
+      { signal, onProgress: (f) => routePlanCard.update({ progress: f }) });
+    const back = mapPlan(result, ([x, y]) => { const p = frameL.fromLocal(x, y); return toXY(p.latDeg, p.lonDeg); });
+    back.global = { terrainM: 474, centre: c };
+    return back;
   }
   async function runPlan(points, maxSlopeDeg, { pick = 'short', fit = true } = {}) {
     rpAbort?.abort();
@@ -558,6 +589,14 @@ function start() {
     rpAbort = ac;
     routePlanCard.update({ points, maxSlopeDeg, running: true, progress: 0 });
     try {
+      if (globeMap && isGlobalRoute(points)) {
+        const result = await planGlobal(points, maxSlopeDeg, ac.signal);
+        const first = result.ok ? (result.routes.some((r) => r.id === pick && r.points?.length) ? pick : 'short') : null;
+        rp = { ...rp, points, maxSlopeDeg, plan: result, selected: first, hovered: null };
+        routePlanCard.update({ running: false, plan: result, selected: rp.selected, hovered: null });
+        if (result.ok) { pickPlanned(first); if (fit) fitPlanned(null); } else { redrawRoutes(); persistRoutePlan(); }
+        return result;
+      }
       const dem = await dem240();
       if (ac.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
       loadExtras();
@@ -645,10 +684,10 @@ function start() {
   function updateEnergy() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
     const g = plan?.fine?.grid ?? coarse?.grid;
-    if (!r?.profile || !rp.plan.mobility || !g) { rp = { ...rp, energy: null }; routePlanCard?.update({ energy: null }); return; }
+    if (!r?.profile || !rp.plan.mobility || (!g && !rp.plan.global)) { rp = { ...rp, energy: null }; routePlanCard?.update({ energy: null }); return; }
     const departMs = rp.departMs ?? timelineNow();
-    const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
-    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id, skyKm: g.cellKm } };
+    const drive = simulateDrive(r.profile, { mob: rp.plan.mobility, power: rp.power ?? {}, departMs, sky: skyAny(g) });
+    rp = { ...rp, departMs, energy: { drive, departMs, routeId: r.id, skyKm: rp.plan.global ? null : g.cellKm } };
     routePlanCard?.update({ energy: rp.energy });
     updateHavens();
     updateComms();
@@ -663,8 +702,9 @@ function start() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
     const dem240 = pyramid?.levels.find((x) => !x.tiled && x.kmPerPixel === 0.24);
     const g = plan?.fine?.grid ?? coarse?.grid;
-    if (!r?.profile || !rp.energy || !dem240 || !g) { rp = { ...rp, havens: null }; routePlanCard?.update({ havens: null }); return; }
-    const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyFromGrid(g, eph, bodyAzEl, fromXY) });
+    // (havens are searched on the polar 240 m grid: not for a route planned on the global terrain)
+    if (!r?.profile || !rp.energy || !dem240 || !g || rp.plan.global) { rp = { ...rp, havens: null }; routePlanCard?.update({ havens: null }); return; }
+    const result = findHavens({ dem: dem240, mob: rp.plan.mobility, power: rp.power ?? {}, profile: r.profile, drive: rp.energy.drive, sky: skyAny(g) });
     rp = { ...rp, havens: { routeId: r.id, result, stamp: Date.now() } };
     routePlanCard?.update({ havens: rp.havens });
     pushInset();
@@ -673,7 +713,21 @@ function start() {
   function terrainHeight(x, y) {
     const ls = pyramid?.levels ?? [];
     for (let i = ls.length - 1; i >= 0; i--) { const v = ls[i].sample(x, y); if (v === v) return v; }
+    // away from the polar data: the global LOLA terrain
+    if (globeMap) { const p = fromXY(x, y), h = globeMap.heightAt(p.latDeg, p.lonDeg); if (Number.isFinite(h)) return h; }
     return null;
+  }
+  // the Sun and Earth over the local skyline for the drive: the polar horizon grid where it exists, elsewhere a
+  // smooth horizon from the ephemeris (labelled in the route card's note)
+  function skyAny(g) {
+    const polar = g ? skyFromGrid(g, eph, bodyAzEl, fromXY) : null;
+    return (x, y, tMs) => {
+      const s0 = polar ? polar(x, y, tMs) : null;
+      if (s0 && Number.isFinite(s0.sunDeg)) return s0;
+      const { latDeg, lonDeg } = fromXY(x, y), r = bodyAzEl(eph, { latDeg, lonDeg }, tMs);
+      if (!r) return null;
+      return { sunDeg: r.sun.elDeg, earthDeg: r.earth.elDeg, azDeg: r.sun.azDeg, elDeg: r.sun.elDeg, earthAzDeg: r.earth.azDeg, earthElDeg: r.earth.elDeg };
+    };
   }
   function updateComms() {
     const r = rp.plan?.ok ? rp.plan.routes.find((x) => x.id === rp.selected) : null;
@@ -700,8 +754,27 @@ function start() {
   }
   // fix L3: ease the map to the candidates (all of them after planning, the picked one on a click), in the
   // space between the open panels and bars; the panels stay as they are
+  // a route drawn by hand (the polar map's Route tool, or the globe's anywhere on the Moon) fills the Route plan card's
+  // points; planning waits for its Plan button
+  function setHandRoute(points) {
+    kind = 'route';
+    plannedRoute = null;
+    rp = { ...rp, points, plan: null, selected: null };
+    routePlanCard?.update({ points, plan: null, selected: null });
+    api.setRoute(points);
+    persistRoutePlan();
+    redrawRoutes();
+  }
+  // a route with a point outside the polar data (north of 80°S) is planned on the global LOLA terrain in a local
+  // frame (localframe.js) and drawn on the globe itself
+  const isGlobalRoute = (pts) => (pts ?? []).some((p) => fromXY(p[0], p[1]).latDeg > TERRAIN_MAX_LAT);
   function fitPlanned(id) {
     if (!mapView) return;
+    if (globeMap && isGlobalRoute(rp.points)) {
+      const routes = (rp.plan?.routes ?? []).filter((r) => r.points?.length && (!id || r.id === id));
+      globeMap.flyToPoints(routes.flatMap((r) => r.points).map(([x, y]) => fromXY(x, y)));
+      return;
+    }
     const routes = (rp.plan?.routes ?? []).filter((r) => r.points?.length && (!id || r.id === id));
     mapView?.fitRoute(routes.flatMap((r) => r.points));
   }
