@@ -27,6 +27,18 @@ export function unit(latDeg, lonDeg) {
   const cl = Math.cos(latDeg * RAD);
   return [cl * Math.cos(lonDeg * RAD), Math.sin(latDeg * RAD), -cl * Math.sin(lonDeg * RAD)];
 }
+// The great circle from a to b ({ latDeg, lonDeg }): the straight line on the sphere (the plane through both points
+// and the centre). arcGc → the angle between them (radians); onGc(a, b, f) → the point a fraction f of the way.
+// Interpolating latitude and longitude instead bends a line along the parallels, worst near the pole.
+const ecefUnit = (p) => { const la = p.latDeg * RAD, lo = p.lonDeg * RAD; return [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)]; };
+export function arcGc(a, b) { const A = ecefUnit(a), B = ecefUnit(b); return Math.acos(Math.max(-1, Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2]))); }
+export function onGc(a, b, f, d = arcGc(a, b)) {
+  if (d < 1e-9) return { latDeg: a.latDeg, lonDeg: a.lonDeg };
+  const A = ecefUnit(a), B = ecefUnit(b), s = Math.sin(d), wa = Math.sin((1 - f) * d) / s, wb = Math.sin(f * d) / s;
+  const x = wa * A[0] + wb * B[0], y = wa * A[1] + wb * B[1], z = wa * A[2] + wb * B[2];
+  return { latDeg: Math.asin(Math.max(-1, Math.min(1, z / Math.hypot(x, y, z)))) / RAD, lonDeg: ((Math.atan2(y, x) / RAD) + 360) % 360 };
+}
+
 export function toLatLon(x, y, z) {
   const r = Math.hypot(x, y, z);
   let lon = Math.atan2(-z, x) * DEG;

@@ -123,14 +123,17 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const pickWhy = h('span', { class: 'sr-only', id: ids('pick-why') }, '');
   const pickField = h('div', { class: 'field field-inline tool-pick' }, h('span', { class: 'label', id: ids('pick-label') }, 'Click sets'), pickSeg.el, pickWhy);
 
+  let lastTools = {};   // the tool column's last params, so the Sky dial button can change alone
   const tools = createMapTools({
     onTool: (tool) => cb.onTool(tool),
     onZoom: (dir) => {
-      if (dir !== 'fullscreen' && cb.onZoomOverride?.(dir)) return;   // the Map is the globe: its camera takes the zoom (reset: north up, straight down)
+      if (dir !== 'fullscreen' && cb.onZoomOverride?.(dir)) return;   // the Map is the globe: its camera takes the zoom and North up
+      if (dir === 'north') return;   // the flat polar map is always drawn with 0°E up
       if (dir === 'fullscreen') setFullScreen(!fullUi);
       else if (dir === 'reset') frame.resetView();
       else frame.zoomBy(dir === 'in' ? 1.5 : 1 / 1.5);
     },
+    onDial: () => cb.onDial?.(!dialPressed),
     onSlot: (slot) => cb.onSlot(slot),
     onClear: (what) => {
       cb.onClear(what);
@@ -389,7 +392,8 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   applyTerrain();
 
   function syncTools() {
-    tools.update({ tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!last.regions?.A, hasB: !!last.regions?.B, hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi });
+    lastTools = { tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!last.regions?.A, hasB: !!last.regions?.B, hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi };
+    tools.update({ ...lastTools, dialOn: dialPressed });
     // "Click sets" belongs to the Select tool; with a drawing tool it stays in place, greyed, and says why
     const off = last.tool !== 'select';
     for (const b of pickSeg.buttons) b.disabled = off;
@@ -412,7 +416,6 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   let dialPressed = true;
   function syncPointBar() {
     actionBar.set('point', 'site', [
-      { id: 'dial', label: 'Sky dial', short: 'Sky dial', icon: 'sun', pressed: dialPressed, title: 'Show or hide the sky dial on the map (K)', cls: 'dial-btn', onClick: () => cb.onDial?.(!dialPressed) },
       { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
       { type: 'divider' },
       // planning tools at other levels, then step 2 of the mission (mission-flow.js)
@@ -497,7 +500,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   function setLive({ now, countdown, dialOn } = {}) {
     if (now !== undefined && liveNow.textContent !== now) liveNow.textContent = now;
     if (countdown !== undefined && liveCount.textContent !== countdown) { liveCount.textContent = countdown; countRow.hidden = !countdown; }
-    if (dialOn !== undefined && dialPressed !== !!dialOn) { dialPressed = !!dialOn; syncPointBar(); }
+    if (dialOn !== undefined && dialPressed !== !!dialOn) { dialPressed = !!dialOn; tools.update({ ...lastTools, dialOn: dialPressed }); }
   }
 
   function renderBest(best) {
@@ -553,7 +556,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     renderSun();
     swPsr.set(params.showPsr);
     swDial.set(params.dialOn);
-    if (params.dialOn !== undefined && dialPressed !== !!params.dialOn) { dialPressed = !!params.dialOn; syncPointBar(); }
+    if (params.dialOn !== undefined && dialPressed !== !!params.dialOn) { dialPressed = !!params.dialOn; tools.update({ ...lastTools, dialOn: dialPressed }); }
     weightsSec.hidden = params.mode !== 'score';
     weights.update({ weights: params.weights });
     const nFilters = (params.filters?.maxSlope != null ? 1 : 0) + (params.filters?.maxDark != null ? 1 : 0);

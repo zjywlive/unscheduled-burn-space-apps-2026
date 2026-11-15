@@ -13,7 +13,7 @@
 // terrain (the region statistics and the rover planner run on it).
 import { createGlobeTerrain, MOON_R_KM, G2 } from '../globe-terrain.js';
 import { createRouteLayer } from '../globe-route.js';
-import { createGlobeView } from '../globe-view.js';
+import { createGlobeView, arcGc, onGc } from '../globe-view.js';
 import { toXY, fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { loadData } from '../data-loader.js';
 import { globalGrid, globalFractions } from '../globalheat.js';
@@ -505,10 +505,10 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const T = view.THREE, pts = [];
     for (let i = 0; i + 1 < lls.length; i++) {
       const a = lls[i], b = lls[i + 1];
-      const n = Math.max(2, Math.ceil(Math.hypot(b.latDeg - a.latDeg, ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * Math.cos(a.latDeg * RAD)) * 8));
+      const d = arcGc(a, b), n = Math.max(2, Math.ceil((d / RAD) * 8));   // 8 steps a degree of arc
       for (let k = 0; k <= n; k++) {
-        const f = k / n, la = a.latDeg + (b.latDeg - a.latDeg) * f, lo = a.lonDeg + ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * f;
-        pts.push(new T.Vector3(...view.surface(la, lo, 0.02)));
+        const q = onGc(a, b, k / n, d);
+        pts.push(new T.Vector3(...view.surface(q.latDeg, q.lonDeg, 0.02)));
       }
     }
     const g = new T.BufferGeometry().setFromPoints(pts);
@@ -643,10 +643,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       let km = 0;
       for (let i = 0; i + 1 < data.hand.length; i++) {
         const a = data.hand[i], b = data.hand[i + 1];
-        const dLon = ((b.lonDeg - a.lonDeg + 540) % 360) - 180;
-        const seg = MOON_R_KM * RAD * Math.hypot(b.latDeg - a.latDeg, dLon * Math.cos(((a.latDeg + b.latDeg) / 2) * RAD));
+        const d = arcGc(a, b), seg = MOON_R_KM * d;   // along the great circle, not the parallels
         const n = Math.max(2, Math.ceil(seg / 0.5));
-        for (let k = i ? 1 : 0; k <= n; k++) { const f = k / n; pts.push([a.latDeg + (b.latDeg - a.latDeg) * f, (a.lonDeg + dLon * f + 360) % 360, km + seg * f, null, null, 1]); }
+        for (let k = i ? 1 : 0; k <= n; k++) { const f = k / n, q = onGc(a, b, f, d); pts.push([q.latDeg, q.lonDeg, km + seg * f, null, null, 1]); }
         km += seg;
       }
       lay = createRouteLayer(view, { v: 1, label: 'Drawn', lengthKm: km, departMs: null, arriveMs: null, reserve: 0.2, pts }, { onTop: true });
@@ -688,12 +687,14 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     // screen position (frame CSS px) of a ground point, for the sky dial; null when out of sight
     toFramePx(latDeg, lonDeg) { const p = view?.project(latDeg, lonDeg); return p ? [p.x, p.y] : null; },
     flyTo(cam) { view?.flyTo({ tilt: 0, heading: northUp(cam.lat, cam.lon), ms: 1400, ...cam }); },
-    // + / −; the zoom readout (reset): the same place turned back to the map's orientation (north up, 0°E up near
-    // the south pole) and looking straight down, since a drag turns the globe freely about its centre
+    // + / −; the zoom readout (reset): back to the polar map's 1× scale; north (the tool column's North up): the same
+    // place turned back to the map's orientation (north up, 0°E up near the south pole) and looking straight down,
+    // since a drag turns the globe freely about its centre
     zoom(dir) {
       if (!view) return false;
       const c = view.camera;
-      if (dir === 'reset') { view.flyTo({ lat: c.lat, lon: c.lon, dist: c.dist, tilt: 0, heading: northUp(c.lat, c.lon), ms: 600 }); return true; }
+      if (dir === 'north') { view.flyTo({ lat: c.lat, lon: c.lon, dist: c.dist, tilt: 0, heading: northUp(c.lat, c.lon), ms: 600 }); return true; }
+      if (dir === 'reset') { view.flyTo({ lat: c.lat, lon: c.lon, dist: frame.geo?.W ? distForZoom(1, frame.geo) : 1600, tilt: c.tilt, heading: c.heading, ms: 600 }); return true; }
       if (dir !== 'in' && dir !== 'out') return false;
       view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.05, Math.min(14000, c.dist * (dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 400 });
       return true;

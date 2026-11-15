@@ -1153,7 +1153,7 @@ html.lsn-bigmap, html.lsn-bigmap body { height: 100%; overflow: hidden; }
 .is-bigmap .map-ui-br { right: var(--edge); bottom: var(--edge); }
 .is-bigmap .map-toolcol { position: relative; gap: 0; padding: var(--pad1); border-radius: var(--r1); }
 .is-bigmap .map-toolcol .map-group { padding: 0; border-radius: 0; gap: 2px; }
-.is-bigmap .map-toolcol :is(.map-slots, .map-clears) { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair); }
+.is-bigmap .map-toolcol :is(.map-slots, .map-clears, .map-viewctl) { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair); }
 .is-bigmap .map-btn { width: var(--ctl); height: var(--ctl); border-radius: var(--r2); font-size: var(--fs-value); }
 .is-bigmap .map-btn:hover { background: rgba(255, 255, 255, 0.08); }
 .is-bigmap .map-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); }
@@ -2650,6 +2650,7 @@ html[data-reduce-motion="true"] :is(.story-card, .app[data-story="on"] *) { tran
 .ab-opt-short { display: none; }
 .ab-seg.is-empty { padding: 0 10px; border-style: dashed; height: calc(var(--ctl, 32px) - 4px); }
 .ab-hint { color: var(--faint); font-size: var(--fs-label, 12px); white-space: nowrap; }
+.ab-hint.is-warn { color: var(--sun, #f2b33d); }
 /* the popover under a bar button */
 .ab-pop {
   position: absolute; top: calc(100% + 6px); width: min(340px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; display: grid; gap: 6px; pointer-events: auto;
@@ -4012,6 +4013,18 @@ function unit(latDeg, lonDeg) {
   const cl = Math.cos(latDeg * RAD);
   return [cl * Math.cos(lonDeg * RAD), Math.sin(latDeg * RAD), -cl * Math.sin(lonDeg * RAD)];
 }
+// The great circle from a to b ({ latDeg, lonDeg }): the straight line on the sphere (the plane through both points
+// and the centre). arcGc → the angle between them (radians); onGc(a, b, f) → the point a fraction f of the way.
+// Interpolating latitude and longitude instead bends a line along the parallels, worst near the pole.
+const ecefUnit = (p) => { const la = p.latDeg * RAD, lo = p.lonDeg * RAD; return [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)]; };
+function arcGc(a, b) { const A = ecefUnit(a), B = ecefUnit(b); return Math.acos(Math.max(-1, Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2]))); }
+function onGc(a, b, f, d = arcGc(a, b)) {
+  if (d < 1e-9) return { latDeg: a.latDeg, lonDeg: a.lonDeg };
+  const A = ecefUnit(a), B = ecefUnit(b), s = Math.sin(d), wa = Math.sin((1 - f) * d) / s, wb = Math.sin(f * d) / s;
+  const x = wa * A[0] + wb * B[0], y = wa * A[1] + wb * B[1], z = wa * A[2] + wb * B[2];
+  return { latDeg: Math.asin(Math.max(-1, Math.min(1, z / Math.hypot(x, y, z)))) / RAD, lonDeg: ((Math.atan2(y, x) / RAD) + 360) % 360 };
+}
+
 function toLatLon(x, y, z) {
   const r = Math.hypot(x, y, z);
   let lon = Math.atan2(-z, x) * DEG;
@@ -4753,7 +4766,7 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
   };
 }
 
-return { SEG, CAP_HALF_KM, BAND_LAT, MIN_DIST_KM, unit, toLatLon, fromXYNorth, cameraFromHash, cameraToHash, createGlobeView };
+return { SEG, CAP_HALF_KM, BAND_LAT, MIN_DIST_KM, unit, arcGc, onGc, toLatLon, fromXYNorth, cameraFromHash, cameraToHash, createGlobeView };
 })();
 __m['data-loader.js'] = (() => {
 // Data packs (spec phase 3 §5.1). Each demo/data/js/<name>.js is one classic script line,
@@ -5605,7 +5618,7 @@ __m['ui/globemap.js'] = (() => {
 // terrain (the region statistics and the rover planner run on it).
 const { createGlobeTerrain, MOON_R_KM, G2 } = __m['globe-terrain.js'];
 const { createRouteLayer } = __m['globe-route.js'];
-const { createGlobeView } = __m['globe-view.js'];
+const { createGlobeView, arcGc, onGc } = __m['globe-view.js'];
 const { toXY, fromXY, TERRAIN_MAX_LAT } = __m['terrain.js'];
 const { loadData } = __m['data-loader.js'];
 const { globalGrid, globalFractions } = __m['globalheat.js'];
@@ -6097,10 +6110,10 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     const T = view.THREE, pts = [];
     for (let i = 0; i + 1 < lls.length; i++) {
       const a = lls[i], b = lls[i + 1];
-      const n = Math.max(2, Math.ceil(Math.hypot(b.latDeg - a.latDeg, ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * Math.cos(a.latDeg * RAD)) * 8));
+      const d = arcGc(a, b), n = Math.max(2, Math.ceil((d / RAD) * 8));   // 8 steps a degree of arc
       for (let k = 0; k <= n; k++) {
-        const f = k / n, la = a.latDeg + (b.latDeg - a.latDeg) * f, lo = a.lonDeg + ((b.lonDeg - a.lonDeg + 540) % 360 - 180) * f;
-        pts.push(new T.Vector3(...view.surface(la, lo, 0.02)));
+        const q = onGc(a, b, k / n, d);
+        pts.push(new T.Vector3(...view.surface(q.latDeg, q.lonDeg, 0.02)));
       }
     }
     const g = new T.BufferGeometry().setFromPoints(pts);
@@ -6235,10 +6248,9 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
       let km = 0;
       for (let i = 0; i + 1 < data.hand.length; i++) {
         const a = data.hand[i], b = data.hand[i + 1];
-        const dLon = ((b.lonDeg - a.lonDeg + 540) % 360) - 180;
-        const seg = MOON_R_KM * RAD * Math.hypot(b.latDeg - a.latDeg, dLon * Math.cos(((a.latDeg + b.latDeg) / 2) * RAD));
+        const d = arcGc(a, b), seg = MOON_R_KM * d;   // along the great circle, not the parallels
         const n = Math.max(2, Math.ceil(seg / 0.5));
-        for (let k = i ? 1 : 0; k <= n; k++) { const f = k / n; pts.push([a.latDeg + (b.latDeg - a.latDeg) * f, (a.lonDeg + dLon * f + 360) % 360, km + seg * f, null, null, 1]); }
+        for (let k = i ? 1 : 0; k <= n; k++) { const f = k / n, q = onGc(a, b, f, d); pts.push([q.latDeg, q.lonDeg, km + seg * f, null, null, 1]); }
         km += seg;
       }
       lay = createRouteLayer(view, { v: 1, label: 'Drawn', lengthKm: km, departMs: null, arriveMs: null, reserve: 0.2, pts }, { onTop: true });
@@ -6280,12 +6292,14 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     // screen position (frame CSS px) of a ground point, for the sky dial; null when out of sight
     toFramePx(latDeg, lonDeg) { const p = view?.project(latDeg, lonDeg); return p ? [p.x, p.y] : null; },
     flyTo(cam) { view?.flyTo({ tilt: 0, heading: northUp(cam.lat, cam.lon), ms: 1400, ...cam }); },
-    // + / −; the zoom readout (reset): the same place turned back to the map's orientation (north up, 0°E up near
-    // the south pole) and looking straight down, since a drag turns the globe freely about its centre
+    // + / −; the zoom readout (reset): back to the polar map's 1× scale; north (the tool column's North up): the same
+    // place turned back to the map's orientation (north up, 0°E up near the south pole) and looking straight down,
+    // since a drag turns the globe freely about its centre
     zoom(dir) {
       if (!view) return false;
       const c = view.camera;
-      if (dir === 'reset') { view.flyTo({ lat: c.lat, lon: c.lon, dist: c.dist, tilt: 0, heading: northUp(c.lat, c.lon), ms: 600 }); return true; }
+      if (dir === 'north') { view.flyTo({ lat: c.lat, lon: c.lon, dist: c.dist, tilt: 0, heading: northUp(c.lat, c.lon), ms: 600 }); return true; }
+      if (dir === 'reset') { view.flyTo({ lat: c.lat, lon: c.lon, dist: frame.geo?.W ? distForZoom(1, frame.geo) : 1600, tilt: c.tilt, heading: c.heading, ms: 600 }); return true; }
       if (dir !== 'in' && dir !== 'out') return false;
       view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.05, Math.min(14000, c.dist * (dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 400 });
       return true;
@@ -10387,7 +10401,8 @@ function createActionBar(doc = document, { parent, avoid = () => [] } = {}) {
     if (!opts.length) {
       if (n.btns.size) { n.btns.clear(); clear(el); }
       n.hint.textContent = it.hint ?? '';
-      el.title = it.hint ?? '';
+      n.hint.classList.toggle('is-warn', !!it.warn);   // a hint that reports a failure (no route found), not a next step
+      el.title = it.title ?? it.hint ?? '';
       el.setAttribute('aria-disabled', 'true');
       if (n.hint.parentNode !== el) el.append(n.hint);
       return;
@@ -12463,7 +12478,12 @@ function createRoutePlanCard(deps = {}, callbacks = {}) {
     const items = [{ id: 'plan', label: 'Plan routes', short: 'Plan', icon: 'route', primary: true, title: 'Plan the routes between the points (Enter in a field does the same)', onClick: () => submit() }];
     if (running) items.push({ type: 'progress', id: 'plan-progress', pct: progress ?? 0, text: `Planning… ${Math.floor(Math.max(0, Math.min(1, progress ?? 0)) * 10) * 10}%`, onCancel: () => callbacks.onCancel?.() });
     else {
-      items.push({ type: 'segmented', id: 'choose', label: 'Route', value: selected, hint: 'Plan routes first',
+      // a plan that found nothing says so here, where the routes would be (the card has the full reason)
+      const failed = !!plan && !plan.ok;
+      const leg = /on leg (\d+)/.exec(plan?.error ?? '')?.[1] ?? (plan?.blocked && plan.waypoints?.length > 2 ? String(plan.blocked.leg + 1) : null);
+      const failText = failed ? `No route${plan.blocked ? ` under ${plan.blocked.limitDeg}°` : ''}${leg ? ` · leg ${leg}` : ''}` : '';
+      const failTitle = failed ? (plan.error ?? `No route keeps under ${plan.blocked?.limitDeg}°${leg ? ` on leg ${leg}` : ''}. Raise the climb limit, move a point, or try Self-driving.`) : undefined;
+      items.push({ type: 'segmented', id: 'choose', label: 'Route', value: selected, hint: failed ? failText : 'Plan routes first', warn: failed, title: failTitle,
         options: planned ? plan.routes.map((r) => ({ id: r.id, label: names[r.id] ?? r.label, short: SHORT[r.id], sub: r.unavailable ? '' : `${routeFigures(r).length} km`, disabled: !!r.unavailable || !r.points?.length, title: r.unavailable ?? undefined })) : [],
         onChange: (rid) => pick(rid) });
     }
@@ -14855,7 +14875,8 @@ __m['ui/maptools.js'] = (() => {
 // one-line text for the top centre while a drawing tool is on. Builds DOM and calls back; holds no state.
 //
 // createMapTools(callbacks) → { tools, zoom, hint, update(params) }
-//   callbacks: { onTool(tool), onZoom('in' | 'out' | 'reset' | 'fullscreen'), onSlot('A' | 'B'), onClear('A' | 'B' | 'route') }
+//   callbacks: { onTool(tool), onZoom('in' | 'out' | 'reset' | 'fullscreen' | 'north'), onSlot('A' | 'B'), onClear('A' | 'B' | 'route'),
+//                onDial() }   the view group under the tools: Sky dial on / off, and North up (the globe's heading reset)
 //   tools, zoom, hint: elements the caller places in the frame
 // params: {
 //   tool: 'select' | 'rect' | 'circle' | 'polygon' | 'route',
@@ -14865,6 +14886,7 @@ __m['ui/maptools.js'] = (() => {
 //   drawing: boolean,                                  a shape is half drawn (changes the hint)
 //   done: boolean,                                     fix L8: a shape was just finished (hides the hint until the next starts)
 //   full: boolean,                                     phase 4: the map is in full screen
+//   dialOn: boolean,                                   the sky dial is shown (the Sky dial button's pressed state)
 // }
 // Tour anchors set here: data-tour="tools" on the tool column, data-tour="zoom" on the zoom group.
 const { h, s } = __m['ui/dom.js'];
@@ -14889,6 +14911,8 @@ const ICONS = {
   polygon: () => svg(s('path', { d: 'M4 7.5 10 3.5l6 4-2 8.5H6z' })),
   route: () => svg(s('path', { d: 'M3.5 15.5 7.5 9l4.5 3 4.5-7.5' }), s('circle', { cx: 3.5, cy: 15.5, r: 1.2, fill: 'currentColor' }), s('circle', { cx: 16.5, cy: 4.5, r: 1.2, fill: 'currentColor' })),
   clear: () => svg(s('path', { d: 'M6 6l8 8M14 6l-8 8' })),
+  dial: () => svg(s('circle', { cx: 10, cy: 10, r: 6.5 }), s('path', { d: 'M3.5 12.5h13' }), s('circle', { cx: 13, cy: 7.5, r: 1.4, fill: 'currentColor' })),
+  north: () => svg(s('circle', { cx: 10, cy: 10, r: 7 }), s('path', { d: 'M10 4.5 12 10h-4z', fill: 'currentColor' }), s('path', { d: 'M8 10h4l-2 5.5z' })),
 };
 const TOOLS = [['select', 'Select'], ['rect', 'Rectangle'], ['circle', 'Circle'], ['polygon', 'Polygon'], ['route', 'Route']];
 
@@ -14908,9 +14932,13 @@ function createMapTools(callbacks = {}) {
   const clearRoute = clearBtn('route', 'Clear route');
   const clears = h('div', { class: 'map-group map-clears', role: 'group', 'aria-label': 'Clear' }, clearA, clearB, clearRoute);
 
+  // the view: always under the tools, whatever tool or panel is on
+  const dialBtn = iconBtn('Sky dial', ICONS.dial(), () => callbacks.onDial?.(), { 'aria-pressed': 'true', class: 'map-btn dial-toggle dial-btn', 'data-tip': 'Sky dial (K)' });
+  const northBtn = iconBtn('North up', ICONS.north(), () => callbacks.onZoom?.('north'), { class: 'map-btn north-btn', 'data-tip': 'North up, looking straight down' });
+  const viewGroup = h('div', { class: 'map-group map-viewctl', role: 'group', 'aria-label': 'View' }, dialBtn, northBtn);
   const tools = h('div', { class: 'map-ui-ctl map-toolcol' },
     h('div', { class: 'map-group', role: 'group', 'aria-label': 'Map tool', 'data-tour': 'tools' }, toolButtons),
-    slotGroup, clears);
+    slotGroup, clears, viewGroup);
 
   const zoomOut = iconBtn('Zoom out', '−', () => callbacks.onZoom?.('out'), { class: 'map-btn zoom-out' });
   const zoomIn = iconBtn('Zoom in', '+', () => callbacks.onZoom?.('in'), { class: 'map-btn zoom-in' });
@@ -14940,6 +14968,7 @@ function createMapTools(callbacks = {}) {
     if (zoomLevel.textContent !== text) { zoomLevel.textContent = text; zoomLive.textContent = `Zoom ${text}`; }
     zoomLevel.disabled = z <= (p.minZoom ?? 1);
     fullBtn.setAttribute('aria-pressed', String(Boolean(p.full)));
+    if (p.dialOn !== undefined) dialBtn.setAttribute('aria-pressed', String(Boolean(p.dialOn)));
     fullBtn.setAttribute('aria-label', p.full ? 'Leave full screen' : 'Full screen map');
     fullBtn.dataset.tip = p.full ? 'Leave full screen' : 'Full screen map';
     hint.hidden = tool === 'select' || (Boolean(p.done) && !p.drawing);
@@ -15560,14 +15589,17 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const pickWhy = h('span', { class: 'sr-only', id: ids('pick-why') }, '');
   const pickField = h('div', { class: 'field field-inline tool-pick' }, h('span', { class: 'label', id: ids('pick-label') }, 'Click sets'), pickSeg.el, pickWhy);
 
+  let lastTools = {};   // the tool column's last params, so the Sky dial button can change alone
   const tools = createMapTools({
     onTool: (tool) => cb.onTool(tool),
     onZoom: (dir) => {
-      if (dir !== 'fullscreen' && cb.onZoomOverride?.(dir)) return;   // the Map is the globe: its camera takes the zoom (reset: north up, straight down)
+      if (dir !== 'fullscreen' && cb.onZoomOverride?.(dir)) return;   // the Map is the globe: its camera takes the zoom and North up
+      if (dir === 'north') return;   // the flat polar map is always drawn with 0°E up
       if (dir === 'fullscreen') setFullScreen(!fullUi);
       else if (dir === 'reset') frame.resetView();
       else frame.zoomBy(dir === 'in' ? 1.5 : 1 / 1.5);
     },
+    onDial: () => cb.onDial?.(!dialPressed),
     onSlot: (slot) => cb.onSlot(slot),
     onClear: (what) => {
       cb.onClear(what);
@@ -15826,7 +15858,8 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   applyTerrain();
 
   function syncTools() {
-    tools.update({ tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!last.regions?.A, hasB: !!last.regions?.B, hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi });
+    lastTools = { tool: last.tool, slot: last.slot, zoom: last.viewport?.zoom ?? 1, maxZoom: MAX_ZOOM, hasA: !!last.regions?.A, hasB: !!last.regions?.B, hasRoute: !!last.route, drawing: last.drawing, done: last.shapeDone, full: fullUi };
+    tools.update({ ...lastTools, dialOn: dialPressed });
     // "Click sets" belongs to the Select tool; with a drawing tool it stays in place, greyed, and says why
     const off = last.tool !== 'select';
     for (const b of pickSeg.buttons) b.disabled = off;
@@ -15849,7 +15882,6 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   let dialPressed = true;
   function syncPointBar() {
     actionBar.set('point', 'site', [
-      { id: 'dial', label: 'Sky dial', short: 'Sky dial', icon: 'sun', pressed: dialPressed, title: 'Show or hide the sky dial on the map (K)', cls: 'dial-btn', onClick: () => cb.onDial?.(!dialPressed) },
       { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
       { type: 'divider' },
       // planning tools at other levels, then step 2 of the mission (mission-flow.js)
@@ -15934,7 +15966,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   function setLive({ now, countdown, dialOn } = {}) {
     if (now !== undefined && liveNow.textContent !== now) liveNow.textContent = now;
     if (countdown !== undefined && liveCount.textContent !== countdown) { liveCount.textContent = countdown; countRow.hidden = !countdown; }
-    if (dialOn !== undefined && dialPressed !== !!dialOn) { dialPressed = !!dialOn; syncPointBar(); }
+    if (dialOn !== undefined && dialPressed !== !!dialOn) { dialPressed = !!dialOn; tools.update({ ...lastTools, dialOn: dialPressed }); }
   }
 
   function renderBest(best) {
@@ -15990,7 +16022,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
     renderSun();
     swPsr.set(params.showPsr);
     swDial.set(params.dialOn);
-    if (params.dialOn !== undefined && dialPressed !== !!params.dialOn) { dialPressed = !!params.dialOn; syncPointBar(); }
+    if (params.dialOn !== undefined && dialPressed !== !!params.dialOn) { dialPressed = !!params.dialOn; tools.update({ ...lastTools, dialOn: dialPressed }); }
     weightsSec.hidden = params.mode !== 'score';
     weights.update({ weights: params.weights });
     const nFilters = (params.filters?.maxSlope != null ? 1 : 0) + (params.filters?.maxDark != null ? 1 : 0);
@@ -25656,12 +25688,10 @@ function start() {
     dialCache = { key, a, b, series, ...tracksFromSeries(series) };
     return dialCache;
   }
-  // while a drawing tool is on and its shape does not exist yet, the point is still the selection (dimmed)
+  // the dial stays on the selected point; while a drawing tool or the Route / Region panel is on it is dimmed
   function dialVisible() {
     if (!dial || state.view !== 'map' || !settings.get('skyDial')) return false;
-    if (kind === 'point') return true;
-    if (kind === 'region') return !shapes[state.slot];
-    return kind === 'route' && !routePoints && !rp.points;
+    return true;   // with the Route or Region panel open it is dimmed (and lets clicks through), not hidden
   }
   function updateDial(full) {
     if (!dial || !derived) return;
@@ -25672,7 +25702,7 @@ function start() {
     dial.update({
       skyline: derived.skyline, sunTrack: tr.sunTrack, earthTrack: tr.earthTrack,
       stayRange: state.windowOn ? [derived.planned.startMs, derived.planned.endMs] : null,
-      now: cursorBodies(), northDeg: northOnScreenDeg(state.site) ?? 0, dimmed: state.tool !== 'select',
+      now: cursorBodies(), northDeg: northOnScreenDeg(state.site) ?? 0, dimmed: state.tool !== 'select' || kind !== 'point',
     });
     if (full) placeDial();
   }

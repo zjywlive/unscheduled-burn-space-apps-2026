@@ -438,7 +438,12 @@ export function createRoutePlanCard(deps = {}, callbacks = {}) {
     const items = [{ id: 'plan', label: 'Plan routes', short: 'Plan', icon: 'route', primary: true, title: 'Plan the routes between the points (Enter in a field does the same)', onClick: () => submit() }];
     if (running) items.push({ type: 'progress', id: 'plan-progress', pct: progress ?? 0, text: `Planning… ${Math.floor(Math.max(0, Math.min(1, progress ?? 0)) * 10) * 10}%`, onCancel: () => callbacks.onCancel?.() });
     else {
-      items.push({ type: 'segmented', id: 'choose', label: 'Route', value: selected, hint: 'Plan routes first',
+      // a plan that found nothing says so here, where the routes would be (the card has the full reason)
+      const failed = !!plan && !plan.ok;
+      const leg = /on leg (\d+)/.exec(plan?.error ?? '')?.[1] ?? (plan?.blocked && plan.waypoints?.length > 2 ? String(plan.blocked.leg + 1) : null);
+      const failText = failed ? `No route${plan.blocked ? ` under ${plan.blocked.limitDeg}°` : ''}${leg ? ` · leg ${leg}` : ''}` : '';
+      const failTitle = failed ? (plan.error ?? `No route keeps under ${plan.blocked?.limitDeg}°${leg ? ` on leg ${leg}` : ''}. Raise the climb limit, move a point, or try Self-driving.`) : undefined;
+      items.push({ type: 'segmented', id: 'choose', label: 'Route', value: selected, hint: failed ? failText : 'Plan routes first', warn: failed, title: failTitle,
         options: planned ? plan.routes.map((r) => ({ id: r.id, label: names[r.id] ?? r.label, short: SHORT[r.id], sub: r.unavailable ? '' : `${routeFigures(r).length} km`, disabled: !!r.unavailable || !r.points?.length, title: r.unavailable ?? undefined })) : [],
         onChange: (rid) => pick(rid) });
     }

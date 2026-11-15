@@ -1061,6 +1061,18 @@ function unit(latDeg, lonDeg) {
   const cl = Math.cos(latDeg * RAD);
   return [cl * Math.cos(lonDeg * RAD), Math.sin(latDeg * RAD), -cl * Math.sin(lonDeg * RAD)];
 }
+// The great circle from a to b ({ latDeg, lonDeg }): the straight line on the sphere (the plane through both points
+// and the centre). arcGc → the angle between them (radians); onGc(a, b, f) → the point a fraction f of the way.
+// Interpolating latitude and longitude instead bends a line along the parallels, worst near the pole.
+const ecefUnit = (p) => { const la = p.latDeg * RAD, lo = p.lonDeg * RAD; return [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)]; };
+function arcGc(a, b) { const A = ecefUnit(a), B = ecefUnit(b); return Math.acos(Math.max(-1, Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2]))); }
+function onGc(a, b, f, d = arcGc(a, b)) {
+  if (d < 1e-9) return { latDeg: a.latDeg, lonDeg: a.lonDeg };
+  const A = ecefUnit(a), B = ecefUnit(b), s = Math.sin(d), wa = Math.sin((1 - f) * d) / s, wb = Math.sin(f * d) / s;
+  const x = wa * A[0] + wb * B[0], y = wa * A[1] + wb * B[1], z = wa * A[2] + wb * B[2];
+  return { latDeg: Math.asin(Math.max(-1, Math.min(1, z / Math.hypot(x, y, z)))) / RAD, lonDeg: ((Math.atan2(y, x) / RAD) + 360) % 360 };
+}
+
 function toLatLon(x, y, z) {
   const r = Math.hypot(x, y, z);
   let lon = Math.atan2(-z, x) * DEG;
@@ -1802,7 +1814,7 @@ function createGlobeView(canvas, terrain, { requestSouth = () => {}, onStatus = 
   };
 }
 
-return { SEG, CAP_HALF_KM, BAND_LAT, MIN_DIST_KM, unit, toLatLon, fromXYNorth, cameraFromHash, cameraToHash, createGlobeView };
+return { SEG, CAP_HALF_KM, BAND_LAT, MIN_DIST_KM, unit, arcGc, onGc, toLatLon, fromXYNorth, cameraFromHash, cameraToHash, createGlobeView };
 })();
 __m['route3d.js'] = (() => {
 // Phase 6 (docs/PHASES.md): a planned route and its simulated drive, handed from the navigator to the 3D
@@ -3087,6 +3099,7 @@ __m['globe-waypoints.js'] = (() => {
 // to the navigator to plan the rover route through them ("rp=" points on the rover step). Kept in
 // localStorage so they survive a reload. DOM, three.js lines draped on the terrain, labels on screen.
 const { toXY } = __m['terrain.js'];
+const { arcGc, onGc } = __m['globe-view.js'];
 const { bearingDeg, compassName } = __m['rover-attitude.js'];
 const { stageUrl } = __m['mission-flow.js'];
 
@@ -3163,9 +3176,8 @@ function createWaypointTool(view, { parent, bar = null, mission = null, terrain,
     const lift = Math.max(0.01, kpp * 3), o = new THREE.Vector3(...view.surface(pts[0].latDeg, pts[0].lonDeg, 0));
     for (let i = 0; i + 1 < pts.length; i++) {
       const a = pts[i], b = pts[i + 1], n = Math.max(8, Math.min(200, Math.ceil(gcKm(a, b) / Math.max(0.02, kpp * 4))));
-      let dl = b.lonDeg - a.lonDeg; if (dl > 180) dl -= 360; else if (dl < -180) dl += 360;
-      const line = [];
-      for (let k = 0; k <= n; k++) { const f = k / n; line.push(new THREE.Vector3(...view.surface(a.latDeg + (b.latDeg - a.latDeg) * f, a.lonDeg + dl * f, lift)).sub(o)); }
+      const d = arcGc(a, b), line = [];   // along the great circle (globe-view.js), not the parallels
+      for (let k = 0; k <= n; k++) { const q = onGc(a, b, k / n, d); line.push(new THREE.Vector3(...view.surface(q.latDeg, q.lonDeg, lift)).sub(o)); }
       const m = new THREE.Line(new THREE.BufferGeometry().setFromPoints(line), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: kpp * 10, gapSize: kpp * 6, transparent: true, opacity: 0.9, depthTest: false }));
       m.computeLineDistances(); m.position.copy(o); m.renderOrder = 7;
       group.add(m);

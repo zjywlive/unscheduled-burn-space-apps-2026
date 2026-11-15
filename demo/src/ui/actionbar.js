@@ -93,7 +93,8 @@ export function createActionBar(doc = document, { parent, avoid = () => [] } = {
     if (!opts.length) {
       if (n.btns.size) { n.btns.clear(); clear(el); }
       n.hint.textContent = it.hint ?? '';
-      el.title = it.hint ?? '';
+      n.hint.classList.toggle('is-warn', !!it.warn);   // a hint that reports a failure (no route found), not a next step
+      el.title = it.title ?? it.hint ?? '';
       el.setAttribute('aria-disabled', 'true');
       if (n.hint.parentNode !== el) el.append(n.hint);
       return;

@@ -4,7 +4,8 @@
 // one-line text for the top centre while a drawing tool is on. Builds DOM and calls back; holds no state.
 //
 // createMapTools(callbacks) → { tools, zoom, hint, update(params) }
-//   callbacks: { onTool(tool), onZoom('in' | 'out' | 'reset' | 'fullscreen'), onSlot('A' | 'B'), onClear('A' | 'B' | 'route') }
+//   callbacks: { onTool(tool), onZoom('in' | 'out' | 'reset' | 'fullscreen' | 'north'), onSlot('A' | 'B'), onClear('A' | 'B' | 'route'),
+//                onDial() }   the view group under the tools: Sky dial on / off, and North up (the globe's heading reset)
 //   tools, zoom, hint: elements the caller places in the frame
 // params: {
 //   tool: 'select' | 'rect' | 'circle' | 'polygon' | 'route',
@@ -14,6 +15,7 @@
 //   drawing: boolean,                                  a shape is half drawn (changes the hint)
 //   done: boolean,                                     fix L8: a shape was just finished (hides the hint until the next starts)
 //   full: boolean,                                     phase 4: the map is in full screen
+//   dialOn: boolean,                                   the sky dial is shown (the Sky dial button's pressed state)
 // }
 // Tour anchors set here: data-tour="tools" on the tool column, data-tour="zoom" on the zoom group.
 import { h, s } from './dom.js';
@@ -38,6 +40,8 @@ const ICONS = {
   polygon: () => svg(s('path', { d: 'M4 7.5 10 3.5l6 4-2 8.5H6z' })),
   route: () => svg(s('path', { d: 'M3.5 15.5 7.5 9l4.5 3 4.5-7.5' }), s('circle', { cx: 3.5, cy: 15.5, r: 1.2, fill: 'currentColor' }), s('circle', { cx: 16.5, cy: 4.5, r: 1.2, fill: 'currentColor' })),
   clear: () => svg(s('path', { d: 'M6 6l8 8M14 6l-8 8' })),
+  dial: () => svg(s('circle', { cx: 10, cy: 10, r: 6.5 }), s('path', { d: 'M3.5 12.5h13' }), s('circle', { cx: 13, cy: 7.5, r: 1.4, fill: 'currentColor' })),
+  north: () => svg(s('circle', { cx: 10, cy: 10, r: 7 }), s('path', { d: 'M10 4.5 12 10h-4z', fill: 'currentColor' }), s('path', { d: 'M8 10h4l-2 5.5z' })),
 };
 const TOOLS = [['select', 'Select'], ['rect', 'Rectangle'], ['circle', 'Circle'], ['polygon', 'Polygon'], ['route', 'Route']];
 
@@ -57,9 +61,13 @@ export function createMapTools(callbacks = {}) {
   const clearRoute = clearBtn('route', 'Clear route');
   const clears = h('div', { class: 'map-group map-clears', role: 'group', 'aria-label': 'Clear' }, clearA, clearB, clearRoute);
 
+  // the view: always under the tools, whatever tool or panel is on
+  const dialBtn = iconBtn('Sky dial', ICONS.dial(), () => callbacks.onDial?.(), { 'aria-pressed': 'true', class: 'map-btn dial-toggle dial-btn', 'data-tip': 'Sky dial (K)' });
+  const northBtn = iconBtn('North up', ICONS.north(), () => callbacks.onZoom?.('north'), { class: 'map-btn north-btn', 'data-tip': 'North up, looking straight down' });
+  const viewGroup = h('div', { class: 'map-group map-viewctl', role: 'group', 'aria-label': 'View' }, dialBtn, northBtn);
   const tools = h('div', { class: 'map-ui-ctl map-toolcol' },
     h('div', { class: 'map-group', role: 'group', 'aria-label': 'Map tool', 'data-tour': 'tools' }, toolButtons),
-    slotGroup, clears);
+    slotGroup, clears, viewGroup);
 
   const zoomOut = iconBtn('Zoom out', '−', () => callbacks.onZoom?.('out'), { class: 'map-btn zoom-out' });
   const zoomIn = iconBtn('Zoom in', '+', () => callbacks.onZoom?.('in'), { class: 'map-btn zoom-in' });
@@ -89,6 +97,7 @@ export function createMapTools(callbacks = {}) {
     if (zoomLevel.textContent !== text) { zoomLevel.textContent = text; zoomLive.textContent = `Zoom ${text}`; }
     zoomLevel.disabled = z <= (p.minZoom ?? 1);
     fullBtn.setAttribute('aria-pressed', String(Boolean(p.full)));
+    if (p.dialOn !== undefined) dialBtn.setAttribute('aria-pressed', String(Boolean(p.dialOn)));
     fullBtn.setAttribute('aria-label', p.full ? 'Leave full screen' : 'Full screen map');
     fullBtn.dataset.tip = p.full ? 'Leave full screen' : 'Full screen map';
     hint.hidden = tool === 'select' || (Boolean(p.done) && !p.drawing);

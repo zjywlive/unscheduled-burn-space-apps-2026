@@ -29,3 +29,16 @@ test('near the south pole 0°E is up, as on the polar map; elsewhere north is up
   assert.equal(northUp(-85, 90), 270);
   assert.equal(northUp(10, 200), 0);
 });
+
+test('lines between two points follow the great circle, not the parallels', async () => {
+  const { arcGc, onGc } = await import('../demo/src/globe-view.js');
+  // two points on 88°S, half a turn apart: the straight line on the sphere runs over the pole
+  const a = { latDeg: -88, lonDeg: 0 }, b = { latDeg: -88, lonDeg: 180 };
+  assert.ok(Math.abs(arcGc(a, b) - (4 * Math.PI) / 180) < 1e-9);
+  assert.ok(Math.abs(onGc(a, b, 0.5).latDeg + 90) < 1e-6);
+  // a quarter of the way along stays on the 0° meridian at 89°S
+  const q = onGc(a, b, 0.25);
+  assert.ok(Math.abs(q.latDeg + 89) < 1e-9 && (Math.abs(q.lonDeg) < 1e-6 || Math.abs(q.lonDeg - 360) < 1e-6));
+  // the ends are the points themselves
+  assert.ok(Math.abs(onGc(a, b, 1).latDeg + 88) < 1e-9);
+});

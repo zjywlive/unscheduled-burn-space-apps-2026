@@ -43,6 +43,7 @@
 .ab-opt-short { display: none; }
 .ab-seg.is-empty { padding: 0 10px; border-style: dashed; height: calc(var(--ctl, 32px) - 4px); }
 .ab-hint { color: var(--faint); font-size: var(--fs-label, 12px); white-space: nowrap; }
+.ab-hint.is-warn { color: var(--sun, #f2b33d); }
 /* the popover under a bar button */
 .ab-pop {
   position: absolute; top: calc(100% + 6px); width: min(340px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; display: grid; gap: 6px; pointer-events: auto;

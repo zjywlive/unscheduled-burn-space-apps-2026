@@ -3,6 +3,7 @@
 // to the navigator to plan the rover route through them ("rp=" points on the rover step). Kept in
 // localStorage so they survive a reload. DOM, three.js lines draped on the terrain, labels on screen.
 import { toXY } from './terrain.js';
+import { arcGc, onGc } from './globe-view.js';
 import { bearingDeg, compassName } from './rover-attitude.js';
 import { stageUrl } from './mission-flow.js';
 
@@ -79,9 +80,8 @@ export function createWaypointTool(view, { parent, bar = null, mission = null, t
     const lift = Math.max(0.01, kpp * 3), o = new THREE.Vector3(...view.surface(pts[0].latDeg, pts[0].lonDeg, 0));
     for (let i = 0; i + 1 < pts.length; i++) {
       const a = pts[i], b = pts[i + 1], n = Math.max(8, Math.min(200, Math.ceil(gcKm(a, b) / Math.max(0.02, kpp * 4))));
-      let dl = b.lonDeg - a.lonDeg; if (dl > 180) dl -= 360; else if (dl < -180) dl += 360;
-      const line = [];
-      for (let k = 0; k <= n; k++) { const f = k / n; line.push(new THREE.Vector3(...view.surface(a.latDeg + (b.latDeg - a.latDeg) * f, a.lonDeg + dl * f, lift)).sub(o)); }
+      const d = arcGc(a, b), line = [];   // along the great circle (globe-view.js), not the parallels
+      for (let k = 0; k <= n; k++) { const q = onGc(a, b, k / n, d); line.push(new THREE.Vector3(...view.surface(q.latDeg, q.lonDeg, lift)).sub(o)); }
       const m = new THREE.Line(new THREE.BufferGeometry().setFromPoints(line), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: kpp * 10, gapSize: kpp * 6, transparent: true, opacity: 0.9, depthTest: false }));
       m.computeLineDistances(); m.position.copy(o); m.renderOrder = 7;
       group.add(m);

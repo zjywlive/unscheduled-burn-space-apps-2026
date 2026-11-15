@@ -1387,12 +1387,10 @@ function start() {
     dialCache = { key, a, b, series, ...tracksFromSeries(series) };
     return dialCache;
   }
-  // while a drawing tool is on and its shape does not exist yet, the point is still the selection (dimmed)
+  // the dial stays on the selected point; while a drawing tool or the Route / Region panel is on it is dimmed
   function dialVisible() {
     if (!dial || state.view !== 'map' || !settings.get('skyDial')) return false;
-    if (kind === 'point') return true;
-    if (kind === 'region') return !shapes[state.slot];
-    return kind === 'route' && !routePoints && !rp.points;
+    return true;   // with the Route or Region panel open it is dimmed (and lets clicks through), not hidden
   }
   function updateDial(full) {
     if (!dial || !derived) return;
@@ -1403,7 +1401,7 @@ function start() {
     dial.update({
       skyline: derived.skyline, sunTrack: tr.sunTrack, earthTrack: tr.earthTrack,
       stayRange: state.windowOn ? [derived.planned.startMs, derived.planned.endMs] : null,
-      now: cursorBodies(), northDeg: northOnScreenDeg(state.site) ?? 0, dimmed: state.tool !== 'select',
+      now: cursorBodies(), northDeg: northOnScreenDeg(state.site) ?? 0, dimmed: state.tool !== 'select' || kind !== 'point',
     });
     if (full) placeDial();
   }

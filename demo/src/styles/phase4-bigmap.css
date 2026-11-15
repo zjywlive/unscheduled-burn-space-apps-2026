@@ -208,7 +208,7 @@ html.lsn-bigmap, html.lsn-bigmap body { height: 100%; overflow: hidden; }
 .is-bigmap .map-ui-br { right: var(--edge); bottom: var(--edge); }
 .is-bigmap .map-toolcol { position: relative; gap: 0; padding: var(--pad1); border-radius: var(--r1); }
 .is-bigmap .map-toolcol .map-group { padding: 0; border-radius: 0; gap: 2px; }
-.is-bigmap .map-toolcol :is(.map-slots, .map-clears) { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair); }
+.is-bigmap .map-toolcol :is(.map-slots, .map-clears, .map-viewctl) { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair); }
 .is-bigmap .map-btn { width: var(--ctl); height: var(--ctl); border-radius: var(--r2); font-size: var(--fs-value); }
 .is-bigmap .map-btn:hover { background: rgba(255, 255, 255, 0.08); }
 .is-bigmap .map-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); }
