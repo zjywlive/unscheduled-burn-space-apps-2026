@@ -21,15 +21,18 @@ test('stage links carry the site and landing time to each page', () => {
   const m = { siteId: 'de-gerlache-rim-2', latDeg: -88.5, lonDeg: 293.3, landingMs: T, stayDays: 14 };
   assert.equal(stageUrl('site', m), 'index.html#view=map&site=de-gerlache-rim-2&t=2027-01-13T00:00Z&stay=14');
   assert.equal(stageUrl('rover', m), 'index.html#view=map&site=de-gerlache-rim-2&t=2027-01-13T00:00Z&stay=14&plan=1');
-  assert.equal(stageUrl('landing', m), 'lander.html?site=de-gerlache-rim-2&t=2027-01-13T00:00Z');
+  assert.equal(stageUrl('map', m), stageUrl('site', m));
+  assert.equal(stageUrl('region', m), 'planner.html?at=-88.5000,293.3000&t=2027-01-13T00:00Z');
+  assert.equal(stageUrl('finalise', m), 'finalise.html');
+  assert.equal(stageUrl('execute', m), 'lander.html');
   assert.match(stageUrl('3d', m), /^globe\.html#lat=-88\.5000&lon=293\.3000&dist=45/);
   assert.equal(stageUrl('3d', m, { route: true }), 'globe.html#route=1');
-  assert.equal(stageUrl('landing', null), 'lander.html');
-  assert.equal(STAGES.map((s) => `${s.n} ${s.id}`).join(', '), '1 landing, 2 rover, 3 3d');
+  assert.equal(stageUrl('region', null), 'planner.html');
+  assert.equal(STAGES.map((s) => `${s.group} ${s.n} ${s.id}`).join(', '), 'Plan 1 map, Plan 2 finalise, Fly 3 execute');
 });
 
 test('a custom site (no id) goes as coordinates', () => {
-  assert.match(stageUrl('site', { latDeg: -87.25, lonDeg: 10.5, landingMs: T }), /site=-87\.2500,10\.5000&t=/);
+  assert.match(stageUrl('site', { latDeg: -87.25, lonDeg: 10.5, landingMs: T }), /site=c:-87\.2500,10\.5000&t=/);
 });
 
 test('the touchdown point: kept only for its own site, carried to the rover and 3D steps', async () => {
@@ -43,4 +46,13 @@ test('the touchdown point: kept only for its own site, carried to the rover and 
   assert.deepEqual(landFromHash('#view=map&land=-89.44100,222.40000&plan=1'), { latDeg: -89.441, lonDeg: 222.4 });
   assert.equal(landFromHash('#view=map'), null);
   assert.ok(Math.abs(moonKm(-90, 0, -89, 0) - 30.32) < 0.01, 'one degree of latitude is 30.3 km');
+});
+
+test('the execution phases cover every lander phase once, in flight order', async () => {
+  const { EXEC_PHASES, execPhaseOf } = await import('../demo/src/mission-flow.js');
+  const { PHASES } = await import('../demo/src/lander/mission.js');
+  assert.deepEqual(EXEC_PHASES.map((p) => p.label), ['Launch', 'Spaceflight', 'Orbital manoeuvres', 'Lunar orbit insertion', 'Landing', 'Surface operations']);
+  const order = PHASES.map((p) => EXEC_PHASES.findIndex((e) => e.id === execPhaseOf(p.id)));
+  assert.ok(order.every((k) => k >= 0), 'every lander phase belongs to an execution phase');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'in order');
 });
