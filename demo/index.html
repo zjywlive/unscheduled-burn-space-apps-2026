@@ -27678,7 +27678,9 @@ function start() {
     const m = writeMission({ siteId: listed ? listed.id : null, siteName: listed ? listed.name : 'Map point', latDeg: c.latDeg, lonDeg: c.lonDeg, landingMs: c.landingMs, landed: null });
     kind = 'point';
     globeMap?.setLanding(null);
-    const url = stageUrl(route ? 'rover' : 'map', m), keep = location.hash.match(/(^|[#&])(ra|rb)=[^&]*/g) ?? [];
+    // the regions and the view stay (without z / cx / cy the map's view resets and the globe flies to the pole); the
+    // camera then goes to the new site (syncGlobeSite)
+    const url = stageUrl(route ? 'rover' : 'map', m), keep = location.hash.match(/(^|[#&])(ra|rb|z|cx|cy)=[^&]*/g) ?? [];
     location.hash = url.slice(url.indexOf('#')) + keep.map((k) => `&${k.replace(/^[#&]/, '')}`).join('');
   }
   function openLanding() {
