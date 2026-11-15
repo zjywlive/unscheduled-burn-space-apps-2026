@@ -357,7 +357,11 @@ function start() {
     globalThis.__globeMap = globeMap;   // for inspection from the console
     regionLayer = createRegionLayer(document, {
       topbar: shell.topbar, getMission: () => readMission(),
-      onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); },
+      // the chosen site and time replace the plan's; the rover route (rp, rpsel) stays, so route planning carries on
+      onSite: (m) => {
+        const url = stageUrl('map', m), keep = location.hash.match(/(^|[#&])(rp|rpsel)=[^&]*/g) ?? [];
+        location.hash = url.slice(url.indexOf('#')) + keep.map((k) => `&${k.replace(/^[#&]/, '')}`).join('');
+      },
     });
   }
   // a site chosen from a list, a link or Where to land: the camera goes to it (a click on the map does not move it)
