@@ -40,7 +40,7 @@ carries each one. Code references are to `demo/src/`.
 | Filters (max slope, max dark), weights | polar grids | Inside 80°S, as before |
 | Contour lines with labels | height field | The globe's contour shader everywhere (interval follows the zoom; no height labels) |
 | PSR outline and hatch | LOLA PSR 120 m | Draped |
-| Live veil (no Sun now) | 2 km now-states | Replaced by real lighting: with "Light at the playhead" on, the globe is lit by the real Sun with cast shadows, everywhere |
+| Live veil (no Sun now); Live mode and no mission window | 2 km now-states | Real lighting: the globe is lit by the real Sun at the playhead with cast shadows, everywhere. In Live (or with no mission window) no Sun / Earth colours are drawn, inside 80°S or out: a smooth horizon outside the polar data would fill half-Moons with straight edges, and the cap alone in colour reads as a disc. The readout and hover card still give the cell's Sun and Earth state |
 | Graticule | — | Drawn by the globe's shader over the whole Moon, the polar cap included; spacing 30° / 10° / 5° / 1° / 0.5° with the zoom; degree labels along the lines through the view centre; Layers → Graticule |
 | Feature names | polar features list, IAU gazetteer | Screen labels over the whole Moon (the polar map's 12 polar craters, 32 major features elsewhere), upright at any tilt, shown while the feature is 30 px to a view across, decluttered by size; Layers → Site and feature names |
 | Site markers and labels | sites | Screen labels for every listed site (click to pick it), decluttered after the selected site; snapping to sites in clicks and drawing is unchanged; Layers → Site and feature names |

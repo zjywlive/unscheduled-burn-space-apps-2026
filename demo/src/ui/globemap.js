@@ -279,11 +279,16 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const alpha = style === 'data' ? 1 : 0.35;
     view.setNight(null);
     if (live) {
-      const d = eph.at(st.cursorMs ?? st.landingMs ?? eph.startMs);
-      view.setLive(d ? { sun: d.sun, earth: d.earth, colours } : null);
-      view.setOverlay({ global: { canvas: gcv, alpha } });
+      // Live (and no mission window): the globe is lit by the real Sun at the playhead with cast shadows
+      // (refreshTerrain), which is what "now" looks like; no flat Sun / Earth fills from a smooth horizon outside the
+      // polar data, whose straight half-Moon edges read as terminators that are not there
+      // (inside 80°S too: the polar picture leaves its Live colours out, so the cap matches the rest of the Moon)
+      view.setLive(null);
+      view.setOverlay({ global: null });
+      frame.setDrapeHeat?.(false);
       return;
     }
+    frame.setDrapeHeat?.(true);
     view.setLive(null);
     const img = gctx.createImageData(grid.w, grid.h), d = img.data;
     const N = grid.w * grid.h;
@@ -313,7 +318,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const ts = frame.terrain ?? {}, st = getState();
     // the real Sun at the playhead lights the globe (with cast shadows) in Real light, and whenever the polar map
     // would show "Light at the playhead" (its veil): one light across 80°S that moves with the time
-    const realSun = ts.style === 'real' || host.dataset.live === 'on';
+    const liveMode = st.mapMode === 'now' || !st.windowOn || !Number.isFinite(st.landingMs);
+    const realSun = ts.style === 'real' || host.dataset.live === 'on' || liveMode;
     const key = `${ts.style}|${ts.contours}|${realSun ? Math.floor((st.cursorMs ?? 0) / 300e3) : ''}`;
     if (key === tsKey) return;
     tsKey = key;

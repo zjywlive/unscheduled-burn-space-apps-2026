@@ -5814,11 +5814,16 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     const alpha = style === 'data' ? 1 : 0.35;
     view.setNight(null);
     if (live) {
-      const d = eph.at(st.cursorMs ?? st.landingMs ?? eph.startMs);
-      view.setLive(d ? { sun: d.sun, earth: d.earth, colours } : null);
-      view.setOverlay({ global: { canvas: gcv, alpha } });
+      // Live (and no mission window): the globe is lit by the real Sun at the playhead with cast shadows
+      // (refreshTerrain), which is what "now" looks like; no flat Sun / Earth fills from a smooth horizon outside the
+      // polar data, whose straight half-Moon edges read as terminators that are not there
+      // (inside 80°S too: the polar picture leaves its Live colours out, so the cap matches the rest of the Moon)
+      view.setLive(null);
+      view.setOverlay({ global: null });
+      frame.setDrapeHeat?.(false);
       return;
     }
+    frame.setDrapeHeat?.(true);
     view.setLive(null);
     const img = gctx.createImageData(grid.w, grid.h), d = img.data;
     const N = grid.w * grid.h;
@@ -5848,7 +5853,8 @@ function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutside, onC
     const ts = frame.terrain ?? {}, st = getState();
     // the real Sun at the playhead lights the globe (with cast shadows) in Real light, and whenever the polar map
     // would show "Light at the playhead" (its veil): one light across 80°S that moves with the time
-    const realSun = ts.style === 'real' || host.dataset.live === 'on';
+    const liveMode = st.mapMode === 'now' || !st.windowOn || !Number.isFinite(st.landingMs);
+    const realSun = ts.style === 'real' || host.dataset.live === 'on' || liveMode;
     const key = `${ts.style}|${ts.contours}|${realSun ? Math.floor((st.cursorMs ?? 0) / 300e3) : ''}`;
     if (key === tsKey) return;
     tsKey = key;
@@ -13609,7 +13615,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
   let lightTimer = 0, lightAt = 0;
   let shownPic = null, shownContour = null;   // the last pictures on screen, kept while the next ones are built
   let colours = null;
-  let drapeOnly = false;
+  let drapeOnly = false, drapeHeat = true;   // drapeHeat false: the globe shows Live as real light, no heat colours
   let draw = initialDraw('select');
   let snap = null;                 // { target, px, py }
   let keyPt = null;                // keyboard crosshair, km
@@ -14212,9 +14218,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     const pic = drapeOnly ? null : styledPicture();
     if (pic) drawLayerImage(ctx, pic.canvas, pic.view, pic.sref);
     if (!p.emptyText && drapeOnly) {
-      ctx.globalAlpha = ts.style === 'data' ? 1 : HEAT_ON_TERRAIN;
-      paintLayers(ctx);
-      ctx.globalAlpha = 1;
+      if (drapeHeat) { ctx.globalAlpha = ts.style === 'data' ? 1 : HEAT_ON_TERRAIN; paintLayers(ctx); ctx.globalAlpha = 1; }
     } else if (!p.emptyText) {
       const t = reliefAmount();
       if (t === 0 && !pic) paintLayers(ctx);
@@ -14739,6 +14743,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     zoomBy,
     // the Map's globe draws the terrain: paint only what is draped on it (heat, PSR; the SVG layers as always)
     setDrapeOnly(on) { drapeOnly = !!on; paint(); },
+    setDrapeHeat(on) { if (drapeHeat !== !!on) { drapeHeat = !!on; paint(); } },
     resetView() { stopFly(); setView({ cx: 0, cy: 0, zoom: 1 }, true); },
     // fix L3: ease to the view that fits a box (km) inside the insets (CSS px from each frame edge)
     fitBox(box, insets, opts = {}) { if (p && geo.W) flyTo(viewFor(box, insets, opts.maxZoom), opts.ms); },
@@ -22227,6 +22232,84 @@ function createDocSheet({ name, title = '', subtitle = '', onClose } = {}) {
 
 return { createDocSheet };
 })();
+__m['tools-v2/refs.js'] = (() => {
+// The v2 reference store (docs/mcp-v2/DESIGN.md §4): results that later calls can point at instead of
+// repeating coordinates. One store per createCoreTools instance, in memory, at most LIMIT entries per kind
+// (oldest dropped first). Nothing is written to disk.
+//
+//   refs.put(kind, value, { prefix }) → id          kind: 'search' | 'mission' | 'route'
+//   refs.get(kind, id) → value | null               id omitted → the latest of that kind
+//   refs.place(input) → { site } | { error } | null  a PLACE that names a reference (null when it does not)
+//
+// PLACE forms resolved here (tools-core.js resolvePlace hands them over):
+//   { candidate: "S2" }               candidate S2 of the latest find_landing_sites (or of search_id)
+//   { candidate: "S2", search_id }    of that search
+//   { mission_point: "W2" }           point W2 of the latest mission_open (or of mission_id)
+//   { mission_point: "W2", mission_id }
+// A search value must carry candidates: [{ ref, latDeg, lonDeg, ... }]; a mission value must carry
+// points: [{ name, latDeg, lonDeg, ... }] (mission-io.js). Names match case-insensitively.
+
+const REF_LIMIT = 32;
+const REF_FIELDS = ['candidate', 'search_id', 'mission_point', 'mission_id'];
+
+function createRefs({ limit = REF_LIMIT } = {}) {
+  const kinds = new Map();
+  let seq = 0;
+  const table = (kind) => {
+    if (!kinds.has(kind)) kinds.set(kind, new Map());
+    return kinds.get(kind);
+  };
+  const latest = new Map();
+
+  function put(kind, value, { prefix = kind[0] } = {}) {
+    const t = table(kind);
+    seq += 1;
+    // deterministic (s_1, s_2, …): the same calls give the same ids, so results compare equal across runs
+    const id = `${prefix}_${seq}`;
+    t.set(id, value);
+    while (t.size > limit) t.delete(t.keys().next().value);
+    latest.set(kind, id);
+    return id;
+  }
+
+  function get(kind, id) {
+    const t = table(kind);
+    const key = id ?? latest.get(kind);
+    return key !== undefined && t.has(key) ? t.get(key) : null;
+  }
+
+  const latestId = (kind) => (latest.has(kind) && table(kind).has(latest.get(kind)) ? latest.get(kind) : null);
+
+  function place(input) {
+    if (!input || typeof input !== 'object') return null;
+    const has = (k) => input[k] !== undefined;
+    if (!REF_FIELDS.some(has)) return null;
+    if (has('site_id') || has('lat_deg') || has('lon_deg')) return { error: 'Give a reference (candidate or mission_point) or a site_id / lat_deg+lon_deg, not both.' };
+    if (has('candidate') && has('mission_point')) return { error: 'Give candidate or mission_point, not both.' };
+    if (has('candidate')) {
+      const search = get('search', input.search_id);
+      if (!search) return { error: input.search_id ? `Search ${input.search_id} is no longer held (the server keeps the last ${limit}). Run find_landing_sites again.` : 'No find_landing_sites result is held yet. Run find_landing_sites first, then refer to its candidates as S1, S2, …' };
+      const want = String(input.candidate).trim().toLowerCase();
+      const c = (search.candidates ?? []).find((x) => String(x.ref).toLowerCase() === want);
+      if (!c) return { error: `No candidate ${input.candidate} in search ${input.search_id ?? latestId('search')}. It has ${(search.candidates ?? []).map((x) => x.ref).join(', ') || 'no candidates'}.` };
+      return { site: { id: c.ref, name: `Candidate ${c.ref}`, latDeg: c.latDeg, lonDeg: c.lonDeg, verified: true } };
+    }
+    if (has('mission_point')) {
+      const m = get('mission', input.mission_id);
+      if (!m) return { error: input.mission_id ? `Mission ${input.mission_id} is no longer held. Run mission_open again.` : 'No mission is open. Run mission_open first, then refer to its points as landing, W1, W2, …' };
+      const want = String(input.mission_point).trim().toLowerCase();
+      const p = (m.points ?? []).find((x) => String(x.name).toLowerCase() === want);
+      if (!p) return { error: `No point ${input.mission_point} in mission ${input.mission_id ?? latestId('mission')}. It has ${(m.points ?? []).map((x) => x.name).join(', ') || 'no points'}.` };
+      return { site: { id: p.name, name: `${m.name ? `${m.name} · ` : ''}${p.name}`, latDeg: p.latDeg, lonDeg: p.lonDeg, verified: true } };
+    }
+    return { error: 'search_id goes with candidate, and mission_id with mission_point.' };
+  }
+
+  return { put, get, latestId, place, limit };
+}
+
+return { REF_LIMIT, REF_FIELDS, createRefs };
+})();
 __m['tools-core.js'] = (() => {
 // The compute tier of the command layer (task book phase 5 §3 item 11): twelve stateless tools that take
 // their place and time in the input and return plain JSON. They never read or change page state, so the
@@ -22261,6 +22344,7 @@ const { parseLat, parseLon } = __m['coords.js'];
 const { formatCoords } = __m['sites.js'];
 const { fmtHours, fmtSpan, fmtDeg } = __m['format.js'];
 const { compareRows } = __m['compare-rows.js'];
+const { createRefs, REF_FIELDS } = __m['tools-v2/refs.js'];
 
 const DAY_MS = 86400e3;
 const HOUR_MS = 3600e3;
@@ -22278,6 +22362,29 @@ const LAT = { type: ['number', 'string'], description: 'Latitude, south negative
 const LON = { type: ['number', 'string'], description: 'Longitude: east 0–360 (222.69), negative or "137.31W" for west.' };
 const PLACE = { site_id: SITE_ID, lat_deg: LAT, lon_deg: LON };
 const PLACE_OBJ = { ...obj(PLACE), description: 'A place: { site_id } or { lat_deg, lon_deg }.' };
+// v2 (createCoreTools with extensions): every place may also name a held result (tools-v2/refs.js).
+const PLACE_REFS = {
+  candidate: { type: 'string', description: 'A candidate of the latest find_landing_sites, e.g. "S1" (with search_id: of that search).' },
+  search_id: { type: 'string', description: 'With candidate: the find_landing_sites search it belongs to.' },
+  mission_point: { type: 'string', description: 'A point of the open mission (mission_open): landing, touchdown, start, end, W1…, stop1…, haven1…, empty, or a name the user gave.' },
+  mission_id: { type: 'string', description: 'With mission_point: the mission it belongs to (default: the latest mission_open).' },
+};
+// Adds PLACE_REFS to every object schema that takes a place (site_id with lat_deg), at any depth.
+function withPlaceRefs(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) return schema.map(withPlaceRefs);
+  const out = {};
+  for (const [k, v] of Object.entries(schema)) out[k] = k === 'enum' ? v : withPlaceRefs(v);
+  if (out.properties?.site_id && out.properties?.lat_deg) {
+    out.properties = { ...out.properties, ...PLACE_REFS };
+    if (typeof out.description === 'string' && out.description.startsWith('A place:')) out.description = 'A place: { site_id }, { lat_deg, lon_deg }, { candidate: "S1" } or { mission_point: "W2" }.';
+  }
+  return out;
+}
+const REFS = new WeakMap();
+const PLACE_KEYS = ['site_id', 'lat_deg', 'lon_deg', ...REF_FIELDS];
+const namesPlace = (o) => PLACE_KEYS.some((k) => o[k] !== undefined);
+const placeOf = (o) => Object.fromEntries(PLACE_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 const LANDING = { type: 'string', description: 'Landing time, UTC: 2027-01-13 or 2027-01-13T06:00Z. Snapped down to the whole hour, as the page does.' };
 const INSTANT = { type: 'string', description: 'Instant, UTC: 2027-01-20T14:30Z (or a date for 00:00).' };
 const STAY = { type: 'number', minimum: 1, maximum: 60, description: 'Stay length in days (the page offers 7, 14 and 30). Default 14.' };
@@ -22459,7 +22566,13 @@ function findPlace(sites, id) {
 function resolvePlace(ctx, input, { terrainOnly = false } = {}) {
   const hasLat = input.lat_deg !== undefined, hasLon = input.lon_deg !== undefined;
   let site;
-  if (input.site_id !== undefined) {
+  const held = REFS.get(ctx)?.place(input) ?? null;
+  if (held?.error) return err(held.error);
+  if (held) {
+    site = held.site;
+  } else if (REF_FIELDS.some((k) => input[k] !== undefined)) {
+    return err('References (candidate, mission_point) need the v2 tools, which this caller does not have.');
+  } else if (input.site_id !== undefined) {
     if (hasLat || hasLon) return err('Give either site_id or lat_deg and lon_deg, not both.');
     const s = findPlace(ctx.sites, input.site_id);
     if (!s) return err(`Unknown site_id ${input.site_id}. list_sites gives the ids.`);
@@ -22554,14 +22667,14 @@ function summaryFigures(s, requestedDays) {
 // The scenario set of site_summary / compare_scenarios → [{ index, site, place, landingMs, stayDays } | { index, error }]
 function scenarioList(ctx, input, { perStay }) {
   const stayDays = stayIn(input.stay_days ?? 14);
-  const flat = input.site_id !== undefined || input.lat_deg !== undefined || input.lon_deg !== undefined || input.landing !== undefined;
+  const flat = namesPlace(input) || input.landing !== undefined;
   const forms = [flat, input.scenarios !== undefined, input.places !== undefined || input.landings !== undefined].filter(Boolean).length;
   if (forms === 0) return err('Give a place and landing, or scenarios, or places and landings.');
   if (forms > 1) return err('Use one form: a single place and landing, scenarios, or places with landings.');
   let raw;
   if (flat) {
     if (input.landing === undefined) return err('landing is required.');
-    raw = [{ site_id: input.site_id, lat_deg: input.lat_deg, lon_deg: input.lon_deg, landing: input.landing }];
+    raw = [{ ...placeOf(input), landing: input.landing }];
   } else if (input.scenarios) {
     raw = input.scenarios;
   } else {
@@ -22571,7 +22684,7 @@ function scenarioList(ctx, input, { perStay }) {
   }
   return raw.map((r, index) => {
     if (!perStay && r.stay_days !== undefined) return { index, error: 'stay_days goes at the top level here: every scenario is compared over the same days.' };
-    const p = resolvePlace(ctx, { site_id: r.site_id, lat_deg: r.lat_deg, lon_deg: r.lon_deg });
+    const p = resolvePlace(ctx, placeOf(r));
     if (p.error) return { index, error: p.error };
     const l = parseLanding(ctx.eph, r.landing);
     if (l.error) return { index, error: l.error };
@@ -22629,9 +22742,13 @@ function why(name, b, smooth) {
 const strip = (b) => { const { _el, _sky, ...rest } = b; return rest; };
 
 // ---------- the tools ----------
-function createCoreTools(ctx) {
+// extensions (v2, docs/mcp-v2/DESIGN.md): functions kit → { specs: [{ name, description, schema }], handlers }.
+// With any extension, places also accept references (candidate, mission_point) and kit.refs holds results.
+function createCoreTools(ctx, { extensions = [] } = {}) {
   if (!ctx?.eph || !Array.isArray(ctx?.sites)) throw new Error('createCoreTools needs ctx.eph and ctx.sites');
   const eph = ctx.eph;
+  const refs = extensions.length ? createRefs() : null;
+  if (refs) REFS.set(ctx, refs);
   // the skyline provider: the page's (shared cache) or a small cache over terrain.js skylineFor
   const cache = new Map();
   const sky = typeof ctx.skylineFor === 'function' ? ctx.skylineFor : (site) => {
@@ -22908,7 +23025,7 @@ function createCoreTools(ctx) {
       let alt = null;
       if (input.alternative) {
         const a = input.alternative;
-        const ap = a.site_id !== undefined || a.lat_deg !== undefined || a.lon_deg !== undefined ? resolvePlace(ctx, a) : p;
+        const ap = namesPlace(a) ? resolvePlace(ctx, a) : p;
         if (ap.error) return err(`alternative: ${ap.error}`);
         const al = parseLanding(eph, a.landing, 'alternative.landing');
         if (al.error) return al;
@@ -22958,7 +23075,7 @@ function createCoreTools(ctx) {
       let alt = null;
       if (input.alternative) {
         const a = input.alternative;
-        const ap = a.site_id !== undefined || a.lat_deg !== undefined || a.lon_deg !== undefined ? resolvePlace(ctx, a) : p;
+        const ap = namesPlace(a) ? resolvePlace(ctx, a) : p;
         if (ap.error) return err(`alternative: ${ap.error}`);
         const al = parseLanding(eph, a.landing, 'alternative.landing');
         if (al.error) return al;
@@ -22998,7 +23115,7 @@ function createCoreTools(ctx) {
       for (const [i, q] of input.points.entries()) {
         const where = Array.isArray(q) ? (q.length === 2 ? { lat_deg: q[0], lon_deg: q[1] } : null) : q;
         if (!where) return err(`points[${i}] must be [lat, lon], { site_id } or { lat_deg, lon_deg }.`);
-        const extra = Object.keys(where).filter((k) => !['site_id', 'lat_deg', 'lon_deg'].includes(k));
+        const extra = Object.keys(where).filter((k) => !['site_id', 'lat_deg', 'lon_deg', ...(REFS.has(ctx) ? REF_FIELDS : [])].includes(k));
         if (extra.length) return err(`points[${i}]: unknown field ${extra[0]}.`);
         const r = resolvePlace(ctx, where, { terrainOnly: true });
         if (r.error) return err(`points[${i}]: ${r.error}`);
@@ -23064,11 +23181,37 @@ function createCoreTools(ctx) {
     },
   };
 
-  const byName = new Map(SPECS.map((s) => [s.name, s]));
-  return {
-    list: SPECS.map((s) => s.name),
+  // ---------- v2 extensions ----------
+  let specs = SPECS;
+  if (extensions.length) {
+    const kit = {
+      ctx, eph, refs, sky, horizonOf, about, withAbout, err, round, hours, pct, iso, stayIn, provided, span, dateText, rangeText, labelOf,
+      resolvePlace: (input, opts) => resolvePlace(ctx, input, opts),
+      parseLanding: (text, field) => parseLanding(eph, text, field),
+      parseInstant: (text, field) => parseInstant(eph, text, field),
+      parseUtc, summaryFigures, bodyNow, nextCrossings: (site, body, fromMs, mask) => nextCrossings(eph, site, body, fromMs, mask),
+      schema: { obj, PLACE: { ...PLACE, ...PLACE_REFS }, PLACE_OBJ: withPlaceRefs(PLACE_OBJ), LANDING, INSTANT, STAY, SITE_ID, LAT, LON },
+      conv: { SCAN_RES, VISIBLE_CONV, HOURS_CONV, CLIP_CONV },
+      run: (name, input) => api.run(name, input),
+      DAY_MS, HOUR_MS,
+    };
+    specs = SPECS.map((s) => ({ ...s, schema: withPlaceRefs(s.schema) }));
+    for (const ext of extensions) {
+      const e = ext(kit);
+      for (const s of e.specs) {
+        if (handlers[s.name]) throw new Error(`Tool ${s.name} is defined twice.`);
+        if (typeof e.handlers[s.name] !== 'function') throw new Error(`Tool ${s.name} has no handler.`);
+        handlers[s.name] = e.handlers[s.name];
+      }
+      specs = [...specs, ...e.specs];
+    }
+  }
+
+  const byName = new Map(specs.map((s) => [s.name, s]));
+  const api = {
+    list: specs.map((s) => s.name),
     specs() {
-      return SPECS.map((s) => ({ name: s.name, description: s.description, input_schema: structuredClone(s.schema) }));
+      return specs.map((s) => ({ name: s.name, description: s.description, input_schema: structuredClone(s.schema) }));
     },
     toolDefinitions() {
       return this.specs();
@@ -23087,6 +23230,7 @@ function createCoreTools(ctx) {
       }
     },
   };
+  return api;
 }
 
 return { CORE_MAX_SCENARIOS, CORE_MAX_TIMES, validateCoreInput, createCoreTools };
