@@ -41,7 +41,7 @@ test('shape entry: point, rectangle and polygon', () => {
   assert.equal(bow.ok, false); assert.match(bow.formError, /cross/);
   const two = shapeFromFields('polygon', { rows: [{ lat: '-88', lon: '0' }, { lat: '-88', lon: '120' }] });
   assert.equal(two.ok, false); assert.match(two.formError, /at least 3/);
-  const errs = shapeFromFields('polygon', { rows: [{ lat: '-70', lon: '0' }, { lat: '-88', lon: 'x' }, { lat: '', lon: '' }] });
+  const errs = shapeFromFields('polygon', { rows: [{ lat: '-95', lon: '0' }, { lat: '-88', lon: 'x' }, { lat: '', lon: '' }] });
   assert.deepEqual(errs.errors.map((e) => e.key), ['0:lat', '1:lon', '2:lat', '2:lon']);   // every wrong field
   assert.deepEqual(shapeFromFields('point', { rows: [{ lat: '-75', lon: '400' }] }).errors.map((e) => e.key), ['0:lat', '0:lon']);
   assert.deepEqual(blankFields('circle'), { rows: [{ lat: '', lon: '' }], r: '' });
@@ -66,4 +66,20 @@ test('shape entry: shape → fields → shape round trip (to the 3 decimals the 
   }
   assert.deepEqual(fieldsFromShape({ latDeg: -89.45, lonDeg: 222.69 }), { rows: [{ lat: '−89.450', lon: '222.690' }] });
   assert.equal(fieldsFromShape(null), null);
+});
+
+test('north of 80°S the form reads and makes regions in latitude and longitude', async () => {
+  const { geoParam } = await import('../demo/src/georegion.js');
+  const r = shapeFromFields('rect', { rows: [{ lat: '-10', lon: '20' }, { lat: '5', lon: '30' }] });
+  assert.equal(r.ok, true);
+  assert.equal(geoParam(r.shape), 'grect:-10,20,5,10');
+  const back = fieldsFromShape(r.shape);
+  assert.deepEqual(shapeFromFields('rect', back).shape, r.shape);
+  const c = shapeFromFields('circle', { rows: [{ lat: '0', lon: '45' }], r: '50' });
+  assert.ok(c.ok && c.shape.geo && c.shape.rKm === 50);
+  const p = shapeFromFields('polygon', { rows: [{ lat: '0', lon: '0' }, { lat: '0', lon: '10' }, { lat: '10', lon: '5' }] });
+  assert.ok(p.ok && p.shape.geo && p.shape.pts.length === 3);
+  // south of 80°S: map km as before
+  const polar = shapeFromFields('circle', { rows: [{ lat: '-89', lon: '0' }], r: '5' });
+  assert.ok(polar.ok && !polar.shape.geo && Number.isFinite(polar.shape.cx));
 });

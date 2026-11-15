@@ -4000,7 +4000,7 @@ const RAD = Math.PI / 180, DEG = 180 / Math.PI;
 const MOON_R_KM = 1737.4;
 const r4 = (v) => Math.round(v * 1e4) / 1e4;
 const r2 = (v) => Math.round(v * 100) / 100;
-const lon360 = (v) => ((v % 360) + 360) % 360;
+const lon360 = (v) => r4(((v % 360) + 360) % 360);
 
 const isGeo = (shape) => !!shape?.geo;
 
@@ -4031,9 +4031,10 @@ function geoPolygon(points) {
 
 function geoParam(sh) {
   if (!isGeo(sh)) return null;
-  if (sh.type === 'rect') return `grect:${[sh.lat0, sh.lonW, sh.lat1, sh.spanDeg].join(',')}`;
-  if (sh.type === 'circle') return `gcircle:${[sh.latDeg, sh.lonDeg, sh.rKm].join(',')}`;
-  if (sh.type === 'polygon') return `gpoly:${sh.pts.map((p) => p.join(',')).join(';')}`;
+  // rounded (lon360 leaves float noise such as 25.853099999999984)
+  if (sh.type === 'rect') return `grect:${[sh.lat0, sh.lonW, sh.lat1, sh.spanDeg].map(r4).join(',')}`;
+  if (sh.type === 'circle') return `gcircle:${[r4(sh.latDeg), r4(sh.lonDeg), r2(sh.rKm)].join(',')}`;
+  if (sh.type === 'polygon') return `gpoly:${sh.pts.map((p) => p.map(r4).join(',')).join(';')}`;
   return null;
 }
 const nums = (s, n) => { const v = s.split(',').map(Number); return v.length === n && v.every(Number.isFinite) ? v : null; };
@@ -17255,6 +17256,8 @@ __m['ui/shapeentry.js'] = (() => {
 const { h, clear } = __m['ui/dom.js'];
 const { parseLat, parseLon, parseLatLon, parseKm, fieldsFromXY, formatKm, formatLat, formatLon } = __m['coords.js'];
 const { selfIntersects } = __m['map/shapes.js'];
+const { TERRAIN_MAX_LAT } = __m['terrain.js'];
+const { geoRect, geoPolygon } = __m['georegion.js'];
 
 const ENTRY_TOOLS = ['point', 'rect', 'circle', 'polygon', 'route'];
 const MAX_RADIUS_KM = 300;
@@ -17281,12 +17284,14 @@ function blankFields(tool) {
 function shapeFromFields(tool, fields) {
   const t = toolOf(tool);
   const errors = [], pts = [];
+  // regions may be anywhere on the Moon (north of 80°S they are kept in latitude and longitude); a point stays polar
+  const opts = t === 'point' ? {} : { maxLatDeg: 90 };
   (fields.rows ?? []).forEach((r, i) => {
     // both fields of a row are checked, so every wrong field shows its own message
-    const la = parseLat(r.lat), lo = parseLon(r.lon);
+    const la = parseLat(r.lat, opts), lo = parseLon(r.lon);
     if (!la.ok) errors.push({ key: `${i}:lat`, message: la.message });
     if (!lo.ok) errors.push({ key: `${i}:lon`, message: lo.message });
-    pts.push(la.ok && lo.ok ? parseLatLon(r.lat, r.lon) : null);
+    pts.push(la.ok && lo.ok ? parseLatLon(r.lat, r.lon, opts) : null);
   });
   let rKm = null;
   if (t === 'circle') {
@@ -17296,6 +17301,15 @@ function shapeFromFields(tool, fields) {
   if (t === 'polygon' && (fields.rows ?? []).length < MIN_POLYGON) return { ok: false, errors, formError: `A polygon needs at least ${MIN_POLYGON} vertices.` };
   if (errors.length) return { ok: false, errors, formError: null };
   if (t === 'point') return { ok: true, point: { xy: pts[0].xy, latDeg: pts[0].latDeg, lonDeg: pts[0].lonDeg } };
+  // a shape with a point north of 80°S is kept in latitude and longitude (georegion.js), as the globe draws it there
+  if (pts.some((p) => p.latDeg > TERRAIN_MAX_LAT)) {
+    if (t === 'circle') return { ok: true, shape: { type: 'circle', geo: true, latDeg: pts[0].latDeg, lonDeg: ((pts[0].lonDeg % 360) + 360) % 360, rKm } };
+    if (t === 'rect') {
+      const shape = geoRect(pts[0], pts[1]);
+      return shape ? { ok: true, shape } : { ok: false, errors: [], formError: 'The two corners must differ in latitude and in longitude.' };
+    }
+    if (t === 'polygon') return { ok: true, shape: geoPolygon(pts) };
+  }
   if (t === 'circle') return { ok: true, shape: { type: 'circle', cx: pts[0].xy[0], cy: pts[0].xy[1], rKm } };
   if (t === 'rect') {
     const [a, b] = [pts[0].xy, pts[1].xy];
@@ -17318,6 +17332,14 @@ function fieldsFromShape(shape) {
   if (Array.isArray(shape)) return { rows: [fieldsFromXY(shape)] };
   // a picked point in degrees: formatted directly, no trip through the plane
   if (Number.isFinite(shape.latDeg) && Number.isFinite(shape.lonDeg) && !shape.type) return { rows: [{ lat: formatLat(shape.latDeg), lon: formatLon(shape.lonDeg) }] };
+  // a region held in latitude and longitude (north of 80°S, georegion.js): its corners and centre as they are
+  if (shape.geo) {
+    const ll = (lat, lon) => ({ lat: formatLat(lat), lon: formatLon(((lon % 360) + 360) % 360) });
+    if (shape.type === 'circle') return { rows: [ll(shape.latDeg, shape.lonDeg)], r: formatKm(shape.rKm) };
+    if (shape.type === 'rect') return { rows: [ll(shape.lat0, shape.lonW), ll(shape.lat1, shape.lonW + shape.spanDeg)] };
+    if (shape.type === 'polygon') return { rows: shape.pts.map(([a, b]) => ll(a, b)) };
+    return null;
+  }
   if (shape.type === 'circle') return { rows: [fieldsFromXY([shape.cx, shape.cy])], r: formatKm(shape.rKm) };
   if (shape.type === 'rect') return { rows: [fieldsFromXY([shape.x0, shape.y0]), fieldsFromXY([shape.x1, shape.y1])] };
   if (shape.type === 'polygon') return { rows: shape.points.map((p) => fieldsFromXY(p)) };
@@ -17396,7 +17418,7 @@ function createShapeEntry(cb = {}) {
       sub.textContent = 'Pick a point by its coordinates.';
       body.append(colsHead(''), h('ol', { class: 'se-rows' }, coordRow(0, 'Point')));
     } else if (tool === 'rect') {
-      sub.textContent = `Two opposite corners. The rectangle is square to the map, as drawn. ${regionLine}`;
+      sub.textContent = `Two opposite corners. South of 80°S the rectangle is square to the polar map; north of it, it runs along latitude and longitude. ${regionLine}`;
       body.append(colsHead('Corner'), h('ol', { class: 'se-rows' }, coordRow(0, 'Corner 1'), coordRow(1, 'Corner 2')));
     } else if (tool === 'circle') {
       sub.textContent = `Centre and radius. ${regionLine}`;
@@ -24999,11 +25021,10 @@ function start() {
   if (shapeEntry) mapView.mountFold('coords', shapeEntry.el);
   onCoordsFold = (open) => shapeEntry?.setBar(open);
   onCoordsFold(mapView?.foldOpen('coords'));
-  let entryShapes = polarShapes();   // a new object only when a region changes (it refills the form)
+  let entryShapes = { A: shapes.A, B: shapes.B };   // a new object only when a region changes (it refills the form)
   function syncEntry() {
     if (!shapeEntry) return;
-    const ps = polarShapes();
-    if (entryShapes.A !== ps.A || entryShapes.B !== ps.B) entryShapes = ps;
+    if (entryShapes.A !== shapes.A || entryShapes.B !== shapes.B) entryShapes = { A: shapes.A, B: shapes.B };
     shapeEntry.update({ tool: state.tool, slot: state.slot, shapes: entryShapes, point: state.site });
   }
   // choosing a tool opens its form (the Route tool: the Route plan section); big layout only, where the

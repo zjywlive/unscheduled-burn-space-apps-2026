@@ -23,6 +23,8 @@
 import { h, clear } from './dom.js';
 import { parseLat, parseLon, parseLatLon, parseKm, fieldsFromXY, formatKm, formatLat, formatLon } from '../coords.js';
 import { selfIntersects } from '../map/shapes.js';
+import { TERRAIN_MAX_LAT } from '../terrain.js';
+import { geoRect, geoPolygon } from '../georegion.js';
 
 export const ENTRY_TOOLS = ['point', 'rect', 'circle', 'polygon', 'route'];
 export const MAX_RADIUS_KM = 300;
@@ -49,12 +51,14 @@ export function blankFields(tool) {
 export function shapeFromFields(tool, fields) {
   const t = toolOf(tool);
   const errors = [], pts = [];
+  // regions may be anywhere on the Moon (north of 80°S they are kept in latitude and longitude); a point stays polar
+  const opts = t === 'point' ? {} : { maxLatDeg: 90 };
   (fields.rows ?? []).forEach((r, i) => {
     // both fields of a row are checked, so every wrong field shows its own message
-    const la = parseLat(r.lat), lo = parseLon(r.lon);
+    const la = parseLat(r.lat, opts), lo = parseLon(r.lon);
     if (!la.ok) errors.push({ key: `${i}:lat`, message: la.message });
     if (!lo.ok) errors.push({ key: `${i}:lon`, message: lo.message });
-    pts.push(la.ok && lo.ok ? parseLatLon(r.lat, r.lon) : null);
+    pts.push(la.ok && lo.ok ? parseLatLon(r.lat, r.lon, opts) : null);
   });
   let rKm = null;
   if (t === 'circle') {
@@ -64,6 +68,15 @@ export function shapeFromFields(tool, fields) {
   if (t === 'polygon' && (fields.rows ?? []).length < MIN_POLYGON) return { ok: false, errors, formError: `A polygon needs at least ${MIN_POLYGON} vertices.` };
   if (errors.length) return { ok: false, errors, formError: null };
   if (t === 'point') return { ok: true, point: { xy: pts[0].xy, latDeg: pts[0].latDeg, lonDeg: pts[0].lonDeg } };
+  // a shape with a point north of 80°S is kept in latitude and longitude (georegion.js), as the globe draws it there
+  if (pts.some((p) => p.latDeg > TERRAIN_MAX_LAT)) {
+    if (t === 'circle') return { ok: true, shape: { type: 'circle', geo: true, latDeg: pts[0].latDeg, lonDeg: ((pts[0].lonDeg % 360) + 360) % 360, rKm } };
+    if (t === 'rect') {
+      const shape = geoRect(pts[0], pts[1]);
+      return shape ? { ok: true, shape } : { ok: false, errors: [], formError: 'The two corners must differ in latitude and in longitude.' };
+    }
+    if (t === 'polygon') return { ok: true, shape: geoPolygon(pts) };
+  }
   if (t === 'circle') return { ok: true, shape: { type: 'circle', cx: pts[0].xy[0], cy: pts[0].xy[1], rKm } };
   if (t === 'rect') {
     const [a, b] = [pts[0].xy, pts[1].xy];
@@ -86,6 +99,14 @@ export function fieldsFromShape(shape) {
   if (Array.isArray(shape)) return { rows: [fieldsFromXY(shape)] };
   // a picked point in degrees: formatted directly, no trip through the plane
   if (Number.isFinite(shape.latDeg) && Number.isFinite(shape.lonDeg) && !shape.type) return { rows: [{ lat: formatLat(shape.latDeg), lon: formatLon(shape.lonDeg) }] };
+  // a region held in latitude and longitude (north of 80°S, georegion.js): its corners and centre as they are
+  if (shape.geo) {
+    const ll = (lat, lon) => ({ lat: formatLat(lat), lon: formatLon(((lon % 360) + 360) % 360) });
+    if (shape.type === 'circle') return { rows: [ll(shape.latDeg, shape.lonDeg)], r: formatKm(shape.rKm) };
+    if (shape.type === 'rect') return { rows: [ll(shape.lat0, shape.lonW), ll(shape.lat1, shape.lonW + shape.spanDeg)] };
+    if (shape.type === 'polygon') return { rows: shape.pts.map(([a, b]) => ll(a, b)) };
+    return null;
+  }
   if (shape.type === 'circle') return { rows: [fieldsFromXY([shape.cx, shape.cy])], r: formatKm(shape.rKm) };
   if (shape.type === 'rect') return { rows: [fieldsFromXY([shape.x0, shape.y0]), fieldsFromXY([shape.x1, shape.y1])] };
   if (shape.type === 'polygon') return { rows: shape.points.map((p) => fieldsFromXY(p)) };
@@ -164,7 +185,7 @@ export function createShapeEntry(cb = {}) {
       sub.textContent = 'Pick a point by its coordinates.';
       body.append(colsHead(''), h('ol', { class: 'se-rows' }, coordRow(0, 'Point')));
     } else if (tool === 'rect') {
-      sub.textContent = `Two opposite corners. The rectangle is square to the map, as drawn. ${regionLine}`;
+      sub.textContent = `Two opposite corners. South of 80°S the rectangle is square to the polar map; north of it, it runs along latitude and longitude. ${regionLine}`;
       body.append(colsHead('Corner'), h('ol', { class: 'se-rows' }, coordRow(0, 'Corner 1'), coordRow(1, 'Corner 2')));
     } else if (tool === 'circle') {
       sub.textContent = `Centre and radius. ${regionLine}`;

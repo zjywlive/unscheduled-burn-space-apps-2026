@@ -14,7 +14,7 @@ const RAD = Math.PI / 180, DEG = 180 / Math.PI;
 export const MOON_R_KM = 1737.4;
 const r4 = (v) => Math.round(v * 1e4) / 1e4;
 const r2 = (v) => Math.round(v * 100) / 100;
-const lon360 = (v) => ((v % 360) + 360) % 360;
+const lon360 = (v) => r4(((v % 360) + 360) % 360);
 
 export const isGeo = (shape) => !!shape?.geo;
 
@@ -45,9 +45,10 @@ export function geoPolygon(points) {
 
 export function geoParam(sh) {
   if (!isGeo(sh)) return null;
-  if (sh.type === 'rect') return `grect:${[sh.lat0, sh.lonW, sh.lat1, sh.spanDeg].join(',')}`;
-  if (sh.type === 'circle') return `gcircle:${[sh.latDeg, sh.lonDeg, sh.rKm].join(',')}`;
-  if (sh.type === 'polygon') return `gpoly:${sh.pts.map((p) => p.join(',')).join(';')}`;
+  // rounded (lon360 leaves float noise such as 25.853099999999984)
+  if (sh.type === 'rect') return `grect:${[sh.lat0, sh.lonW, sh.lat1, sh.spanDeg].map(r4).join(',')}`;
+  if (sh.type === 'circle') return `gcircle:${[r4(sh.latDeg), r4(sh.lonDeg), r2(sh.rKm)].join(',')}`;
+  if (sh.type === 'polygon') return `gpoly:${sh.pts.map((p) => p.map(r4).join(',')).join(';')}`;
   return null;
 }
 const nums = (s, n) => { const v = s.split(',').map(Number); return v.length === n && v.every(Number.isFinite) ? v : null; };

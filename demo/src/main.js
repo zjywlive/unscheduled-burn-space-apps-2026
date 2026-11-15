@@ -405,11 +405,10 @@ function start() {
   if (shapeEntry) mapView.mountFold('coords', shapeEntry.el);
   onCoordsFold = (open) => shapeEntry?.setBar(open);
   onCoordsFold(mapView?.foldOpen('coords'));
-  let entryShapes = polarShapes();   // a new object only when a region changes (it refills the form)
+  let entryShapes = { A: shapes.A, B: shapes.B };   // a new object only when a region changes (it refills the form)
   function syncEntry() {
     if (!shapeEntry) return;
-    const ps = polarShapes();
-    if (entryShapes.A !== ps.A || entryShapes.B !== ps.B) entryShapes = ps;
+    if (entryShapes.A !== shapes.A || entryShapes.B !== shapes.B) entryShapes = { A: shapes.A, B: shapes.B };
     shapeEntry.update({ tool: state.tool, slot: state.slot, shapes: entryShapes, point: state.site });
   }
   // choosing a tool opens its form (the Route tool: the Route plan section); big layout only, where the
