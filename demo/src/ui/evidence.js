@@ -1,5 +1,17 @@
 // The Evidence view (spec §9.5, phase 3 §7 item 8): five questions a judge asks, the validation tables, and the limits.
 import { h, clear } from './dom.js';
+import { DATA_SOURCES, SHOWN_LABEL } from '../data-sources.js';
+
+// Every dataset, how the page shows it (a NASA product as published, NASA data we calculate with, or our own
+// calculation) and where it appears.
+function sourcesTable() {
+  return h('div', { class: 'table-scroll' }, h('table', { class: 'doc-table sources-table' },
+    h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Data'), h('th', { scope: 'col' }, 'How it is shown'), h('th', { scope: 'col' }, 'Where in the app'))),
+    h('tbody', null, DATA_SOURCES.map((s) => h('tr', { 'data-shown': s.shown },
+      h('th', { scope: 'row' }, h('b', null, s.label), h('br'), h('span', { class: 'src-value' }, s.value)),
+      h('td', { class: 'src-shown' }, SHOWN_LABEL[s.shown]),
+      h('td', null, s.where))))));
+}
 
 const MINUS = '−';
 const deg3 = (v) => `${v < 0 ? MINUS : ''}${Math.abs(v).toFixed(3)}°`;
@@ -103,6 +115,9 @@ export function renderEvidence(el, { validation, meta, sites }) {
       h('p', null, "A site, a landing time and a stay length go in. The page interpolates JPL’s Moon-fixed directions to the Sun and the Earth, converts them to azimuth and elevation at the site, compares them with the terrain skyline in that direction, and finds every rise and set. Out come the hours of sunlight, the hours with Earth in view, the overlap, and the same figures for the alternative.")),
     qa('Which step depends on NASA data?',
       h('p', null, `Every curve. The sub-solar and sub-Earth points come from JPL Horizons (ephemeris ${meta.ephemeris}) at 3-hour steps from 1 Nov 2026 to 1 Jan 2029. Without that file the page can draw nothing. The skyline at each point comes from NASA’s LOLA topography (LDEM_75S_240M). Zoomed-in shading also uses LDEM_75S_120M at 120 m per pixel, LDEM_80S_40M at 40 m around the named sites, and LDEM_875S_20M at 20 m around the two sites nearest the pole. Slope comes from the 240 m grid. Persistent shadow comes from NASA’s official map of permanently shadowed regions (LPSR_75S_120M, Mazarico et al. 2011, 2016 update).`)), // taste-skill-ignore: persistent shadow is the terrain product (sunless cells), not a CSS shadow
+    qa('Where does each picture come from?',
+      h('p', null, 'The page shows three kinds of thing: NASA products drawn exactly as published, NASA data this tool calculates with, and our own calculations from that data. The colours on the heat map are our calculation; the permanently shadowed regions and the 18.6-year averages are NASA’s. The checks below compare our calculations with NASA’s own products. Full citations, versions and links are in the README.'),
+      sourcesTable()),
     qa('What check supports the main claim?',
       h('p', null, `The same angles were requested from Horizons a second way, with the observer placed on the lunar surface at four sites. Across ${n} comparisons the largest elevation difference is ${x}° and the largest azimuth difference is ${y}°.`),
       h('div', { class: 'table-scroll' }, h('table', { class: 'doc-table per-site' },

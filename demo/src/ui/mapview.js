@@ -262,7 +262,8 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     h('div', { class: 'sun-head' }, h('h3', { class: 'sun-title' }, 'Sun & Earth'), sunClose),
     sunWhere,
     h('div', { class: 'sun-body' }, sunDraw.el, sunRows),
-    sunWhy);
+    sunWhy,
+    h('p', { class: 'sun-src' }, 'Positions: JPL Horizons (DE441). Skyline: NASA LOLA terrain.'));
   const terrainEl = h('div', { class: 'terrain-dock' }, sunPanel, terrainChip);
   function setTerrainPref(o) {
     Object.assign(tp, o);
@@ -573,13 +574,17 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     route.update(params.routeCard ?? null);
   }
 
-  // fix H (legend line): the heat is a smoothed picture of the cells; say so, with the grid in use
   const smoothNote = h('span', { class: 'legend-smooth', hidden: true });
+  // fix H (legend line) and where the colours come from (data-sources.js): the heat is a smoothed picture of
+  // our own calculation, not a NASA product; one line no longer than before, so the dock keeps its size.
   function syncSmoothNote() {
-    // astra G: the heat is smoothed at every zoom now, 1× included, so the note shows whenever smoothing is on
+    // astra G: the heat is smoothed at every zoom now, 1× included, so the note says so whenever smoothing is on
     const on = last.smoothOn !== false;
-    smoothNote.hidden = !on;
-    if (on) smoothNote.textContent = `Smoothed display of ${last.tierLabel === '1 km' ? '1 km' : '2 km'} cells. Hover for the cell value.`;
+    const tier = last.tierLabel === '1 km' ? '1 km' : '2 km';
+    const src = last.mode === 'score' ? 'LOLA, Horizons + NASA PSR map' : 'LOLA + JPL Horizons';
+    smoothNote.hidden = false;
+    smoothNote.textContent = `${on ? 'Smoothed ' : ''}${tier} cells computed from ${src}`;
+    smoothNote.title = 'Calculated by this tool from NASA LOLA terrain and JPL Horizons, not a NASA product. Hover the map for a cell’s value; sources and checks are in Evidence.';
   }
 
   // phase 5: the inspector follows the selected object. In the big layout only that object's sections show:

@@ -78,6 +78,9 @@
 .lsn-set-label { display: flex; flex-direction: column; min-width: 0; }
 .lsn-set-hint { font-size: var(--fs-label, 12px); line-height: 16px; color: var(--faint); }
 .lsn-set-value { text-align: right; color: var(--text); }
+/* Data and reset: the source rows are sentences, so a fixed label column and left-aligned text */
+.lsn-set-sec[data-section="data"] .lsn-set-field-top .lsn-set-label { flex: none; width: 8.5em; }
+.lsn-set-sec[data-section="data"] .lsn-set-field-top .lsn-set-value { flex: 1 1 0; min-width: 0; text-align: left; }
 .lsn-set-ctl { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .lsn-set-note { font-size: var(--fs-label, 12px); line-height: 17px; color: var(--muted); max-width: 46ch; }
 .lsn-set-note + .lsn-set-note { margin-top: 6px; }

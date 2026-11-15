@@ -665,3 +665,10 @@ th:last-child, td:last-child { padding-right: 0; }
 .terrain-check { margin-top: 24px; }
 .terrain-check h3 { font-size: var(--fs-body); line-height: 20px; font-weight: 600; margin-bottom: 6px; }
 .terrain-table .terrain-note { font-size: var(--fs-small); line-height: 16px; }
+/* Evidence: where each picture comes from (data-sources.js) */
+.sources-table th[scope="row"] { white-space: normal; min-width: 16em; font-weight: 400; }
+.sources-table th[scope="row"] b { font-weight: 600; }
+.sources-table .src-value { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.sources-table td { font-size: var(--fs-small); line-height: 16px; }
+.sources-table .src-shown { white-space: nowrap; }
+.sources-table tr:is([data-shown="official"], [data-shown="ours"]) .src-shown { color: var(--text); }

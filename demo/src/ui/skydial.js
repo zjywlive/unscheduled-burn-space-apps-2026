@@ -155,7 +155,8 @@ export function createSkyDial({ geom = DIAL, showCenter = true } = {}) {
     tip.textContent = '';
     tip.append(
       h('b', null, `${NAMES[body]}${st.above ? '' : ', behind terrain'}`),
-      h('span', null, describeBody(pos, current.skyline)));
+      h('span', null, describeBody(pos, current.skyline)),
+      h('span', { class: 'skydial-src' }, 'JPL Horizons position, NASA LOLA skyline'));
     tip.hidden = false;
     // outside the ring, in the body's direction, so the readout never covers the dial
     const b = bodies[body];

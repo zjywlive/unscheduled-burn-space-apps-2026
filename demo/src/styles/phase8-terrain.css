@@ -50,6 +50,7 @@
 .sun-rows dd { margin: 0; color: var(--text); text-align: right; white-space: nowrap; }
 .sun-note { display: block; color: var(--muted); font-size: 10px; line-height: 12px; }
 .sun-why { margin: 8px 0 0; color: var(--muted); font-size: 10.5px; line-height: 14px; }
+.sun-src { margin: 6px 0 0; color: var(--faint, var(--muted)); font-size: 10.5px; line-height: 14px; }
 
 /* the Sun and Earth directions at the view centre */
 .map-sky { position: absolute; z-index: 3; width: 260px; height: 260px; overflow: visible; pointer-events: none; }
