@@ -507,7 +507,7 @@ function start() {
   // the 3D preview window and the slope legend float over the map's bottom left
   const floats = mapView ? createMapFloats(document) : null;
   const slopeLegend = createSlopeLegend();
-  if (floats) floats.append(slopeLegend.el, mapView.terrainEl);
+  if (floats) floats.append(mapView.terrainEl, slopeLegend.el);   // the Sun & Earth readout and the terrain chip keep the left edge
   const inset3d = createInset3d({ host: floats ?? document.body, beforeOpen: () => !!writeRoute3d(), onFull: () => openFull3d() });
   // while it is open, the globe gets the new payload when the route, its drive, links or havens change
   let insetTimer = 0;

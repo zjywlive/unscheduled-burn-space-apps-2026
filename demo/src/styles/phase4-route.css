@@ -194,15 +194,17 @@
 /* ---------- route coloured by slope (routes-layer.js slopeRuns) ---------- */
 .rp-slope-seg { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ---------- floating map extras (ui/inset3d.js): the slope legend and the 3D preview window ---------- */
+/* ---------- floating map extras (ui/inset3d.js): the terrain dock at the left edge, then the slope legend and the 3D preview window ---------- */
 .map-floats {
   position: fixed; left: 12px; bottom: 12px; z-index: 14; display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
   max-width: calc(100vw - 24px); pointer-events: none;
 }
 /* the row sits inside .app, so the big layout's glass and edge variables are in scope there */
 .is-bigmap .map-floats {
-  left: calc(var(--edge, 16px) + var(--left-w, 0px) + var(--left-gap, 0px)); bottom: calc(var(--edge, 16px) + 96px);
+  left: var(--edge, 16px); bottom: calc(var(--edge, 16px) + 96px);
 }
+/* the open site list reaches down to the time dock, so the row starts right of it (rail + list) */
+.is-bigmap:not([data-left="closed"]) .map-floats { left: calc(var(--edge, 16px) + var(--rail-w, 0px) + var(--left-w, 0px) + 2 * var(--left-gap, 0px)); }
 .map-floats > * { pointer-events: auto; }
 .slope-legend {
   display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 999px; color: var(--muted); font-size: 11px; line-height: 14px;
