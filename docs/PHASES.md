@@ -179,8 +179,8 @@ to land we can just plan further", and "high resolution 3D depth map so we would
 down".
 
 - **One mission across the pages** (`demo/src/mission-flow.js`): the chosen site, landing time and stay are kept
-  in localStorage and carried in the links; every page has the same stage bar (since changed, at the team's request, to 1 Landing (lander) → 2 Rover
-  (navigator) → 3 3D (globe); first version: 1 Site (navigator) → 2 Landing
+  in localStorage and carried in the links; every page has the same stage bar (since changed twice: at the team's request to 1 Landing (lander) → 2 Rover
+  (navigator) → 3 3D (globe), then to Plan 1 Map → 2 Finalise → Fly 3 Execute, see Phase 9; first version: 1 Site (navigator) → 2 Landing
   (lander) → 3 Rover (navigator, route card opened with the landing site as the start) → 4 3D (globe, at the site,
   or the planned route). The navigator also shows "Plan the landing / Plan the rover route / See it in 3D" under the
   site inspector.
@@ -262,3 +262,46 @@ minimap.
   Self-driving and Use this path, the departure time with its menu of good departures, Fly along in 3D, 3D preview,
   Save mission; coordinates: Apply, Pick, Add vertex). It sits in the free span between the docked panels and
   shortens its labels (short names, then two rows, then icons) to fit. Globe: Fly to, waypoints, mapped areas.
+
+## Phase 9: plan before launch, then fly (15 Nov, 00:20–03:00 GMT)
+
+Asked by the team: all planning happens before launch, the Landing page becomes mission execution, the Rover step
+becomes the Map and covers the whole Moon, and an explicit "Finalise mission configuration" step freezes the plan.
+Workflow: Mission planning (Map) → Finalise → Launch → Spaceflight → Orbital manoeuvres → Lunar orbit insertion →
+Landing → Surface operations.
+
+- **Stage bar** (`mission-flow.js`): *Plan* 1 Map (`index.html`) › 2 Finalise (`finalise.html`), *Fly* 3 Execute
+  (`lander.html`). Execute is marked locked until a configuration is frozen. The six execution phases are named once
+  (`EXEC_PHASES`, each with the lander phases it covers). The globe is no longer a step: it is the Map's whole-Moon
+  level, the surface-operations view, and still a page of its own.
+- **Map: the whole Moon in three levels of detail** (`ui/maplevels.js`, a switch in the top bar):
+  *Moon*, the 3D globe in a frame (`globe.html#pick=1`; LOLA 7.6 km → 474 m, polar 240–20 m), a click picks a point;
+  *Region*, the landing-spot planner moved off the lander page (`planner.html`, `lander/planner-main.js`): ±200 km
+  around the point on the polar data or the global LOLA terrain with a computed skyline, ellipse scores, better spots,
+  "Use this site" sets the mission's site and first lit landing time; *Site*, the existing analysis. North of 80°S the
+  selected site's skyline is now computed from the global terrain too (it was a smooth sphere). The point and route
+  action bars end with **Finalise mission**.
+- **Finalise** (`finalise.html`, `lander/finalise-main.js`, `mission-config.js`): plans the flight to the Map's site
+  and time with the lander's planner, finds the landing window (Sun and Earth above the skyline around the requested
+  time), reads the chosen rover route, shows the assumed vehicle (editable here for the last time) and what each phase
+  will fly, and rates each item go / check / no-go (terrain, sky at landing, window, Δv margin, landing checks, route,
+  battery, comms; thresholds in VARIABLES.md §10). **Freeze** writes `lsn-config` = the site, landing time and
+  window, stay, vehicle, route and departure, the rows, and an id made from the decisions, then opens execution. Only
+  a missing site or time stops a freeze; no-go rows are shown, not hidden.
+- **Execute** (`lander.html`, `lander/main.js`): flies only the frozen configuration (a link with `?site=&t=` flies a
+  labelled rehearsal). No site, time, planner or vehicle inputs; a chip names the configuration and says when the Map
+  has changed since. The phase strip seeks the timeline and marks the phase flown; Surface operations plays the frozen
+  route on the globe (`globe.html#cfg=1`) from the touchdown of the branch flown (`lsn-flown`). The planning mission
+  is never written by execution.
+- **Build**: `tools/build-lander.mjs` builds `lander.html`, `planner.html` and `finalise.html` from the lander modules;
+  the two new pages copy `lander.html`'s CSS at build time.
+- Tests: `tests/mission-config.test.mjs` (the configuration, its id, storage, changes since freezing, the window,
+  the route summary, the go / no-go levels), `tests/mission-flow.test.mjs` (new stages and links, the execution
+  phases cover every lander phase in order), `tests/lander-flow.test.mjs` (what the execution page flies, the pages
+  built). Full suite 739 tests: 723 pass, 16 skipped (data not on disk), 0 fail.
+- Checked in the browser at 1440 × 900 and 375 × 812: Moon → click → Region → Use this site → Site; Finalise → Freeze
+  → Execute (phase strip, landing, surface operations with the frozen route); the phone layouts of all three steps.
+- Not done: the user guide (`docs/GUIDE.md`, `docs/guide/`) still shows the old three steps and needs a re-shoot; the
+  rover planner itself still needs the polar data (south of 80°S); the launch ascent is not modelled (the timeline
+  starts at parking-orbit insertion).
+

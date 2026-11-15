@@ -8,10 +8,24 @@ The lander track of the Lunar Landing Site Navigator follows a generic robotic l
 
 ### The page
 
-`demo/lander.html` (open it from `demo/` over http or as a file; deep link `lander.html?site=<id | lat,lon>&t=<ISO time>`):
+`demo/lander.html` is **step 3 of the mission, Execute** (since 15 Nov; open it from `demo/` over http or as a file):
 
-- **Step 1 of the mission flow** (`demo/src/mission-flow.js`): the stage bar in the top bar links 1 Landing (this page) → 2 Rover (navigator, route card) → 3 3D (globe). Without URL parameters the page starts from the stored mission (`localStorage` key `lsn-mission`: site and landing time); a stored point south of 80°S that is not a listed site becomes a custom site. Every plan writes the site and the *requested* landing time back (the planner moves touchdown by up to half an orbit to an overhead pass; storing that snapped time would move the landing again on each visit). Each plan also writes `landed: { latDeg, lonDeg (east, 0–360), tMs, siteId, missM, source }`, the touchdown point of what the page shows as flown (`landing.flownTouchdown`): the nominal descent; a selected branch that lands (hazard divert, about 152 m from the target; engine 20 % low) gives its own touchdown; a selected branch that does not land (abort to orbit, wave-off, hold, retarget to a site not simulated) or a touchdown outside the vehicle's limits gives `landed: null`. The point is the last descent sample taken through MCI to Moon-fixed with the landing-time rotation; the navigator and globe draw the lander there and start the rover route from it. After touchdown a "Plan the rover route →" card (also in the Landing tab) opens step 3 at the site and time.
-- **Choose where to land** (top bar, `lander/planner.js` + `lander/siteplan.js`): a full-screen south polar map (relief from LOLA 480 m, 120 m when zoomed, the fine DEM near the pick; LOLA PSR outlines; the listed sites; the 80°S edge of the page's terrain data) and a whole-Moon view (LOLA 7.6 km, LDEM_4) that sends a click south of 80°S to the polar map. A click or typed latitude/longitude proposes a point, scored with its **assumed 3σ landing ellipse of 150 m down-range × 100 m cross-range** (terrain-relative navigation; down-range along the meridian, as a polar orbit crosses the pole):
+- **It flies the frozen configuration** (`demo/src/mission-config.js`) that step 2, Finalise (`demo/finalise.html`,
+  `lander/finalise-main.js`), wrote: site, requested landing time and window, stay, vehicle, rover route and
+  departure. Nothing is planned on this page and the planning mission is never written; the top bar shows the
+  configuration's id and says when the plan on the Map has changed since. Without one, the page says so and links
+  back to the Map. A link `lander.html?site=<id | lat,lon>&t=<ISO time>` flies a labelled *rehearsal* instead.
+- **Six phases** (`mission-flow.js` `EXEC_PHASES`) over the timeline: Launch (parking orbit; the ascent is not
+  modelled), Spaceflight (TLI, coast, TCM-1), Orbital manoeuvres (lunar approach, TCM-2), Lunar orbit insertion
+  (LOI, low lunar orbit), Landing (DOI to touchdown, with the contingency branches), Surface operations (the frozen
+  rover route played on the globe, `globe.html#cfg=1`, from the touchdown point of the branch flown). Click a phase
+  to go to it; the end of the playback opens surface operations.
+- The vehicle tab is read-only (the numbers were frozen); the "Save flight log" button downloads the configuration
+  and the flight figures.
+
+Moved off this page to planning (the text below keeps its detail):
+
+- **Choose where to land** (now `demo/planner.html`, the Map's region level; `lander/planner.js` + `lander/siteplan.js`): a full-screen south polar map (relief from LOLA 480 m, 120 m when zoomed, the fine DEM near the pick; LOLA PSR outlines; the listed sites; the 80°S edge of the page's terrain data) and a whole-Moon view (LOLA 7.6 km, LDEM_4) that sends a click south of 80°S to the polar map. A click or typed latitude/longitude proposes a point, scored with its **assumed 3σ landing ellipse of 150 m down-range × 100 m cross-range** (terrain-relative navigation; down-range along the meridian, as a polar orbit crosses the pole):
   - share of the ellipse steeper than the lander's 10° limit, mean and 95th-percentile slope (two-pixel baseline of the finest DEM there: 5/10/20 m patches, 20/40 m tiles, else 120 m), and roughness (RMS about the best-fit plane, only where the DEM is 40 m or finer; otherwise "not resolved", graded near). Rocks below the DEM are not modelled.
   - share of the ellipse in permanent shadow (LOLA PSR, 120 m).
   - hours of Sun and of Earth above the real skyline (ephemeris + the page's 480 m skyline, hourly) over the stay (the mission's stay, default 7 days) from the point's first lit window, the longest dark spell against the battery (3000 Wh, 20 % reserve, 220 W surface load = 10.9 h, assumed), and Earth in view at touchdown (direct link; no relay modelled).

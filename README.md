@@ -61,9 +61,12 @@ sunniest), then for the chosen one:
 - *Contingency:* the nearest safe haven (sunlit for a day, Earth in view, reachable with the battery left) from
   every 2 km of the route, and a comms-denied heading using the Sun and Earth.
 
-**One mission, three steps.** Every page carries the same stage bar: 1 Landing → 2 Rover → 3 3D. The site and landing
-time chosen for the landing (in the lander, or checked in the navigator's site analysis) go with you to the route card,
-with the landing site as the start, then to the 3D globe.
+**Plan before launch, then fly.** Every page carries the same stage bar: *Plan* 1 Map → 2 Finalise, then *Fly*
+3 Execute. Everything is decided on the Map: the site anywhere on the Moon (three levels of detail: the whole Moon in
+3D, a region with the landing-spot planner, the south-pole site analysis), the landing time and its slip, the rover
+route and its departure. Finalise (`demo/finalise.html`) checks go / no-go, takes the last change to the assumed
+vehicle and freezes the configuration; Execute (`demo/lander.html`) flies exactly that configuration: launch,
+spaceflight, orbital manoeuvres, lunar orbit insertion, landing, and surface operations (the planned rover drive).
 
 **3D (`demo/globe.html`).** A globe of the whole Moon from LOLA elevation at several levels of detail, down to
 20 m at the south pole and 5–20 m around the landing sites, with contour lines on request and on-screen camera
@@ -83,10 +86,12 @@ browser and downloads as JSON, GeoJSON or CSV; saved missions load back into the
 same direction-dependent slope limits, moves a waypoint it cannot reach, and aborts after a few tries; its trees,
 candidate paths and chosen trajectory show on the map and in 3D.
 
-**Lander (`demo/lander.html`).** A generic robotic lander from Earth parking orbit through lunar orbit to a
-powered descent at a south-pole site: Δv and propellant budget, J2/C22 and third-body dynamics, power and
-attitude, landing checks against the terrain, and contingency branches (abort to orbit, divert, wave-off, hold).
-See `docs/LANDER.md`.
+**Execution (`demo/lander.html`).** The frozen configuration flown by a generic robotic lander from Earth parking
+orbit through lunar orbit to a powered descent at the site: Δv and propellant budget, J2/C22 and third-body
+dynamics, power and attitude, landing checks against the terrain, contingency branches (abort to orbit, divert,
+wave-off, hold), then the rover drive on the 3D globe. A link with `?site=…&t=…` flies a labelled rehearsal
+instead. **Where to land (`demo/planner.html`)**, the Map's region level, scores a landing ellipse and finds better
+spots near any point on the Moon. See `docs/LANDER.md`.
 
 All vehicle, rover and radio figures are assumptions the user can change; the cards label them so. The decision
 variables and their sources are listed in `docs/VARIABLES.md`, the build in `docs/PHASES.md`. How to use every page
@@ -140,15 +145,16 @@ Needs Node 22 or later and Python 3 (only for a static web server); no npm insta
 python3 -m http.server 8731 --directory demo
 ```
 
-Then open http://localhost:8731/ (navigator), http://localhost:8731/globe.html (3D globe) or
-http://localhost:8731/lander.html (lander). The pages also open straight from the files, offline.
+Then open http://localhost:8731/ (step 1, the Map). Finalise (`finalise.html`) and Execute (`lander.html`) follow
+from its stage bar; the 3D globe is http://localhost:8731/globe.html. The pages also open straight from the files,
+offline.
 
 Rebuild the pages after changing `demo/src/`:
 
 ```sh
 node tools/build.mjs          # demo/index.html
 node tools/build-globe.mjs    # demo/globe.html
-node tools/build-lander.mjs   # demo/lander.html
+node tools/build-lander.mjs   # demo/lander.html, planner.html, finalise.html
 ```
 
 Run the tests:

@@ -129,6 +129,20 @@ Conference 2025 (JPL), referred to below as **[JPL-SS]**.
 | Areas to map next | boxes | input (team marks 10 × 10 km boxes) | ✅ | `globe-mapped.js` | kept in the browser, exported as JSON |
 | Saved missions | records | input | ✅ | `mission-save.js` | route, settings, summary, recorded motion; browser storage (newest 20) and JSON / GeoJSON / CSV files |
 
+## 10. Mission configuration (Finalise)
+
+Added 15 Nov 2026 with the plan-then-fly flow (PHASES.md, "Plan before launch"). These are the thresholds of the
+go / no-go rows on `finalise.html`; the page names them as assumptions.
+
+| Variable | Unit | Source | Status | Code | Notes |
+|---|---|---|---|---|---|
+| Landing window | UTC span | derived: Sun (and Earth) above the skyline, stepped out from the requested landing | ✅ | `mission-config.js` `windowAround`, `lander/finalise-main.js` | Step 1 h, at most 20 days each way (the edge then is the cap). Sun only when Earth is not up at the landing |
+| Shortest window rated go | h | assumed (6 h) | ✅ | `mission-config.js` `goNoGoRows` | shorter windows are rated "check" |
+| Rover route belongs to the site | km | assumed (30 km from the site to the route start) | ✅ | `mission-config.js` `routeSummary` | a route from farther away was planned for another site and is left out of the configuration |
+| Rover comms rated go | share | assumed (Earth or station in view on ≥ 50 % of the drive's samples) | ✅ | `mission-config.js` `goNoGoRows` | |
+| Rover battery rated go | share | derived: lowest state of charge ≥ the route's reserve (§3), no empty battery | ✅ | `mission-config.js` `goNoGoRows` | the reserve is the route card's (assumed 20 %) |
+| Configuration id | 6 hex digits | derived: FNV-1a of the site, landing time, stay, vehicle, route and departure | ✅ | `mission-config.js` `configId` | names a frozen configuration; the freeze time does not change it |
+
 ---
 
 ## Team whiteboard list → rows above
