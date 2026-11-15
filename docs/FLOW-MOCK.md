@@ -84,3 +84,9 @@ sessionStorage; the real build would add a `step=` hash key, absent = today's be
 Verified in the browser: A and B at 1440×900, A at 1280×800; Date (calendar from 35 real scenarios,
 best starts), Verdict, Compare (+slip, other site, Make plan changes the app's landing), Route (opens the
 app's route card), Finalise → step 3 back to the map with the changed date kept; no console errors.
+
+## 6. Chosen and built (15 Nov 2026)
+
+Variant B is in the app (docs/PHASES.md, "Plan steps on the inspector"): the tabs live inside the inspector as its
+sticky first row rather than moving it down; Finalise and Execute stay in the top bar's stage bar. The two mock
+pages stay in `demo/` for reference.

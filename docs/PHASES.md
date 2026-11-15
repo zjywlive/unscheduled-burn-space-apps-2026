@@ -340,3 +340,27 @@ Landing → Surface operations.
   route white, candidates dashed, chosen route as a ribbon) on top of the terrain at about 5 px at every zoom
   (checked at 60 km tilted, 500 km and 3000 km); the drawing tools act on clicks so a drag always pans (checked in
   route mode: dragging moves the camera and adds no point). Full suite 747 tests: 731 pass, 16 skipped, 0 fail.
+
+## Plan steps on the inspector (15 Nov, afternoon)
+
+The user tried the two flow mocks (`demo/mock-flow.html`, `demo/mock-integrated.html`, docs/FLOW-MOCK.md) and chose
+variant B: the challenge's loop as five tabs on top of the right panel, the top bar unchanged.
+
+- `ui/plansteps.js` (new): the tabs **Site · Date · Verdict · Compare · Route**, sticky at the panel's top. Site and
+  Route are the panel's own cards (point card, route card; Route opens the route as "Plan the rover route" does).
+  Date: landing time, stay, five weeks of landing days coloured by Sun-and-Earth hours, the best starts nearby.
+  Verdict: one sentence, the Sun and the Earth now (following the clock), the stay's hours, power / communications /
+  sunlight graded (`gradeStay`: battery never empty or a day at most; Earth ≥ 50 %; Sun ≥ 70 %). Compare: the plan
+  and up to three columns (a slip, the best date nearby, another site) with differences; Make plan adopts a column.
+  All numbers from the compute tools (`site_summary`, `compare_scenarios`, `next_events`, `best_landing_dates`,
+  `energy_summary`), the same as Details.
+- The tabs follow the panel: a route on the panel is Route, a region or Where to land is Site, a point picked on the
+  Moon keeps Date / Verdict / Compare open and redraws them.
+- `state.js`: `step=` in the hash (`PLAN_STEPS`), written only when it is not Site, so old links open as before.
+- `styles/phase12-steps.css` (new); big-map layout only.
+- Tests: `tests/plansteps.test.mjs` (hash key, tabs following the panel, pass marks). Full suite 853: 836 pass,
+  16 skipped, 1 fail (the descent file's five-second budget, which passes on its own and fails only under the full
+  suite's load).
+- Checked in the browser at 1440 × 900: each tab, `step=` written and read on load, a calendar day and Make plan
+  change the plan and the time bar, a new site keeps Verdict open, the Rectangle tool returns to Site; no console
+  errors.

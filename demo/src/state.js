@@ -10,6 +10,8 @@ const HOUR_MS = 3600e3;
 // phase 5: the Navigator page is the map's detail sheet; an old #view=navigator link opens the map with it
 const VIEWS = ['map', 'evidence', 'brief'];
 export const SHEET_TABS = ['overview', 'power', 'comms', 'compare'];
+// 15 Nov 2026: the plan step on the inspector's tabs (ui/plansteps.js); step= only when it is not Site
+export const PLAN_STEPS = ['site', 'date', 'verdict', 'compare', 'route'];
 const MODES = ['both', 'sun', 'earth', 'now', 'change', 'score'];
 // Phase 3. Map viewport, filters and suitability weights live in the hash; the drawing tool and the
 // region slot are in-memory only (spec phase 3 §4.1, §4.3, §4.4, §4.6).
@@ -42,6 +44,7 @@ export const DEFAULTS = {
   // phase 5: the mission window is optional (win=off), the playhead is in the hash (now=, when it is not at
   // landing), and the detail sheet's tab when it is open (sheet=)
   windowOn: true, sheet: null,
+  step: 'site',
 };
 export const ENERGY_KEYS = ['attitude', 'panelToLoad', 'batteryHours', 'sleepLoad'];
 const ROUTE_IDS = ['short', 'flat', 'sunny'];
@@ -282,7 +285,7 @@ export function parseHash(hash, sites, eph) {
   const nowMs = parseNow(f.now, eph);
   return {
     view, site, landingMs, stayDays, slipDays: slipDays + 0, altSite, mapMode, picking: DEFAULTS.picking, cursorMs: nowMs ?? landingMs,
-    windowOn, sheet,
+    windowOn, sheet, step: PLAN_STEPS.includes(f.step) ? f.step : DEFAULTS.step,
     viewport, maxSlope: cleanMaxSlope(f.slope), maxDark: cleanMaxDark(f.dark), weights: cleanWeights(f.w),
     tool: DEFAULTS.tool, slot: DEFAULTS.slot,
     psr: f.psr === '1', energy: cleanEnergy(f.en ?? null),
@@ -323,6 +326,7 @@ function phase3Params(state) {
   if (state.windowOn === false) out.push('win=off');
   if (Number.isFinite(state.cursorMs) && state.cursorMs !== state.landingMs) out.push(`now=${new Date(Math.floor(state.cursorMs / 60e3) * 60e3).toISOString().slice(0, 16)}Z`);
   if (SHEET_TABS.includes(state.sheet)) out.push(`sheet=${state.sheet}`);
+  if (PLAN_STEPS.includes(state.step) && state.step !== DEFAULTS.step) out.push(`step=${state.step}`);
   return out.length ? `&${out.join('&')}` : '';
 }
 

@@ -75,6 +75,7 @@ import { createThrottle } from './throttle.js';
 import { verdictOf, wayOutKey, createWayOutFetcher } from './verdict.js';
 import { storyFacts } from './stories.js';
 import { createStoryMode } from './ui/storymode.js';
+import { createPlanSteps } from './ui/plansteps.js';
 
 const DAY_MS = 86400e3;
 const HOUR_MS = 3600e3;
@@ -477,6 +478,19 @@ function start() {
   // candidates themselves are drawn from the full polylines.
   let rp = { points: state.routePlan?.points ?? null, maxSlopeDeg: state.routePlan?.maxSlopeDeg ?? null, plan: null, selected: null, hovered: null }, rpAbort = null, plannedRoute = null;
   // fix L5: a planned route in the hash is planned again once the first heat map is in
+  // 15 Nov 2026: the plan steps on the inspector (ui/plansteps.js): Site · Date · Verdict · Compare · Route
+  const planSteps = mapView ? createPlanSteps(document, {
+    panel: document.getElementById('lsn-point-panel'), core, getState: () => state, sites,
+    act: {
+      setLanding: (ms) => { if (Number.isFinite(ms) && ms >= eph.startMs && ms < eph.endMs) update({ landingMs: Math.floor(ms / HOUR_MS) * HOUR_MS }); },
+      setStay: (days) => update({ stayDays: days }),
+      selectSite: (site) => update({ site }),
+      openDetail: (tab) => openSheet(tab),
+      showSite: () => { kind = 'point'; if (state.tool === 'route') update({ tool: 'select' }); else render(); },
+      openRoute: () => openPlanAtSite(),
+    },
+    onStep: (step) => persist({ step }),
+  }) : null;
   let rpRestore = state.routePlan?.selected ? { ...state.routePlan } : null;
   function persistRoutePlan() {
     const routePlan = cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null);
@@ -1454,6 +1468,7 @@ function start() {
       },
     });
     mapView.frame.setLive(now.states, liveOn());
+    planSteps?.sync(kind);
     pushLight();
     const text = mapFindingText();
     if (text !== null) shell.regions.mapFinding.textContent = text;
@@ -1743,6 +1758,7 @@ function start() {
     if (changed.includes('now')) {
       state = { ...state, cursorMs: st.nowMs };
       renderLive();
+      planSteps?.refresh();
       if (!st.playing) writeHash();
     }
     if (changed.includes('playing')) {
@@ -2135,6 +2151,7 @@ function start() {
     if (nowInHash && next.cursorMs !== timeline.getState().nowMs) timeline.setNow(next.cursorMs);
     state = { ...state, cursorMs: timeline.getState().nowMs };
     render();
+    if (planSteps && next.step !== planSteps.step) { if (next.step === 'route') openPlanAtSite(); else planSteps.set(next.step); }
     if (openTab && (!sheet.isOpen() || sheet.activeTab() !== openTab)) openSheet(openTab);
     else if (!openTab && sheet.isOpen()) closeSheet();
   });
@@ -2156,7 +2173,8 @@ function start() {
       redrawRoutes();
     }
   }
-  if (planOnLoad) openPlanAtSite();
+  if (planOnLoad || state.step === 'route') openPlanAtSite();
+  else if (planSteps && state.step !== 'site') planSteps.set(state.step);
   // the loading screen (boot.js): terrain is in; it lifts when the 2 km map of the stay is done (or after 20 s)
   const boot = bootScreen(document);
   const bootT0 = performance.now();

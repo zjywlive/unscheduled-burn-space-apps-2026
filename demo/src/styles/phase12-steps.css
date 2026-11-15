@@ -1,0 +1,86 @@
+/* ---------- The plan steps on the inspector (ui/plansteps.js; docs/FLOW-MOCK.md §5, variant B) ----------
+   Five tabs on top of the right panel, sticky while it scrolls; Date, Verdict and Compare replace the panel's cards
+   (data-step on the panel), Site and Route are the cards themselves. Big-map layout only. */
+.ps-tabs, .ps-body { display: none; }
+.is-bigmap .point-panel > .ps-tabs {
+  display: flex !important; position: sticky; top: 0; z-index: 3; gap: 2px; margin: 0; padding: 6px;
+  background: rgba(20, 21, 24, 0.94); border-bottom: 1px solid var(--hair, rgba(255, 255, 255, 0.12));
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.ps-tabs button {
+  flex: 1; min-width: 0; height: 28px; padding: 0 4px; border: 0; border-radius: 999px; background: none; color: var(--muted);
+  font: 500 12px/1 var(--font, Inter, system-ui, sans-serif); white-space: nowrap; cursor: pointer;
+}
+.ps-tabs button:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+.ps-tabs button[aria-selected="true"] { background: var(--text, #fff); color: #000; }
+.ps-tabs button:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+
+.is-bigmap .point-panel:is([data-step="date"], [data-step="verdict"], [data-step="compare"]) > :not(.ps-tabs, .ps-body) { display: none !important; }
+.is-bigmap .point-panel:is([data-step="date"], [data-step="verdict"], [data-step="compare"]) > .ps-body { display: block !important; }
+
+.ps-body { --g-ok: #7fd18b; --g-near: var(--sun, #f2b33d); --g-bad: var(--negative, #e5484d); color: var(--text); font-size: 13px; line-height: 1.45; }
+.ps-head { padding: 12px 14px 8px; }
+.ps-head h2 { margin: 0; font-size: var(--fs-section, 16px); font-weight: 600; }
+.ps-head p { margin: 3px 0 0; color: var(--muted); font-size: var(--fs-small, 12px); }
+.ps-main { padding: 0 14px 10px; }
+.ps-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.12)); }
+.ps-grow { flex: 1; }
+.ps-btn { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); background: rgba(255, 255, 255, 0.06); color: var(--text); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.ps-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.ps-pri { background: var(--text, #fff); color: #000; border-color: var(--text, #fff); font-weight: 600; }
+.ps-pri:hover { background: #fff; }
+.ps-ghost { background: none; border-color: transparent; color: var(--muted); }
+.ps-lbl { display: block; margin: 12px 0 4px; color: var(--muted); font-size: 11px; }
+.ps-main > .ps-lbl:first-child { margin-top: 0; }
+.ps-in { width: 100%; height: 32px; padding: 0 10px; box-sizing: border-box; border-radius: var(--radius-control, 8px); border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); background: rgba(0, 0, 0, 0.3); color: var(--text); font: inherit; color-scheme: dark; }
+.ps-seg { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--hair, rgba(255, 255, 255, 0.12)); }
+.ps-seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.ps-seg button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.ps-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.ps-wd { color: var(--muted); font-size: 10px; text-align: center; }
+.ps-cal button { height: 34px; padding: 0; border: 0; border-radius: 6px; font: 600 11px/1.1 var(--font, Inter, sans-serif); color: rgba(0, 0, 0, 0.8); cursor: pointer; }
+.ps-cal button small { display: block; font-weight: 400; font-size: 9px; }
+.ps-cal button.hi { background: #7fd18b; } .ps-cal button.mid { background: #c9a24a; } .ps-cal button.lo { background: #4a4d52; color: rgba(255, 255, 255, 0.85); }
+.ps-cal button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; }
+.ps-legend { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 11px; }
+.ps-legend i { width: 40px; height: 8px; border-radius: 3px; background: linear-gradient(90deg, #4a4d52, #c9a24a, #7fd18b); }
+.ps-best { display: grid; gap: 4px; }
+.ps-best button { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: var(--radius-control, 8px); border: 1px solid var(--hair, rgba(255, 255, 255, 0.1)); background: rgba(255, 255, 255, 0.03); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.ps-best button:hover { border-color: rgba(255, 255, 255, 0.3); }
+.ps-verdict { padding: 10px 12px; border-radius: 10px; font-weight: 600; line-height: 1.4; }
+.ps-verdict small { display: block; margin-top: 3px; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.ps-verdict.g-ok { background: rgba(127, 209, 139, 0.13); color: var(--g-ok); }
+.ps-verdict.g-near { background: rgba(242, 179, 61, 0.13); color: var(--g-near); }
+.ps-verdict.g-bad { background: rgba(229, 72, 77, 0.14); color: var(--g-bad); }
+.ps-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.ps-tile { padding: 9px 10px; border-radius: 10px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.1)); background: rgba(255, 255, 255, 0.03); }
+.ps-k, .ps-s { color: var(--muted); font-size: 11px; }
+.ps-v { font-size: var(--fs-kpi, 20px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ps-sun .ps-v { color: var(--sun); } .ps-earth .ps-v { color: var(--earth); }
+.ps-bar { display: grid; grid-template-columns: 78px 1fr 46px; align-items: center; gap: 8px; margin: 5px 0; font-size: 11px; color: var(--muted); }
+.ps-bar i { position: relative; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.ps-bar i b { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+.ps-bar span:last-child { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.ps-checks { display: grid; gap: 6px; margin-top: 10px; }
+.ps-check { display: flex; gap: 10px; align-items: baseline; padding: 7px 9px; border-radius: var(--radius-control, 8px); background: rgba(255, 255, 255, 0.03); font-size: 12px; }
+.ps-check small { display: block; color: var(--muted); font-size: 11px; }
+.ps-g { flex: none; width: 58px; padding: 2px 0; border-radius: 999px; text-align: center; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.ps-g.g-ok { background: rgba(127, 209, 139, 0.18); color: var(--g-ok); }
+.ps-g.g-near { background: rgba(242, 179, 61, 0.18); color: var(--g-near); }
+.ps-g.g-bad { background: rgba(229, 72, 77, 0.2); color: var(--g-bad); }
+.ps-note { margin: 10px 0 0; color: var(--muted); font-size: 11.5px; }
+.ps-note a { color: var(--text); text-decoration: underline dotted; cursor: pointer; }
+.ps-wait { margin: 0; color: var(--muted); font-size: 12px; }
+.ps-adds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ps-select { height: 30px; max-width: 150px; border-radius: 999px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); background: rgba(255, 255, 255, 0.06); color: var(--text); padding: 0 8px; font: inherit; font-size: 12px; }
+.ps-cmp { width: 100%; border-collapse: collapse; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.ps-cmp th, .ps-cmp td { padding: 5px 2px; border-bottom: 1px solid var(--hair, rgba(255, 255, 255, 0.1)); text-align: right; white-space: nowrap; }
+.ps-cmp th:first-child, .ps-cmp td:first-child { text-align: left; color: var(--muted); font-weight: 400; }
+.ps-cmp thead th { font-weight: 600; vertical-align: bottom; }
+.ps-cmp thead th small { display: block; color: var(--muted); font-weight: 400; font-size: 10px; }
+.ps-cmp .ps-vrow td { white-space: normal; }
+.ps-d { display: block; font-size: 10px; } .ps-d.up { color: var(--g-ok); } .ps-d.down { color: var(--g-bad); } .ps-d.same { color: var(--muted); }
+.ps-x { height: 16px; padding: 0 4px; border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.ps-x:hover { color: var(--text); }
+.ps-mini { height: 22px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--hair, rgba(255, 255, 255, 0.14)); background: none; color: var(--muted); font: inherit; font-size: 10.5px; cursor: pointer; }
+.ps-mini:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.3); }
