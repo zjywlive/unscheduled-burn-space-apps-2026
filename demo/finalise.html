@@ -377,9 +377,9 @@
     #find { order: 1; margin-left: auto; }
     .field { order: 2; flex: 1 1 130px; }
     .field select, .field input { width: 100%; max-width: none; }
-    #cfg-chip { order: 1; flex: 1 1 auto; max-width: none; min-width: 0; }
-    #back-plan { order: 1; }
-    #phases { order: 3; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
+    #back-plan { order: 0; margin-left: auto; }
+    #cfg-chip { order: 1; flex: 1 1 100%; max-width: none; min-width: 0; height: 30px; }
+    #phases { order: 3; flex: 1 1 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
     #phases button { flex: 1 0 auto; padding: 0 7px; }
     #phases button .n { display: none; }
     .surface { left: 8px; right: 8px; bottom: 8px; }
@@ -485,7 +485,7 @@
     <div id="verdict" class="fz-verdict">Checking…</div>
     <ul id="checks"></ul>
     <button id="freeze" class="btn primary" type="button">Freeze and go to launch</button>
-    <p class="fz-what">Freezing stores the site, the landing time and window, the stay, the vehicle, the rover route and its departure as one configuration with an id. Later changes on the Map do not move it until you finalise again.</p>
+    <p class="fz-what">Freezing stores the site, the landing time and window, the stay, the vehicle, the rover route and its departure as one configuration with an id. Later changes on the Map do not move it until you finalise again. Thresholds are assumptions: a landing window of at least 6 h, Earth in view on at least half of the drive, the route starting within 30 km of the site.</p>
     <p id="current"></p>
   </aside>
 </main>
@@ -3375,7 +3375,7 @@ function renderLanding(el, checks, plan, terrainNote, roverUrl = null, landed = 
     <table class="tbl"><tbody>${rows}</tbody></table>
     ${s ? `<p class="note">At touchdown the Sun is at azimuth ${n0(s.sun.azDeg)}°, elevation ${n1(s.sun.elDeg, 2)}°; the Earth at ${n0(s.earth.azDeg)}°, ${n1(s.earth.elDeg, 2)}°. Clearance is measured above the LOLA skyline. Limits are assumptions for this vehicle (Apollo LM design: about 3 m/s vertical, 1.2 m/s horizontal, 12°).</p>` : ''}
     <p class="note">${esc(terrainNote)}</p>
-    ${landed === undefined ? '' : landed ? `<h3>Touchdown point <small>passed to the rover step</small></h3><dl class="kv"><dt>Latitude, longitude</dt><dd>${Math.abs(landed.latDeg).toFixed(5)}°${landed.latDeg < 0 ? 'S' : 'N'}, ${landed.lonDeg.toFixed(5)}°E</dd><dt>From the target</dt><dd>${n1(landed.missM, 1)} m</dd><dt>Time</dt><dd>${esc(fmtUtc(landed.tMs))}</dd><dt>Flown</dt><dd>${landed.source === 'nominal' ? 'nominal descent' : esc(landed.source.replace(/-/g, ' '))}</dd></dl>` : '<h3>Touchdown point</h3><p class="note">No touchdown in the selected contingency (it ends in orbit or waits); the rover step gets the target site only.</p>'}
+    ${landed === undefined ? '' : landed ? `<h3>Touchdown point <small>surface operations start here</small></h3><dl class="kv"><dt>Latitude, longitude</dt><dd>${Math.abs(landed.latDeg).toFixed(5)}°${landed.latDeg < 0 ? 'S' : 'N'}, ${landed.lonDeg.toFixed(5)}°E</dd><dt>From the target</dt><dd>${n1(landed.missM, 1)} m</dd><dt>Time</dt><dd>${esc(fmtUtc(landed.tMs))}</dd><dt>Flown</dt><dd>${landed.source === 'nominal' ? 'nominal descent' : esc(landed.source.replace(/-/g, ' '))}</dd></dl>` : '<h3>Touchdown point</h3><p class="note">No touchdown in the selected contingency (it ends in orbit or waits); surface operations have no lander on the ground.</p>'}
     ${roverUrl ? '<p class="note">Next: <b>Plan the rover route</b> in the bar above the view opens step 2 (the navigator\'s route card) at this touchdown point and time.</p>' : ''}`;
 }
 

@@ -377,9 +377,9 @@
     #find { order: 1; margin-left: auto; }
     .field { order: 2; flex: 1 1 130px; }
     .field select, .field input { width: 100%; max-width: none; }
-    #cfg-chip { order: 1; flex: 1 1 auto; max-width: none; min-width: 0; }
-    #back-plan { order: 1; }
-    #phases { order: 3; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
+    #back-plan { order: 0; margin-left: auto; }
+    #cfg-chip { order: 1; flex: 1 1 100%; max-width: none; min-width: 0; height: 30px; }
+    #phases { order: 3; flex: 1 1 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
     #phases button { flex: 1 0 auto; padding: 0 7px; }
     #phases button .n { display: none; }
     .surface { left: 8px; right: 8px; bottom: 8px; }
@@ -3834,7 +3834,7 @@ function changeShares(planned, alt, stayMs) {
 return { createHeatGrid, fractionJob, nowStates, topCells, shareAtLeast, changeShares };
 })();
 __m['planner.js'] = (() => {
-// "Choose where to land" (step 1 of the mission): a full-screen map of the south polar region (relief from the
+// "Choose where to land" (the Map's region level, planner.html): a full-screen map of the south polar region (relief from the
 // finest LOLA level in view, permanent shadow, the listed sites, the 80°S edge of the data) and a whole-Moon view;
 // a click or a typed latitude/longitude proposes a landing point. The point and its landing ellipse are scored
 // (siteplan.js), a grid around it is searched for better spots (navigator suitability, score.js), the top five

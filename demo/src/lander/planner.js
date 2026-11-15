@@ -1,4 +1,4 @@
-// "Choose where to land" (step 1 of the mission): a full-screen map of the south polar region (relief from the
+// "Choose where to land" (the Map's region level, planner.html): a full-screen map of the south polar region (relief from the
 // finest LOLA level in view, permanent shadow, the listed sites, the 80°S edge of the data) and a whole-Moon view;
 // a click or a typed latitude/longitude proposes a landing point. The point and its landing ellipse are scored
 // (siteplan.js), a grid around it is searched for better spots (navigator suitability, score.js), the top five

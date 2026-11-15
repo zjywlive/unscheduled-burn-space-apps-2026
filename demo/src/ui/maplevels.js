@@ -44,6 +44,9 @@ export function createMapLevels(doc, { slot, topbar, getMission, onSite }) {
   const place = () => { const r = topbar?.getBoundingClientRect(); doc.documentElement.style.setProperty('--level-top', `${Math.max(0, Math.round(r ? r.bottom : 0))}px`); };
   if (typeof ResizeObserver === 'function' && topbar) new ResizeObserver(place).observe(topbar);
   doc.defaultView.addEventListener('resize', place);
+  // on narrow screens the top bar scrolls with the page: the action bar (phase10-flow.css) and the layer follow it
+  doc.defaultView.addEventListener('scroll', place, { passive: true });
+  place();
 
   function frame(id, src) {
     let f = frames[id];

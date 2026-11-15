@@ -19,3 +19,5 @@
 .map-level-frame[hidden] { display: none; }
 /* while a frame covers the map, the map's own floating chrome (action bar, dock, dial) stays under it */
 .map-level-open .ab-wrap { visibility: hidden; }
+/* narrow screens: the action bar sits just under the top bar (which wraps to three rows and scrolls away), not over it */
+@media (max-width: 1100px) { .app:not(.is-bigmap) .ab-wrap { top: calc(var(--level-top, 56px) + 8px); } }
