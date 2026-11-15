@@ -33,6 +33,8 @@ test('stage links carry the site and landing time to each page', () => {
 
 test('a custom site (no id) goes as coordinates', () => {
   assert.match(stageUrl('site', { latDeg: -87.25, lonDeg: 10.5, landingMs: T }), /site=c:-87\.2500,10\.5000&t=/);
+  // the Map stores a picked point with siteId 'custom'; the link must not name a site called "custom"
+  assert.match(stageUrl('rover', { siteId: 'custom', latDeg: -73.925, lonDeg: 238.352, landingMs: T }), /site=c:-73\.9250,238\.3520&t=.*&plan=1$/);
 });
 
 test('the touchdown point: kept only for its own site, carried to the rover and 3D steps', async () => {

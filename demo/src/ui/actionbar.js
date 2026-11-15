@@ -226,7 +226,14 @@ export function createActionBar(doc = document, { parent, avoid = () => [] } = {
     for (const [source, items] of map ?? []) {
       if (!items.length) continue;
       if (flat.length) flat.push({ key: `div:${n++}`, it: { type: 'divider' } });
-      for (const it of items) flat.push({ key: `${kind}:${source}:${it.id ?? it.type}`, it });
+      // items without an id (dividers) are numbered within their source: one shared key made a single node hop
+      // between the places on every render, moving the buttons after it, so a click pressed mid-render was lost
+      const seen = new Map();
+      for (const it of items) {
+        const base = it.id ?? it.type ?? 'button', k = seen.get(base) ?? 0;
+        seen.set(base, k + 1);
+        flat.push({ key: `${kind}:${source}:${base}${k ? `:${k}` : ''}`, it });
+      }
     }
     wrap.hidden = !flat.length;
     layoutSoon();

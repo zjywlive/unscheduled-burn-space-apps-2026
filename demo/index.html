@@ -2832,7 +2832,8 @@ const isoMin = (ms) => `${new Date(Math.floor(ms / 60e3) * 60e3).toISOString().s
 //   region      the "Where to land" planner           finalise / execute   their pages (they read the storage)
 //   3d          the globe at the site (or the route)
 function stageUrl(stage, m, { route = false } = {}) {
-  const site = m?.siteId ? encodeURIComponent(m.siteId) : m ? `c:${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;   // the navigator's custom site
+  // a point picked on the map is stored with siteId 'custom', which is not a listed site: the link carries it as c:lat,lon
+  const site = m?.siteId && m.siteId !== 'custom' ? encodeURIComponent(m.siteId) : m ? `c:${m.latDeg.toFixed(4)},${m.lonDeg.toFixed(4)}` : null;
   const t = m && Number.isFinite(m.landingMs) ? isoMin(m.landingMs) : null;
   const nav = (extra = '') => `index.html#view=map${site ? `&site=${site}` : ''}${t ? `&t=${t}` : ''}${m?.stayDays ? `&stay=${m.stayDays}` : ''}${extra}`;
   if (stage === 'map' || stage === 'site') return nav();
@@ -10484,7 +10485,14 @@ function createActionBar(doc = document, { parent, avoid = () => [] } = {}) {
     for (const [source, items] of map ?? []) {
       if (!items.length) continue;
       if (flat.length) flat.push({ key: `div:${n++}`, it: { type: 'divider' } });
-      for (const it of items) flat.push({ key: `${kind}:${source}:${it.id ?? it.type}`, it });
+      // items without an id (dividers) are numbered within their source: one shared key made a single node hop
+      // between the places on every render, moving the buttons after it, so a click pressed mid-render was lost
+      const seen = new Map();
+      for (const it of items) {
+        const base = it.id ?? it.type ?? 'button', k = seen.get(base) ?? 0;
+        seen.set(base, k + 1);
+        flat.push({ key: `${kind}:${source}:${base}${k ? `:${k}` : ''}`, it });
+      }
     }
     wrap.hidden = !flat.length;
     layoutSoon();
