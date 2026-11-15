@@ -96,6 +96,7 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
   let lightTimer = 0, lightAt = 0;
   let shownPic = null, shownContour = null;   // the last pictures on screen, kept while the next ones are built
   let colours = null;
+  let drapeOnly = false;
   let draw = initialDraw('select');
   let snap = null;                 // { target, px, py }
   let keyPt = null;                // keyboard crosshair, km
@@ -690,12 +691,18 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     ctx.clearRect(0, 0, wd, hd);
     ctx.save();
     clipToMap(ctx);
-    drawBase(ctx);
+    // drape only (the Map's 3D globe draws the terrain itself, ui/globemap.js): no base, no styled terrain, no
+    // contours; the heat at the strength it has over the terrain style, on a clear canvas
+    if (!drapeOnly) drawBase(ctx);
     // Topo and Real light: the styled terrain over the plain hillshade (which stays under it while the picture
     // is built), the heat colours translucent on top
-    const pic = styledPicture();
+    const pic = drapeOnly ? null : styledPicture();
     if (pic) drawLayerImage(ctx, pic.canvas, pic.view, pic.sref);
-    if (!p.emptyText) {
+    if (!p.emptyText && drapeOnly) {
+      ctx.globalAlpha = ts.style === 'data' ? 1 : HEAT_ON_TERRAIN;
+      paintLayers(ctx);
+      ctx.globalAlpha = 1;
+    } else if (!p.emptyText) {
       const t = reliefAmount();
       if (t === 0 && !pic) paintLayers(ctx);
       else {
@@ -711,7 +718,7 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
         ctx.globalAlpha = 1;
       }
     }
-    const cpic = ts.contours ? contourPicture() : null;
+    const cpic = ts.contours && !drapeOnly ? contourPicture() : null;
     if (cpic) drawLayerImage(ctx, cpic.canvas, cpic.view, cpic.sref);
     if (p.psrLayer) drawPsr(ctx);
     el.dataset.psr = p.psrLayer ? 'on' : 'off';
@@ -1217,6 +1224,8 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     // T's hand-off 2.2: the canvas caches the palette; a palette change repaints with the new colours
     refreshColours() { colours = null; psrCache = null; paint(); drawOverlay(); },
     zoomBy,
+    // the Map's globe draws the terrain: paint only what is draped on it (heat, PSR; the SVG layers as always)
+    setDrapeOnly(on) { drapeOnly = !!on; paint(); },
     resetView() { stopFly(); setView({ cx: 0, cy: 0, zoom: 1 }, true); },
     // fix L3: ease to the view that fits a box (km) inside the insets (CSS px from each frame edge)
     fitBox(box, insets, opts = {}) { if (p && geo.W) flyTo(viewFor(box, insets, opts.maxZoom), opts.ms); },

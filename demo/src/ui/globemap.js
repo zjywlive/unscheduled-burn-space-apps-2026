@@ -58,6 +58,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   note.hidden = true;
   layer.append(canvas, labels, note);
   host.insertBefore(layer, host.querySelector('.map-canvas'));
+  // the globe draws the terrain (one lighting and palette across 80°S); the polar map paints only its layers
+  frame.setDrapeOnly?.(true);
   // the polar map's own pointer handlers must not see the globe's raw events (they get mapped copies instead)
   for (const t of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'pointerleave', 'click', 'dblclick', 'wheel', 'contextmenu']) {
     layer.addEventListener(t, (e) => e.stopPropagation(), t === 'wheel' ? { passive: true } : undefined);
@@ -83,7 +85,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       canDrag: () => (getState().tool ?? 'select') === 'select',
       onCamera: (c) => { cameraMoved(c); onCamera(c); },
     });
-    view.setExaggeration(2);
+    view.setExaggeration(1);   // true relief: the cast shadows of the real Sun have their true length
     api.view = view;
     view.onFrame(frameTick);
     refreshGlobal(true);
@@ -208,7 +210,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
       const w = Math.round(fr.width * s), h = Math.round(fr.height * s);
       if (comp.width !== w || comp.height !== h) { comp.width = w; comp.height = h; } else cctx.clearRect(0, 0, w, h);
       const put = (el) => { const r = el.getBoundingClientRect(); if (r.width && el.width) cctx.drawImage(el, (r.left - fr.left) * s, (r.top - fr.top) * s, r.width * s, r.height * s); };
-      for (const c of host.querySelectorAll(':scope > canvas.map-canvas')) if (getComputedStyle(c).display !== 'none') put(c);
+      // (not the polar map's "no Sun now" veil: the globe lights the whole Moon by the real Sun instead, one light
+      // across 80°S, with cast shadows)
+      for (const c of host.querySelectorAll(':scope > canvas.map-canvas:not(.map-live)')) if (getComputedStyle(c).display !== 'none') put(c);
       // (not the Sun and Earth arrows: they sit at the polar map's view centre, which is not the globe's; the sky dial
       // shows the directions at the site)
       const imgs = await Promise.all([...host.querySelectorAll(':scope > svg.map-overlay, :scope > svg.map-shapes')].map(svgImage));
@@ -228,7 +232,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   function frameTick() {
     const now = performance.now();
     if (now - lastUpd > 500) { lastUpd = now; refreshGlobal(); refreshTerrain(); followPolarView(); }
-    const k = `${host.dataset.sharp ?? ''}|${host.dataset.redrawMs ?? ''}|${host.dataset.moveMs ?? ''}|${pyramid.version ?? ''}`;
+    // (and when the playhead moves: the live veil and the Live mode repaint every hour of it)
+    const st = getState();
+    const k = `${host.dataset.sharp ?? ''}|${host.dataset.redrawMs ?? ''}|${host.dataset.moveMs ?? ''}|${host.dataset.paintMs ?? ''}|${host.dataset.live ?? ''}|${pyramid.version ?? ''}|${Math.floor((st.cursorMs ?? 0) / 1800e3)}`;
     if (k !== lastSharp) { lastSharp = k; schedule(120); }
     if (pyramid.version !== pyrV) { pyrV = pyramid.version; view.invalidate({ pole: 'S' }); }
   }
@@ -259,8 +265,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const colours = readColours();
     // over Topo and Real light the heat goes on at the polar map's strength there (mapframe.js HEAT_ON_TERRAIN)
     const alpha = style === 'data' ? 1 : 0.35;
-    const dNow = night ? eph.at(st.cursorMs ?? st.landingMs ?? eph.startMs) : null;
-    view.setNight(dNow ? dNow.sun : null);
+    view.setNight(null);
     if (live) {
       const d = eph.at(st.cursorMs ?? st.landingMs ?? eph.startMs);
       view.setLive(d ? { sun: d.sun, earth: d.earth, colours } : null);
@@ -294,14 +299,17 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
   function refreshTerrain() {
     if (!view) return;
     const ts = frame.terrain ?? {}, st = getState();
-    const key = `${ts.style}|${ts.contours}|${ts.style === 'real' ? Math.floor((st.cursorMs ?? 0) / 600e3) : ''}`;
+    // the real Sun at the playhead lights the globe (with cast shadows) in Real light, and whenever the polar map
+    // would show "Light at the playhead" (its veil): one light across 80°S that moves with the time
+    const realSun = ts.style === 'real' || host.dataset.live === 'on';
+    const key = `${ts.style}|${ts.contours}|${realSun ? Math.floor((st.cursorMs ?? 0) / 300e3) : ''}`;
     if (key === tsKey) return;
     tsKey = key;
     view.setColour(ts.style === 'topo' ? 'tint' : 'shade');
     view.setContours(!!ts.contours);
     // contour ink as on the polar map for each style (mapframe.js CONTOUR_INK, the index lines)
     view.setContourInk(ts.style === 'topo' ? [58, 32, 14] : ts.style === 'real' ? [255, 206, 150] : [235, 235, 235]);
-    const d = ts.style === 'real' ? eph.at(st.cursorMs ?? st.landingMs) : null;
+    const d = realSun ? eph.at(st.cursorMs ?? st.landingMs) : null;
     view.setSun(d ? d.sun : null);
   }
 
@@ -388,6 +396,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
 
   const api = {
     view: null, ready, el: layer,
+    get picture() { return comp; },   // the draped polar picture (for inspection)
     onPolarView: null,
     // screen position (frame CSS px) of a ground point, for the sky dial; null when out of sight
     toFramePx(latDeg, lonDeg) { const p = view?.project(latDeg, lonDeg); return p ? [p.x, p.y] : null; },
