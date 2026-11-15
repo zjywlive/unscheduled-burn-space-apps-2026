@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow mock · Lunar Site Navigator</title>
+<!-- A MOCK of the reorganised flow (docs/FLOW-MOCK.md). Self-contained: the 3D Moon behind it is the real globe
+     (globe.html, embed mode), the numbers come from a simplified sky model below (labelled mock), and nothing here
+     changes the app. The deeper steps link to the existing pages. -->
+<style>
+  :root {
+    --bg: #0b0c0e; --text: #ececec; --muted: #a7abb1; --faint: #7d8188; --hair: rgba(255,255,255,0.12);
+    --glass: rgba(24, 25, 28, 0.78); --sun: #f2b33d; --earth: #4cb3f0; --ok: #7fd18b; --bad: #e5484d;
+    --r1: 14px; --r2: 10px; --ctl: 32px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 Inter, system-ui, -apple-system, sans-serif; overflow: hidden; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .num { font-variant-numeric: tabular-nums; }
+  .glass { background: var(--glass); -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); border: 1px solid var(--hair); border-radius: var(--r1); box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
+  #moon { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  .mock-tag { position: fixed; left: 50%; top: 66px; transform: translateX(-50%); z-index: 5; padding: 3px 10px; border-radius: 999px; background: rgba(242,179,61,0.16); border: 1px solid rgba(242,179,61,0.5); color: var(--sun); font-size: 11px; }
+
+  /* ---- top bar: the stepper is the flow ---- */
+  .top { position: fixed; left: 0; right: 0; top: 0; height: 56px; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: rgba(12,13,15,0.86); border-bottom: 1px solid var(--hair); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  .brand b { display: block; font-size: 14px; } .brand span { color: var(--muted); font-size: 11px; }
+  .steps { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid var(--hair); }
+  .grp { color: var(--faint); font-size: 10px; letter-spacing: 0.08em; padding: 0 6px 0 8px; }
+  .step { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 6px; border: 0; border-radius: 999px; background: none; color: var(--muted); white-space: nowrap; }
+  .step .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,0.1); font-size: 11px; font-weight: 600; }
+  .step.done .n { background: var(--ok); color: #000; }
+  .step:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+  .step[aria-current="step"] { background: #ececec; color: #0b0c0e; }
+  .step[aria-current="step"] .n { background: #0b0c0e; color: #ececec; }
+  .sep { color: var(--faint); }
+  .top .right { margin-left: auto; display: flex; gap: 4px; }
+  .top .right button { height: 30px; padding: 0 12px; border-radius: 8px; border: 0; background: none; color: var(--muted); }
+  .top .right button:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+
+  /* ---- panels ---- */
+  .left { position: fixed; left: 16px; top: 72px; bottom: 132px; width: 280px; z-index: 6; display: flex; flex-direction: column; overflow: hidden; }
+  .right { position: fixed; right: 16px; top: 72px; bottom: 132px; width: 380px; z-index: 6; display: flex; flex-direction: column; overflow: hidden; }
+  .phead { padding: 14px 16px 10px; border-bottom: 1px solid var(--hair); }
+  .phead h2 { margin: 0; font-size: 15px; } .phead p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+  .pbody { padding: 12px 16px; overflow: auto; flex: 1; }
+  .pfoot { padding: 12px 16px; border-top: 1px solid var(--hair); display: flex; gap: 8px; align-items: center; }
+  .btn { height: var(--ctl); padding: 0 14px; border-radius: 999px; border: 1px solid var(--hair); background: rgba(255,255,255,0.06); }
+  .btn:hover { background: rgba(255,255,255,0.12); }
+  .btn.pri { background: #ececec; color: #0b0c0e; border-color: #ececec; font-weight: 600; }
+  .btn.pri:hover { background: #fff; }
+  .btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+  .grow { flex: 1; }
+  .summary { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--hair); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--hair); background: rgba(255,255,255,0.04); color: var(--muted); font-size: 12px; }
+  .chip b { color: var(--text); font-weight: 500; }
+  .chip:hover { border-color: rgba(255,255,255,0.3); }
+
+  /* site list */
+  .search { width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--hair); background: rgba(0,0,0,0.25); color: var(--text); font: inherit; }
+  .glabel { margin: 14px 0 4px; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .site { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 8px; background: none; text-align: left; }
+  .site:hover { background: rgba(255,255,255,0.06); }
+  .site[aria-current="true"] { background: rgba(255,255,255,0.12); }
+  .site .nm { flex: 1; } .site .v { color: var(--muted); font-size: 12px; }
+  .site .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .coord { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-top: 6px; }
+  .coord input { min-width: 0; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--hair); background: rgba(0,0,0,0.25); color: var(--text); font: inherit; }
+  .assist { margin-top: 14px; padding: 10px 12px; border-radius: var(--r2); border: 1px dashed var(--hair); color: var(--muted); font-size: 12px; }
+  .assist b { color: var(--text); }
+
+  /* verdict */
+  .verdict { padding: 12px 14px; border-radius: var(--r2); font-weight: 600; font-size: 14px; line-height: 1.4; }
+  .verdict.ok { background: rgba(127,209,139,0.13); color: var(--ok); }
+  .verdict.near { background: rgba(242,179,61,0.13); color: var(--sun); }
+  .verdict.bad { background: rgba(229,72,77,0.14); color: var(--bad); }
+  .verdict small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: var(--muted); }
+  .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .tile { padding: 10px 12px; border-radius: var(--r2); border: 1px solid var(--hair); background: rgba(255,255,255,0.03); }
+  .tile .k { color: var(--muted); font-size: 11px; }
+  .tile .val { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .tile .s { color: var(--faint); font-size: 11px; }
+  .tile.sun .val { color: var(--sun); } .tile.earth .val { color: var(--earth); }
+  .checks { margin-top: 12px; display: grid; gap: 6px; }
+  .check { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03); }
+  .check .g { flex: none; width: 46px; text-align: center; border-radius: 999px; font-size: 10px; font-weight: 600; padding: 2px 0; text-transform: uppercase; }
+  .g.ok { background: rgba(127,209,139,0.18); color: var(--ok); } .g.near { background: rgba(242,179,61,0.18); color: var(--sun); } .g.bad { background: rgba(229,72,77,0.2); color: var(--bad); }
+  .check .t { flex: 1; } .check .t small { display: block; color: var(--muted); font-size: 11px; }
+  .bars { margin-top: 12px; }
+  .bar { display: grid; grid-template-columns: 70px 1fr 54px; align-items: center; gap: 8px; margin: 4px 0; font-size: 11px; color: var(--muted); }
+  .bar i { display: block; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); position: relative; overflow: hidden; }
+  .bar i b { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+  .hint { margin-top: 12px; color: var(--muted); font-size: 12px; }
+  .hint a { color: var(--text); cursor: pointer; text-decoration: underline dotted; }
+
+  /* date */
+  .dates { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .field label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .field input { width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--hair); background: rgba(0,0,0,0.25); color: var(--text); font: inherit; color-scheme: dark; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid var(--hair); }
+  .seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: rgba(255,255,255,0.16); color: var(--text); }
+  .cal { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; margin-top: 6px; }
+  .cal button { height: 30px; border: 0; border-radius: 5px; font-size: 10px; color: rgba(0,0,0,0.75); }
+  .cal button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; }
+  .legend { display: flex; gap: 10px; margin-top: 6px; color: var(--faint); font-size: 11px; align-items: center; }
+  .legend i { display: inline-block; width: 22px; height: 8px; border-radius: 3px; background: linear-gradient(90deg, #3a3d42, #c9a24a, #7fd18b); }
+
+  /* compare */
+  .cmpwrap { overflow-x: auto; margin: 0 -4px; }
+  .cmp { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .cmp th, .cmp td { padding: 6px 3px; border-bottom: 1px solid var(--hair); text-align: right; white-space: nowrap; }
+  .cmp th:first-child, .cmp td:first-child { text-align: left; color: var(--muted); font-weight: 400; }
+  .cmp thead th { vertical-align: bottom; font-weight: 500; }
+  .cmp thead th small { display: block; color: var(--faint); font-weight: 400; }
+  .cmp .d { display: block; font-size: 10px; }
+  .d.up { color: var(--ok); } .d.down { color: var(--bad); } .d.same { color: var(--faint); }
+  .cmp .mini { height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--hair); background: none; color: var(--muted); font-size: 11px; }
+  .adds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .adds select { height: var(--ctl); border-radius: 999px; border: 1px solid var(--hair); background: rgba(255,255,255,0.06); color: var(--text); padding: 0 10px; font: inherit; }
+
+  /* deeper */
+  .deep { display: grid; gap: 8px; }
+  .deep a { display: block; padding: 12px 14px; border-radius: var(--r2); border: 1px solid var(--hair); background: rgba(255,255,255,0.03); color: var(--text); text-decoration: none; }
+  .deep a:hover { border-color: rgba(255,255,255,0.3); }
+  .deep a b { display: block; } .deep a span { color: var(--muted); font-size: 12px; }
+
+  /* sky dial at the view centre (the camera looks at the site) */
+  .dial { position: fixed; left: 50%; top: 50%; width: 300px; height: 300px; margin: -150px 0 0 -150px; z-index: 3; pointer-events: none; }
+
+  /* time bar */
+  .dock { position: fixed; left: 16px; right: 16px; bottom: 16px; height: 100px; z-index: 6; padding: 10px 14px; display: grid; grid-template-rows: auto 1fr; gap: 6px; }
+  .dock .row { display: flex; align-items: center; gap: 12px; }
+  .dock .clock { font-weight: 600; min-width: 200px; }
+  .dock .msg { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track { position: relative; height: 34px; border-radius: 8px; background: rgba(255,255,255,0.04); overflow: hidden; cursor: pointer; }
+  .track .day { position: absolute; top: 0; bottom: 0; }
+  .track .win { position: absolute; top: 2px; bottom: 2px; border: 2px solid #fff; border-radius: 6px; pointer-events: none; }
+  .track .alt { position: absolute; top: 6px; bottom: 6px; border: 1.5px dashed rgba(255,255,255,0.6); border-radius: 5px; pointer-events: none; }
+  .track .ph { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; }
+  .play { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--hair); background: rgba(255,255,255,0.06); }
+
+  /* notes */
+  .notes { position: fixed; left: 312px; top: 72px; width: 360px; max-height: calc(100vh - 220px); overflow: auto; z-index: 7; padding: 14px 16px; font-size: 12px; color: var(--muted); }
+  .notes h3 { margin: 0 0 6px; color: var(--text); font-size: 13px; }
+  .notes ol { margin: 0 0 8px; padding-left: 18px; } .notes li { margin: 3px 0; }
+  .notes b { color: var(--text); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<iframe id="moon" title="The 3D Moon (the real globe)" src="globe.html#embed=1&lat=-89.45&lon=222.69&dist=160&tilt=30&heading=0"></iframe>
+<div class="mock-tag">Flow mock · numbers from a simplified sky model, not the app's engine</div>
+
+<header class="top">
+  <div class="brand"><b>Lunar Site Navigator</b><span>Flow mock</span></div>
+  <nav class="steps" aria-label="Flow">
+    <span class="grp">PLAN</span>
+    <button class="step" data-step="site"><span class="n">1</span>Site</button><span class="sep">›</span>
+    <button class="step" data-step="date"><span class="n">2</span>Date</button><span class="sep">›</span>
+    <button class="step" data-step="verdict"><span class="n">3</span>Verdict</button><span class="sep">›</span>
+    <button class="step" data-step="compare"><span class="n">4</span>Compare</button>
+    <span class="grp">GO DEEPER</span>
+    <button class="step" data-step="deeper"><span class="n">5</span>Route · Finalise · Execute</button>
+  </nav>
+  <div class="right"><button id="notes-btn">How this flow maps</button><button>Evidence</button><button>Brief</button><button>Ask</button></div>
+</header>
+
+<aside class="left glass" id="left">
+  <div class="phead"><h2>Where to land</h2><p>A listed site, coordinates, or a click on the Moon.</p></div>
+  <div class="pbody">
+    <input class="search" id="q" placeholder="Search sites" aria-label="Search sites">
+    <div id="sitelist"></div>
+    <div class="glabel">Coordinates</div>
+    <div class="coord"><input id="clat" placeholder="lat, e.g. −85.4" aria-label="Latitude"><input id="clon" placeholder="lon °E" aria-label="Longitude"><button class="btn" id="cgo">Go</button></div>
+    <div class="assist"><b>Not sure where?</b> Draw an area and screen it: the best spots by slope, sunlight, Earth view and battery. <br><button class="btn ghost" id="screen-btn" style="padding:0;margin-top:4px">Screen an area (Where to land) →</button></div>
+  </div>
+</aside>
+
+<aside class="right glass" id="right">
+  <div class="summary" id="summary"></div>
+  <div class="phead" id="rhead"></div>
+  <div class="pbody" id="rbody"></div>
+  <div class="pfoot" id="rfoot"></div>
+</aside>
+
+<svg class="dial" id="dial" viewBox="-150 -150 300 300" aria-hidden="true"></svg>
+
+<footer class="dock glass">
+  <div class="row"><button class="play" id="play" aria-label="Play">▶</button><span class="clock num" id="clock"></span><span class="msg" id="msg"></span></div>
+  <div class="track" id="track"></div>
+</footer>
+
+<aside class="notes glass" id="notes" hidden>
+  <h3>How this flow maps to the app</h3>
+  <ol>
+    <li><b>Site</b>: the site list, Coordinates, a click on the Moon (as today). <b>Screen an area</b> is today's region + Where to land, offered as help, not a step.</li>
+    <li><b>Date</b>: today's time-bar popover (landing, stay) plus the landing-day strip, moved into the panel with a 4-week calendar.</li>
+    <li><b>Verdict</b>: one place for what the challenge asks: Sun elevation, time to sunset / Earthset, sunlit and Earth hours, longest dark against the battery, power and comms graded (today split between the site card, Details and Power / Comms).</li>
+    <li><b>Compare</b>: today's Details → Compare and the slip, as a table you add columns to (slip, other site, best date nearby); any column can become the plan.</li>
+    <li><b>Go deeper</b>: the rover route, Finalise and Execute, unchanged, after the four steps.</li>
+  </ol>
+  <p>The steps are a guide, not a gate: every step stays clickable, and the Moon, the dial and the time bar are always there.</p>
+  <button class="btn" id="notes-close">Close</button>
+</aside>
+
+<script>
+// ---------------- a simplified sky (mock): the Sun goes round in a synodic month with a 1.54° seasonal swing, the Earth
+// librates ±6.7° / ±7.9°; a body counts as up above the site's skyline (a constant per site, a stand-in for the terrain)
+const DAY = 86400e3, HOUR = 3600e3, RAD = Math.PI / 180, SYN = 29.530589 * DAY, YEAR = 365.25 * DAY;
+const T0 = Date.UTC(2027, 0, 1);
+const BATTERY_H = 10.9;   // 3000 Wh, 20 % reserve, 220 W (assumed, as the app)
+const SITES = [
+  { id: 'shackleton', name: 'Shackleton ridge', lat: -89.45, lon: 222.69, sky: 0.3, group: 'Artemis III candidates' },
+  { id: 'peak-near-cabeus-b', name: 'Peak near Cabeus B', lat: -83.6, lon: 291.2, sky: 1.0, group: 'Artemis III candidates' },
+  { id: 'malapert-massif', name: 'Malapert Massif', lat: -86.0, lon: 0.3, sky: 0.6, group: 'Artemis III candidates' },
+  { id: 'haworth', name: 'Haworth', lat: -86.7, lon: 336.3, sky: 2.0, group: 'Artemis III candidates' },
+  { id: 'im2', name: 'IM-2 Athena', lat: -84.79, lon: 29.2, sky: 1.2, group: 'Flown' },
+  { id: 'apollo11', name: 'Apollo 11', lat: 0.67, lon: 23.47, sky: 0.2, group: 'Flown' },
+  { id: 'change4', name: "Chang'e-4", lat: -45.44, lon: 177.6, sky: 0.5, group: 'Flown' },
+];
+const unit = (la, lo) => [Math.cos(la * RAD) * Math.cos(lo * RAD), Math.cos(la * RAD) * Math.sin(lo * RAD), Math.sin(la * RAD)];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+function sunDir(t) { const lon = -360 * ((t - T0) / SYN) + 120, lat = 1.54 * Math.sin(2 * Math.PI * (t - T0) / YEAR); return unit(lat, lon); }
+function earthDir(t) { return unit(6.7 * Math.sin(2 * Math.PI * (t - T0) / (27.21 * DAY)), 7.9 * Math.sin(2 * Math.PI * (t - T0) / (27.55 * DAY))); }
+// elevation and azimuth (from north, clockwise) of a direction at a site
+function elAz(site, d) {
+  const n = unit(site.lat, site.lon), e = [-Math.sin(site.lon * RAD), Math.cos(site.lon * RAD), 0];
+  const nn = [-Math.sin(site.lat * RAD) * Math.cos(site.lon * RAD), -Math.sin(site.lat * RAD) * Math.sin(site.lon * RAD), Math.cos(site.lat * RAD)];
+  const el = Math.asin(Math.max(-1, Math.min(1, dot(n, d)))) / RAD;
+  const az = (Math.atan2(dot(e, d), dot(nn, d)) / RAD + 360) % 360;
+  return { el, az };
+}
+const up = (site, t, body) => elAz(site, body === 'sun' ? sunDir(t) : earthDir(t)).el > site.sky;
+// the stay hour by hour: hours with the Sun / the Earth / both up, the longest dark spell, the next sunset and Earthset
+function scenario(site, landMs, stayDays) {
+  let sun = 0, earth = 0, both = 0, run = 0, longest = 0;
+  const n = Math.round(stayDays * 24);
+  for (let i = 0; i < n; i++) {
+    const t = landMs + i * HOUR, s = up(site, t, 'sun'), e = up(site, t, 'earth');
+    if (s) { sun++; run = 0; } else if (++run > longest) longest = run;
+    if (e) earth++; if (s && e) both++;
+  }
+  return { site, landMs, stayDays, sunH: sun, earthH: earth, bothH: both, darkH: longest, hours: n };
+}
+function nextChange(site, t, body) {   // hours to the next set (when up) or rise (when down), within 30 days
+  const now = up(site, t, body);
+  for (let i = 1; i < 720; i++) if (up(site, t + i * HOUR, body) !== now) return { h: i, kind: now ? 'set' : 'rise' };
+  return { h: null, kind: now ? 'set' : 'rise' };
+}
+function grade(sc) {
+  const power = sc.darkH <= BATTERY_H ? 'ok' : sc.darkH <= 1.5 * BATTERY_H ? 'near' : 'bad';
+  const ef = sc.earthH / sc.hours, comms = ef >= 0.5 ? 'ok' : ef >= 0.25 ? 'near' : 'bad';
+  const sf = sc.sunH / sc.hours, sun = sf >= 0.7 ? 'ok' : sf >= 0.4 ? 'near' : 'bad';
+  const all = [power, comms, sun];
+  const overall = all.includes('bad') ? 'bad' : all.includes('near') ? 'near' : 'ok';
+  return { power, comms, sun, overall };
+}
+
+// ---------------- state ----------------
+const S = { step: 'site', site: SITES[0], landMs: Date.UTC(2027, 7, 22), stayDays: 14, cursorMs: Date.UTC(2027, 7, 22), done: new Set(), cmp: [], playing: false };
+const $ = (id) => document.getElementById(id);
+const fmtD = (ms) => new Date(ms).toISOString().slice(0, 10);
+const fmtDT = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+const fmtDay = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const dur = (h) => (h === null ? '> 30 d' : h >= 24 ? `${Math.floor(h / 24)} d ${h % 24} h` : `${h} h`);
+const pct = (x) => `${Math.round(x * 100)}%`;
+const coords = (s) => `${Math.abs(s.lat).toFixed(2)}°${s.lat < 0 ? 'S' : 'N'} ${(s.lon > 180 ? (360 - s.lon).toFixed(2) + '°W' : s.lon.toFixed(2) + '°E')}`;
+
+function flyTo(site) {
+  const f = $('moon');
+  try { f.contentWindow.location.hash = `embed=1&lat=${site.lat.toFixed(4)}&lon=${site.lon.toFixed(4)}&dist=${site.lat < -80 ? 160 : 900}&tilt=${site.lat < -80 ? 30 : 0}&heading=0`; } catch { /* not loaded */ }
+}
+$('moon').addEventListener('load', () => {
+  try { const st = $('moon').contentDocument.createElement('style'); st.textContent = '.act-bar, .boot { display: none !important; }'; $('moon').contentDocument.head.appendChild(st); } catch { /* cross-origin */ }
+});
+
+// ---------------- rendering ----------------
+function goto(step) { if (S.step !== step) S.done.add(S.step); S.step = step; render(); }
+function render() {
+  document.querySelectorAll('.step').forEach((b) => { b.setAttribute('aria-current', b.dataset.step === S.step ? 'step' : 'false'); b.classList.toggle('done', S.done.has(b.dataset.step) && b.dataset.step !== S.step); });
+  $('left').hidden = S.step !== 'site';
+  renderSummary(); renderRight(); renderDock(); renderDial();
+}
+function renderSummary() {
+  const g = grade(scenario(S.site, S.landMs, S.stayDays));
+  const v = { ok: 'Viable', near: 'Marginal', bad: 'Not viable' }[g.overall];
+  $('summary').innerHTML = `<button class="chip" data-go="site">Site <b>${S.site.name}</b></button><button class="chip" data-go="date">Landing <b>${fmtDay(S.landMs)}</b> · ${S.stayDays} d</button><button class="chip" data-go="verdict"><span class="site dot" style="padding:0;width:8px;height:8px;border-radius:50%;background:var(--${g.overall === 'ok' ? 'ok' : g.overall === 'near' ? 'sun' : 'bad'})"></span><b>${v}</b></button>${S.cmp.length ? `<button class="chip" data-go="compare">Compare <b>${S.cmp.length + 1}</b></button>` : ''}`;
+  $('summary').querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => goto(b.dataset.go)));
+}
+function foot(prevStep, nextStep, nextLabel, extra = '') {
+  $('rfoot').innerHTML = `${prevStep ? `<button class="btn ghost" data-go="${prevStep}">← Back</button>` : ''}<span class="grow"></span>${extra}${nextStep ? `<button class="btn pri" data-go="${nextStep}">${nextLabel} →</button>` : ''}`;
+  $('rfoot').querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => goto(b.dataset.go)));
+}
+function renderRight() {
+  const sc = scenario(S.site, S.landMs, S.stayDays), g = grade(sc);
+  if (S.step === 'site') {
+    $('rhead').innerHTML = `<h2>${S.site.name}</h2><p>${coords(S.site)} · ${S.site.lat <= -80 ? 'polar terrain and skyline' : 'global terrain, smooth horizon'}</p>`;
+    $('rbody').innerHTML = `<p class="hint" style="margin-top:0">Pick a site on the left, type coordinates, or click the Moon. The Sky dial shows where the Sun and the Earth stand from here right now.</p>
+      <div class="hero"><div class="tile sun"><div class="k">Sun now</div><div class="val num">${elAz(S.site, sunDir(S.cursorMs)).el.toFixed(1)}°</div><div class="s">elevation</div></div>
+      <div class="tile earth"><div class="k">Earth now</div><div class="val num">${elAz(S.site, earthDir(S.cursorMs)).el.toFixed(1)}°</div><div class="s">elevation</div></div></div>`;
+    foot(null, 'date', 'Choose the date');
+  } else if (S.step === 'date') {
+    $('rhead').innerHTML = `<h2>When to land</h2><p>Landing time (UTC) and how long you stay. The strip colours each landing day by Sun-and-Earth time.</p>`;
+    const days = [];
+    for (let i = -7; i < 49; i++) { const t = Date.UTC(new Date(S.landMs).getUTCFullYear(), new Date(S.landMs).getUTCMonth(), new Date(S.landMs).getUTCDate()) + i * DAY; days.push({ t, sc: scenario(S.site, t, S.stayDays) }); }
+    const max = Math.max(1, ...days.map((d) => d.sc.bothH));
+    const best = days.filter((d) => d.t > S.landMs).sort((a, b) => b.sc.bothH - a.sc.bothH)[0];
+    $('rbody').innerHTML = `<div class="dates"><div class="field"><label>Landing (UTC)</label><input type="datetime-local" id="land" value="${new Date(S.landMs).toISOString().slice(0, 16)}"></div>
+      <div class="field"><label>Stay</label><div class="seg" id="stay">${[7, 14, 30].map((d) => `<button aria-pressed="${d === S.stayDays}" data-d="${d}">${d} days</button>`).join('')}</div></div></div>
+      <div class="glabel">Landing days, 8 weeks</div>
+      <div class="cal">${days.map((d) => { const f = d.sc.bothH / max; const c = f > 0.66 ? '#7fd18b' : f > 0.33 ? '#c9a24a' : '#3a3d42'; return `<button style="background:${c}" aria-pressed="${fmtD(d.t) === fmtD(S.landMs)}" data-t="${d.t}" title="${fmtDay(d.t)}: ${d.sc.bothH} h Sun and Earth">${new Date(d.t).getUTCDate()}</button>`; }).join('')}</div>
+      <div class="legend"><i></i> less → more hours with the Sun and the Earth both up over the stay</div>
+      ${best ? `<p class="hint">Best start in the next weeks: <a data-best="${best.t}">${fmtDay(best.t)} · ${best.sc.bothH} h</a> (now ${sc.bothH} h).</p>` : ''}`;
+    $('land').addEventListener('change', (e) => { const t = Date.parse(e.target.value + ':00Z'); if (Number.isFinite(t)) { S.landMs = S.cursorMs = t; render(); } });
+    $('rbody').querySelectorAll('#stay button').forEach((b) => b.addEventListener('click', () => { S.stayDays = +b.dataset.d; render(); }));
+    $('rbody').querySelectorAll('.cal button, [data-best]').forEach((b) => b.addEventListener('click', () => { S.landMs = S.cursorMs = +(b.dataset.t ?? b.dataset.best); render(); }));
+    foot('site', 'verdict', 'See the verdict');
+  } else if (S.step === 'verdict') {
+    const sunNow = elAz(S.site, sunDir(S.cursorMs)), earthNow = elAz(S.site, earthDir(S.cursorMs));
+    const ns = nextChange(S.site, S.cursorMs, 'sun'), ne = nextChange(S.site, S.cursorMs, 'earth');
+    const why = [];
+    if (g.power !== 'ok') why.push(`the longest dark spell (${sc.darkH} h) is longer than the battery lasts (${BATTERY_H} h)`);
+    if (g.comms !== 'ok') why.push(`the Earth is in view only ${pct(sc.earthH / sc.hours)} of the stay`);
+    if (g.sun !== 'ok') why.push(`the Sun is up only ${pct(sc.sunH / sc.hours)} of the stay`);
+    const head = { ok: 'Viable: power and communications hold for the whole stay.', near: `Marginal: ${why.join('; ')}.`, bad: `Not viable as planned: ${why.join('; ')}.` }[g.overall];
+    $('rhead').innerHTML = `<h2>Is it viable?</h2><p>${S.site.name} · landing ${fmtDT(S.landMs)} · ${S.stayDays}-day stay</p>`;
+    const bar = (k, h, c) => `<div class="bar"><span>${k}</span><i><b style="width:${(h / sc.hours) * 100}%;background:${c}"></b></i><span class="num">${h} h</span></div>`;
+    $('rbody').innerHTML = `<div class="verdict ${g.overall}">${head}<small>Battery ${BATTERY_H} h of darkness (3000 Wh, 20 % reserve, 220 W, assumed). Direct-to-Earth link only.</small></div>
+      <div class="hero"><div class="tile sun"><div class="k">Sun elevation now</div><div class="val num">${sunNow.el.toFixed(1)}°</div><div class="s">${ns.kind === 'set' ? 'sets' : 'rises'} in ${dur(ns.h)}</div></div>
+      <div class="tile earth"><div class="k">Earth elevation now</div><div class="val num">${earthNow.el.toFixed(1)}°</div><div class="s">${ne.kind === 'set' ? 'sets' : 'rises'} in ${dur(ne.h)}</div></div></div>
+      <div class="bars">${bar('Sunlit', sc.sunH, 'var(--sun)')}${bar('Earth in view', sc.earthH, 'var(--earth)')}${bar('Both', sc.bothH, '#fff')}</div>
+      <div class="checks">
+        <div class="check"><span class="g ${g.power}">${g.power}</span><span class="t">Power<small>Longest dark spell ${sc.darkH} h vs ${BATTERY_H} h on battery</small></span></div>
+        <div class="check"><span class="g ${g.comms}">${g.comms}</span><span class="t">Communications<small>Earth in view ${pct(sc.earthH / sc.hours)} of the stay (≥ 50 % passes)</small></span></div>
+        <div class="check"><span class="g ${g.sun}">${g.sun}</span><span class="t">Sunlight<small>Sun up ${pct(sc.sunH / sc.hours)} of the stay (≥ 70 % passes)</small></span></div>
+      </div>
+      <p class="hint">What would change it? <a data-go="compare">Compare a slipped date or another site</a> · play the time bar to watch the Sun and the Earth move.</p>`;
+    $('rbody').querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => goto(b.dataset.go)));
+    foot('date', 'compare', 'Compare options');
+  } else if (S.step === 'compare') {
+    if (!S.cmp.length) S.cmp.push({ siteId: S.site.id, landMs: S.landMs + 14 * DAY, label: '+14 d' });
+    const plan = scenario(S.site, S.landMs, S.stayDays), cols = [{ label: 'Plan', sc: plan, plan: true }, ...S.cmp.map((c, i) => ({ ...c, i, sc: scenario(SITES.find((s) => s.id === c.siteId) ?? S.site, c.landMs, S.stayDays) }))];
+    const rows = [['Both in view', (s) => s.bothH, 'h', 1], ['Sunlit', (s) => s.sunH, 'h', 1], ['Earth in view', (s) => s.earthH, 'h', 1], ['Longest dark', (s) => s.darkH, 'h', -1]];
+    const gl = (s) => ({ ok: 'Viable', near: 'Marginal', bad: 'Not viable' }[grade(s).overall]);
+    $('rhead').innerHTML = `<h2>Compare options</h2><p>The plan against a slipped date, another site or the best date nearby. Any column can become the plan.</p>`;
+    $('rbody').innerHTML = `<div class="adds"><button class="btn" data-add="slip7">+ Slip 7 d</button><button class="btn" data-add="slip14">+ Slip 14 d</button><button class="btn" data-add="best">+ Best date nearby</button>
+      <select id="addsite" aria-label="Add another site"><option value="">+ Other site…</option>${SITES.filter((s) => s.id !== S.site.id).map((s) => `<option value="${s.id}">${s.name}</option>`).join('')}</select></div>
+      <div class="cmpwrap"><table class="cmp"><thead><tr><th></th>${cols.map((c) => `<th>${c.label}<small>${c.sc.site.name.split(' ')[0]} · ${fmtDay(c.sc.landMs)}</small></th>`).join('')}</tr></thead><tbody>
+      ${rows.map(([k, f, u, better]) => `<tr><td>${k}</td>${cols.map((c) => { const v = f(c.sc), d = v - f(plan); const cls = c.plan || d === 0 ? 'same' : d * better > 0 ? 'up' : 'down'; return `<td class="num">${v} ${u}${c.plan ? '' : `<span class="d ${cls}">${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)} ${u}</span>`}</td>`; }).join('')}</tr>`).join('')}
+      <tr><td>Verdict</td>${cols.map((c) => `<td>${gl(c.sc)}</td>`).join('')}</tr>
+      <tr><td></td>${cols.map((c) => (c.plan ? '<td></td>' : `<td><button class="mini" data-make="${c.i}">Make plan</button> <button class="mini" data-del="${c.i}" aria-label="Remove">×</button></td>`)).join('')}</tr>
+      </tbody></table></div>
+      <p class="hint">Small changes matter: two weeks moves the Sun from one side of a polar ridge to the other.</p>`;
+    $('rbody').querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.dataset.add;
+      if (k === 'slip7') S.cmp.push({ siteId: S.site.id, landMs: S.landMs + 7 * DAY, label: '+7 d' });
+      if (k === 'slip14') S.cmp.push({ siteId: S.site.id, landMs: S.landMs + 14 * DAY, label: '+14 d' });
+      if (k === 'best') { let best = null; for (let i = 1; i <= 28; i++) { const sc = scenario(S.site, S.landMs + i * DAY, S.stayDays); if (!best || sc.bothH > best.sc.bothH) best = { i, sc }; } S.cmp.push({ siteId: S.site.id, landMs: S.landMs + best.i * DAY, label: `Best +${best.i} d` }); }
+      if (S.cmp.length > 4) S.cmp.shift();
+      render();
+    }));
+    $('addsite').addEventListener('change', (e) => { if (e.target.value) { S.cmp.push({ siteId: e.target.value, landMs: S.landMs, label: 'Other site' }); if (S.cmp.length > 4) S.cmp.shift(); render(); } });
+    $('rbody').querySelectorAll('[data-make]').forEach((b) => b.addEventListener('click', () => { const c = S.cmp[+b.dataset.make]; S.site = SITES.find((s) => s.id === c.siteId) ?? S.site; S.landMs = S.cursorMs = c.landMs; S.cmp.splice(+b.dataset.make, 1); flyTo(S.site); render(); }));
+    $('rbody').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { S.cmp.splice(+b.dataset.del, 1); render(); }));
+    foot('verdict', 'deeper', 'Go deeper');
+  } else {
+    $('rhead').innerHTML = `<h2>Go deeper</h2><p>The existing tools, for the plan above. They open as they are today.</p>`;
+    const lat = S.site.lat.toFixed(4), lon = (S.site.lon > 180 ? S.site.lon - 360 : S.site.lon).toFixed(4), sid = S.site.id === 'custom' ? `c:${lat},${lon}` : S.site.id, t = new Date(S.landMs).toISOString().slice(0, 16) + 'Z';
+    $('rbody').innerHTML = `<div class="deep">
+      <a href="index.html#view=map&site=${sid}&t=${t}&stay=${S.stayDays}&plan=1" target="_blank"><b>Plan the rover route →</b><span>Draw the drive on the Moon; Short, Flat and Sunny candidates, battery and links (the Map's route card).</span></a>
+      <a href="index.html#view=map&site=${sid}&t=${t}&stay=${S.stayDays}" target="_blank"><b>Screen the area for better spots →</b><span>Where to land around the site or in a drawn region.</span></a>
+      <a href="finalise.html" target="_blank"><b>Finalise →</b><span>Go / no-go checks, the vehicle, freeze the mission.</span></a>
+      <a href="lander.html" target="_blank"><b>Execute →</b><span>Fly the frozen mission: launch to surface operations.</span></a></div>`;
+    foot('compare', null, '');
+  }
+}
+// the time bar: landing days over 10 weeks (colour = Sun-and-Earth hours), the stay, the compared stays, the playhead
+const span = () => { const a = S.landMs - 14 * DAY; return [a, a + 70 * DAY]; };
+function renderDock() {
+  const [a, b] = span(), w = (t) => ((t - a) / (b - a)) * 100;
+  let html = '';
+  for (let t = a; t < b; t += DAY) { const sc = scenario(S.site, t, 1); const f = sc.bothH / 24; html += `<i class="day" style="left:${w(t)}%;width:${100 / 70}%;background:rgba(${f > 0.6 ? '127,209,139' : f > 0.25 ? '201,162,74' : '60,63,68'},${0.25 + f * 0.55})"></i>`; }
+  html += `<i class="win" style="left:${w(S.landMs)}%;width:${(S.stayDays / 70) * 100}%"></i>`;
+  for (const c of S.cmp) html += `<i class="alt" style="left:${w(c.landMs)}%;width:${(S.stayDays / 70) * 100}%"></i>`;
+  html += `<i class="ph" style="left:${w(S.cursorMs)}%"></i>`;
+  $('track').innerHTML = html;
+  const inStay = S.cursorMs >= S.landMs && S.cursorMs < S.landMs + S.stayDays * DAY;
+  $('clock').textContent = `${inStay ? `Day ${Math.floor((S.cursorMs - S.landMs) / DAY) + 1} · ` : ''}${fmtDT(S.cursorMs)}`;
+  const s = elAz(S.site, sunDir(S.cursorMs)), e = elAz(S.site, earthDir(S.cursorMs));
+  $('msg').textContent = `Sun ${s.el > S.site.sky ? 'up' : 'down'} (${s.el.toFixed(1)}°) · Earth ${e.el > S.site.sky ? 'up' : 'down'} (${e.el.toFixed(1)}°) at ${S.site.name}. Click the strip to move the clock; ▶ plays the stay.`;
+}
+$('track').addEventListener('click', (ev) => { const r = $('track').getBoundingClientRect(), [a, b] = span(); S.cursorMs = Math.round((a + ((ev.clientX - r.left) / r.width) * (b - a)) / HOUR) * HOUR; renderDock(); renderDial(); if (S.step === 'verdict' || S.step === 'site') renderRight(); });
+$('play').addEventListener('click', () => {
+  S.playing = !S.playing; $('play').textContent = S.playing ? '❚❚' : '▶';
+  if (S.playing && (S.cursorMs < S.landMs || S.cursorMs >= S.landMs + S.stayDays * DAY)) S.cursorMs = S.landMs;
+  const tick = () => { if (!S.playing) return; S.cursorMs += 2 * HOUR; if (S.cursorMs >= S.landMs + S.stayDays * DAY) S.cursorMs = S.landMs; renderDock(); renderDial(); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+});
+// the Sky dial: rings of elevation (−10° … 18°, as the app's), the skyline, the Sun and the Earth now and their tracks over the stay
+function renderDial() {
+  const r = (el) => 48 + ((Math.max(-10, Math.min(18, el)) + 10) * 86) / 28;
+  const p = (az, el) => [r(el) * Math.sin(az * RAD), -r(el) * Math.cos(az * RAD)];
+  const track = (dirf) => { const pts = []; for (let t = S.landMs; t <= S.landMs + S.stayDays * DAY; t += 6 * HOUR) { const q = elAz(S.site, dirf(t)); pts.push(p(q.az, q.el).map((v) => v.toFixed(1)).join(',')); } return pts.join(' '); };
+  const s = elAz(S.site, sunDir(S.cursorMs)), e = elAz(S.site, earthDir(S.cursorMs)), [sx, sy] = p(s.az, s.el), [ex, ey] = p(e.az, e.el);
+  $('dial').innerHTML = `<circle r="134" fill="rgba(0,0,0,0.42)"/><circle r="${r(S.site.sky)}" fill="rgba(255,255,255,0.14)" stroke="rgba(255,255,255,0.8)"/>
+    <circle r="${r(0)}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-dasharray="3 3"/><circle r="${r(10)}" fill="none" stroke="rgba(255,255,255,0.18)"/>
+    <polyline points="${track(sunDir)}" fill="none" stroke="var(--sun)" stroke-width="1.5" opacity="0.8"/><polyline points="${track(earthDir)}" fill="none" stroke="var(--earth)" stroke-width="1.5" opacity="0.8"/>
+    <circle cx="${sx}" cy="${sy}" r="7" fill="var(--sun)"/><circle cx="${ex}" cy="${ey}" r="7" fill="var(--earth)"/>
+    <text x="0" y="-140" fill="#fff" font-size="12" text-anchor="middle">N</text><text x="${sx + 10}" y="${sy + 4}" fill="var(--sun)" font-size="11">Sun ${s.el.toFixed(1)}°</text><text x="${ex + 10}" y="${ey + 4}" fill="var(--earth)" font-size="11">Earth ${e.el.toFixed(1)}°</text>
+    <circle r="4" fill="#fff"/>`;
+}
+// the site list (with the stay's Sun-and-Earth share), coordinates, the area screen
+function renderSites() {
+  const q = $('q').value.trim().toLowerCase();
+  const groups = {};
+  for (const s of SITES) if (!q || s.name.toLowerCase().includes(q)) (groups[s.group] ??= []).push(s);
+  $('sitelist').innerHTML = Object.entries(groups).map(([g, list]) => `<div class="glabel">${g}</div>${list.map((s) => { const sc = scenario(s, S.landMs, S.stayDays), gr = grade(sc).overall; return `<button class="site" data-id="${s.id}" aria-current="${s.id === S.site.id}"><span class="dot" style="background:var(--${gr === 'ok' ? 'ok' : gr === 'near' ? 'sun' : 'bad'})"></span><span class="nm">${s.name}</span><span class="v num">${pct(sc.bothH / sc.hours)}</span></button>`; }).join('')}`).join('');
+  $('sitelist').querySelectorAll('.site').forEach((b) => b.addEventListener('click', () => { S.site = SITES.find((s) => s.id === b.dataset.id); flyTo(S.site); renderSites(); render(); }));
+}
+$('q').addEventListener('input', renderSites);
+$('cgo').addEventListener('click', () => { const la = +$('clat').value.replace('−', '-'), lo = +$('clon').value; if (!(la >= -90 && la <= 90) || !Number.isFinite(lo)) return; S.site = { id: 'custom', name: 'Custom site', lat: la, lon: ((lo % 360) + 360) % 360, sky: 0.5, group: 'Custom' }; flyTo(S.site); renderSites(); render(); });
+$('screen-btn').addEventListener('click', () => { $('msg').textContent = 'In the app: draw a rectangle, circle or polygon, then Where to land in A → set the screening → Start screening; a spot it finds becomes the site here.'; });
+document.querySelectorAll('.step').forEach((b) => b.addEventListener('click', () => goto(b.dataset.step)));
+$('notes-btn').addEventListener('click', () => { $('notes').hidden = !$('notes').hidden; });
+$('notes-close').addEventListener('click', () => { $('notes').hidden = true; });
+renderSites(); render();
+</script>
+</body>
+</html>
