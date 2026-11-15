@@ -42,6 +42,7 @@ export function buildInstructions(dataDir = DEFAULT_DATA_DIR) {
     `Batches: site_summary and compare_scenarios take at most ${CORE_MAX_SCENARIOS} scenarios per call (places × landings counts every pair). Split bigger sets: 6 sites × 5 landings = 30, so make two calls of 3 sites × the same 5 landings (15 each). To compare everything with one baseline, put the baseline site first in both calls (4 × 5 = 20).`,
     'Battery, panel and load figures, relay orbits and the rover slope limit are assumptions (supplied or defaults), not data. Say so when you report them.',
     'Results are a first-look screen, not a certified landing analysis. Every result has an about block with units, resolution and limitations; carry the relevant ones into your answer.',
+    'Search and robustness: find_landing_sites, check_slip_robustness and landing_windows share one criteria object (lsn://criteria/presets). Name the readings in assumed[]. When feasibility is infeasible or thin, lead with the binding constraint and the cheapest relaxation. Later calls take { candidate: "S1" } or, after mission_open, { mission_point: "W2" } as a place.',
     'To show the user the map, call open_in_navigator and give them the link.',
   ].join('\n\n');
 }

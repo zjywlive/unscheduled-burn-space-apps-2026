@@ -31,6 +31,7 @@ import { parseLat, parseLon } from './coords.js';
 import { formatCoords } from './sites.js';
 import { fmtHours, fmtSpan, fmtDeg } from './format.js';
 import { compareRows } from './compare-rows.js';
+import { createRefs, REF_FIELDS } from './tools-v2/refs.js';
 
 const DAY_MS = 86400e3;
 const HOUR_MS = 3600e3;
@@ -48,6 +49,29 @@ const LAT = { type: ['number', 'string'], description: 'Latitude, south negative
 const LON = { type: ['number', 'string'], description: 'Longitude: east 0–360 (222.69), negative or "137.31W" for west.' };
 const PLACE = { site_id: SITE_ID, lat_deg: LAT, lon_deg: LON };
 const PLACE_OBJ = { ...obj(PLACE), description: 'A place: { site_id } or { lat_deg, lon_deg }.' };
+// v2 (createCoreTools with extensions): every place may also name a held result (tools-v2/refs.js).
+const PLACE_REFS = {
+  candidate: { type: 'string', description: 'A candidate of the latest find_landing_sites, e.g. "S1" (with search_id: of that search).' },
+  search_id: { type: 'string', description: 'With candidate: the find_landing_sites search it belongs to.' },
+  mission_point: { type: 'string', description: 'A point of the open mission (mission_open): landing, touchdown, start, end, W1…, stop1…, haven1…, empty, or a name the user gave.' },
+  mission_id: { type: 'string', description: 'With mission_point: the mission it belongs to (default: the latest mission_open).' },
+};
+// Adds PLACE_REFS to every object schema that takes a place (site_id with lat_deg), at any depth.
+function withPlaceRefs(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) return schema.map(withPlaceRefs);
+  const out = {};
+  for (const [k, v] of Object.entries(schema)) out[k] = k === 'enum' ? v : withPlaceRefs(v);
+  if (out.properties?.site_id && out.properties?.lat_deg) {
+    out.properties = { ...out.properties, ...PLACE_REFS };
+    if (typeof out.description === 'string' && out.description.startsWith('A place:')) out.description = 'A place: { site_id }, { lat_deg, lon_deg }, { candidate: "S1" } or { mission_point: "W2" }.';
+  }
+  return out;
+}
+const REFS = new WeakMap();
+const PLACE_KEYS = ['site_id', 'lat_deg', 'lon_deg', ...REF_FIELDS];
+const namesPlace = (o) => PLACE_KEYS.some((k) => o[k] !== undefined);
+const placeOf = (o) => Object.fromEntries(PLACE_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 const LANDING = { type: 'string', description: 'Landing time, UTC: 2027-01-13 or 2027-01-13T06:00Z. Snapped down to the whole hour, as the page does.' };
 const INSTANT = { type: 'string', description: 'Instant, UTC: 2027-01-20T14:30Z (or a date for 00:00).' };
 const STAY = { type: 'number', minimum: 1, maximum: 60, description: 'Stay length in days (the page offers 7, 14 and 30). Default 14.' };
@@ -229,7 +253,13 @@ function findPlace(sites, id) {
 function resolvePlace(ctx, input, { terrainOnly = false } = {}) {
   const hasLat = input.lat_deg !== undefined, hasLon = input.lon_deg !== undefined;
   let site;
-  if (input.site_id !== undefined) {
+  const held = REFS.get(ctx)?.place(input) ?? null;
+  if (held?.error) return err(held.error);
+  if (held) {
+    site = held.site;
+  } else if (REF_FIELDS.some((k) => input[k] !== undefined)) {
+    return err('References (candidate, mission_point) need the v2 tools, which this caller does not have.');
+  } else if (input.site_id !== undefined) {
     if (hasLat || hasLon) return err('Give either site_id or lat_deg and lon_deg, not both.');
     const s = findPlace(ctx.sites, input.site_id);
     if (!s) return err(`Unknown site_id ${input.site_id}. list_sites gives the ids.`);
@@ -324,14 +354,14 @@ function summaryFigures(s, requestedDays) {
 // The scenario set of site_summary / compare_scenarios → [{ index, site, place, landingMs, stayDays } | { index, error }]
 function scenarioList(ctx, input, { perStay }) {
   const stayDays = stayIn(input.stay_days ?? 14);
-  const flat = input.site_id !== undefined || input.lat_deg !== undefined || input.lon_deg !== undefined || input.landing !== undefined;
+  const flat = namesPlace(input) || input.landing !== undefined;
   const forms = [flat, input.scenarios !== undefined, input.places !== undefined || input.landings !== undefined].filter(Boolean).length;
   if (forms === 0) return err('Give a place and landing, or scenarios, or places and landings.');
   if (forms > 1) return err('Use one form: a single place and landing, scenarios, or places with landings.');
   let raw;
   if (flat) {
     if (input.landing === undefined) return err('landing is required.');
-    raw = [{ site_id: input.site_id, lat_deg: input.lat_deg, lon_deg: input.lon_deg, landing: input.landing }];
+    raw = [{ ...placeOf(input), landing: input.landing }];
   } else if (input.scenarios) {
     raw = input.scenarios;
   } else {
@@ -341,7 +371,7 @@ function scenarioList(ctx, input, { perStay }) {
   }
   return raw.map((r, index) => {
     if (!perStay && r.stay_days !== undefined) return { index, error: 'stay_days goes at the top level here: every scenario is compared over the same days.' };
-    const p = resolvePlace(ctx, { site_id: r.site_id, lat_deg: r.lat_deg, lon_deg: r.lon_deg });
+    const p = resolvePlace(ctx, placeOf(r));
     if (p.error) return { index, error: p.error };
     const l = parseLanding(ctx.eph, r.landing);
     if (l.error) return { index, error: l.error };
@@ -399,9 +429,13 @@ function why(name, b, smooth) {
 const strip = (b) => { const { _el, _sky, ...rest } = b; return rest; };
 
 // ---------- the tools ----------
-export function createCoreTools(ctx) {
+// extensions (v2, docs/mcp-v2/DESIGN.md): functions kit → { specs: [{ name, description, schema }], handlers }.
+// With any extension, places also accept references (candidate, mission_point) and kit.refs holds results.
+export function createCoreTools(ctx, { extensions = [] } = {}) {
   if (!ctx?.eph || !Array.isArray(ctx?.sites)) throw new Error('createCoreTools needs ctx.eph and ctx.sites');
   const eph = ctx.eph;
+  const refs = extensions.length ? createRefs() : null;
+  if (refs) REFS.set(ctx, refs);
   // the skyline provider: the page's (shared cache) or a small cache over terrain.js skylineFor
   const cache = new Map();
   const sky = typeof ctx.skylineFor === 'function' ? ctx.skylineFor : (site) => {
@@ -667,7 +701,19 @@ export function createCoreTools(ctx) {
         out.nasaAverage = n ? { sunPct: round(n.sunPct, 1), earthPct: round(n.earthPct, 1) } : { sunPct: null, earthPct: null, note: 'No data at this point.' };
         res.nasaAverage = '18.6-year averages in 1 h steps, 480 m pixels (Mazarico et al. 2011, 2016 update): share of time with ANY part of the disc above the local horizon, so higher than this product\'s centre-of-disc figures.';
       } else out.nasaAverage = na('The NASA average map');
-      return withAbout(out, about({ units: { heightM: 'm, LOLA datum (1737.4 km sphere)', '*Deg': 'degrees', '*Km': 'km', '*Pct': 'percent of time', mapKm: 'polar stereographic map km (pole at 0, 0°E up)' }, resolution: res }));
+      // v2: thermally stable ice (Diviner), only when the ice packs are built and loaded (tools/build-ice.mjs)
+      const ice = await provided(ctx.ice);
+      if (ice) {
+        const here = ice.at(x, y);
+        const near = (cls) => { const t = ice.nearest(x, y, { cls, withinKm: 20 }); return t ? { km: round(t.distKm, 1), latDeg: round(t.latDeg, 4), lonDeg: round(t.lonDeg, 4), depthM: round(t.depthM, 2) } : null; };
+        out.ice = {
+          here: here ? { stability: here.cls, iceTableDepthM: here.depthM === null || here.depthM === undefined ? null : round(here.depthM, 2), tmaxK: round(here.tmaxK, 0) } : null,
+          nearestSurfaceStable: near('surface'), nearestShallowStable: near('shallow'),
+          note: 'Thermal stability (possible ice), not detected ice. Searched up to 20 km; null = none within 20 km.',
+        };
+        res.ice = `Diviner thermal model (Schorghofer & Williams 2020), ${ice.meta?.resolution ?? '240 m'}: surface = stable at the surface; shallow = ice table within ${ice.shallowMaxM ?? 1} m (depth to a sublimation loss of 1 kg/m²/Gyr); Tmax = maximum temperature.`;
+      }
+      return withAbout(out, about({ units: { heightM: 'm, LOLA datum (1737.4 km sphere)', '*Deg': 'degrees', '*Km': 'km', '*Pct': 'percent of time', mapKm: 'polar stereographic map km (pole at 0, 0°E up)', ...(ice ? { tmaxK: 'kelvin', iceTableDepthM: 'm' } : {}) }, resolution: res }));
     },
 
     energy_summary(input) {
@@ -678,7 +724,7 @@ export function createCoreTools(ctx) {
       let alt = null;
       if (input.alternative) {
         const a = input.alternative;
-        const ap = a.site_id !== undefined || a.lat_deg !== undefined || a.lon_deg !== undefined ? resolvePlace(ctx, a) : p;
+        const ap = namesPlace(a) ? resolvePlace(ctx, a) : p;
         if (ap.error) return err(`alternative: ${ap.error}`);
         const al = parseLanding(eph, a.landing, 'alternative.landing');
         if (al.error) return al;
@@ -728,7 +774,7 @@ export function createCoreTools(ctx) {
       let alt = null;
       if (input.alternative) {
         const a = input.alternative;
-        const ap = a.site_id !== undefined || a.lat_deg !== undefined || a.lon_deg !== undefined ? resolvePlace(ctx, a) : p;
+        const ap = namesPlace(a) ? resolvePlace(ctx, a) : p;
         if (ap.error) return err(`alternative: ${ap.error}`);
         const al = parseLanding(eph, a.landing, 'alternative.landing');
         if (al.error) return al;
@@ -768,7 +814,7 @@ export function createCoreTools(ctx) {
       for (const [i, q] of input.points.entries()) {
         const where = Array.isArray(q) ? (q.length === 2 ? { lat_deg: q[0], lon_deg: q[1] } : null) : q;
         if (!where) return err(`points[${i}] must be [lat, lon], { site_id } or { lat_deg, lon_deg }.`);
-        const extra = Object.keys(where).filter((k) => !['site_id', 'lat_deg', 'lon_deg'].includes(k));
+        const extra = Object.keys(where).filter((k) => !['site_id', 'lat_deg', 'lon_deg', ...(REFS.has(ctx) ? REF_FIELDS : [])].includes(k));
         if (extra.length) return err(`points[${i}]: unknown field ${extra[0]}.`);
         const r = resolvePlace(ctx, where, { terrainOnly: true });
         if (r.error) return err(`points[${i}]: ${r.error}`);
@@ -834,11 +880,38 @@ export function createCoreTools(ctx) {
     },
   };
 
-  const byName = new Map(SPECS.map((s) => [s.name, s]));
-  return {
-    list: SPECS.map((s) => s.name),
+  // ---------- v2 extensions ----------
+  let specs = SPECS;
+  if (extensions.length) {
+    const kit = {
+      ctx, eph, refs, sky, horizonOf, about, withAbout, err, round, hours, pct, iso, stayIn, provided, span, dateText, rangeText, labelOf,
+      resolvePlace: (input, opts) => resolvePlace(ctx, input, opts),
+      parseLanding: (text, field) => parseLanding(eph, text, field),
+      parseInstant: (text, field) => parseInstant(eph, text, field),
+      parseUtc, summaryFigures, bodyNow, nextCrossings: (site, body, fromMs, mask) => nextCrossings(eph, site, body, fromMs, mask),
+      schema: { obj, PLACE: { ...PLACE, ...PLACE_REFS }, PLACE_OBJ: withPlaceRefs(PLACE_OBJ), LANDING, INSTANT, STAY, SITE_ID, LAT, LON },
+      conv: { SCAN_RES, VISIBLE_CONV, HOURS_CONV, CLIP_CONV },
+      run: (name, input) => api.run(name, input),
+      DAY_MS, HOUR_MS,
+    };
+    specs = SPECS.map((s) => ({ ...s, schema: withPlaceRefs(s.schema) }));
+    for (const ext of extensions) {
+      const e = ext(kit);
+      for (const s of e.specs) {
+        if (handlers[s.name]) throw new Error(`Tool ${s.name} is defined twice.`);
+        if (typeof e.handlers[s.name] !== 'function') throw new Error(`Tool ${s.name} has no handler.`);
+        handlers[s.name] = e.handlers[s.name];
+      }
+      specs = [...specs, ...e.specs];
+    }
+  }
+
+  const byName = new Map(specs.map((s) => [s.name, s]));
+  const api = {
+    refs,   // v2: held results (search, mission, route) for MCP resources; null without extensions
+    list: specs.map((s) => s.name),
     specs() {
-      return SPECS.map((s) => ({ name: s.name, description: s.description, input_schema: structuredClone(s.schema) }));
+      return specs.map((s) => ({ name: s.name, description: s.description, input_schema: structuredClone(s.schema) }));
     },
     toolDefinitions() {
       return this.specs();
@@ -857,4 +930,5 @@ export function createCoreTools(ctx) {
       }
     },
   };
+  return api;
 }

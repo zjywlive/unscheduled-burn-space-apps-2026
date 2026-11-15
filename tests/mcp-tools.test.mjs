@@ -1,4 +1,4 @@
-// Every tool through the real stdio server: the 12 compute tools against direct core.run, the handshake
+// Every tool through the real stdio server: the compute tools (v1 + v2) against direct core.run, the handshake
 // instructions, and open_in_navigator links read back by the page's own parseHash.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { createCoreTools } from '../demo/src/tools-core.js';
+import { V2_EXTENSIONS } from '../demo/src/tools-v2/index.js';
 import { loadCoreContext } from '../tools/core-context.mjs';
 import { parseHash, DEFAULTS } from '../demo/src/state.js';
 import { EPHEMERIS_SPAN, MAP_MODES, DEFAULT_PAGE_URL, readSites } from '../mcp/navigator.mjs';
@@ -35,7 +36,7 @@ async function exchange(messages, { env = {}, timeoutMs = 15_000 } = {}) {
 }
 
 const ctx = loadCoreContext();
-const core = createCoreTools(ctx);
+const core = createCoreTools(ctx, { extensions: V2_EXTENSIONS });
 
 const CASES = {
   list_sites: {},
@@ -50,9 +51,17 @@ const CASES = {
   energy_summary: { site_id: 'im2', landing: '2027-01-13', battery_hours: 48, alternative: { landing: '2027-01-27' } },
   relay_coverage: { site_id: 'shackleton', landing: '2027-01-13', min_el_deg: 10, alternative: { site_id: 'im2', landing: '2027-01-13' } },
   route_candidates: { points: [{ site_id: 'shackleton' }, { site_id: 'de-gerlache-rim-2' }], landing: '2027-01-13', max_slope_deg: 15 },
+  // v2, in call order: the mission tools and references depend on earlier calls in the same process
+  find_landing_sites: { landing: '2027-10-07', criteria: { slope_max_deg: 5, psr_distance_km: { min: 1, max: 5 }, inside_psr: false, both_continuous_h_min: 300 }, count: 3 },
+  check_slip_robustness: { landing: '2027-01-13' },
+  landing_windows: { site_id: 'shackleton', from: '2027-01-01', to: '2027-03-01', planned: '2027-01-13' },
+  mission_open: { source: { path: 'tests/fixtures/mission-record.json' } },
+  mission_conditions: { points: ['W2', 'landing'] },
 };
+// Timings are measured, so they differ between two runs; everything else must match exactly.
+const untimed = (v) => { const c = structuredClone(v); if (c?.about) delete c.about.timing_ms; return c; };
 
-test('every one of the 12 compute tools through MCP equals direct core.run, in full', { timeout: 180_000 }, async () => {
+test('every compute tool through MCP equals direct core.run, in full', { timeout: 180_000 }, async () => {
   assert.deepEqual(Object.keys(CASES).sort(), [...core.list].sort(), 'one case per core tool');
   const names = Object.keys(CASES);
   const { replies, stderr } = await exchange([...handshake, request('list', 'tools/list'), ...names.map((n, i) => call(i, n, CASES[n]))], { timeoutMs: 170_000 });
@@ -63,8 +72,8 @@ test('every one of the 12 compute tools through MCP equals direct core.run, in f
     assert.equal(Object.hasOwn(direct, 'error'), false, `${name}: ${direct.error}`);
     const r = replies.get(i).result;
     assert.equal(r.isError, false, name);
-    assert.deepEqual(r.structuredContent, direct, name);
-    assert.deepEqual(JSON.parse(r.content[0].text), direct, name);
+    assert.deepEqual(untimed(r.structuredContent), untimed(direct), name);
+    assert.deepEqual(r.structuredContent, JSON.parse(r.content[0].text), name);
   }
 });
 

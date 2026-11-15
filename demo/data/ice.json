@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "source": "UCLA Diviner level4_polar/24x6_240m/additional_maps",
+  "citation": "Schorghofer, N. & Williams, J.-P. (2020), Mapping of ice storage processes on the Moon with time-dependent temperatures, PSJ 1:54, doi:10.3847/PSJ/abb6ff",
+  "doi": "https://doi.org/10.3847/PSJ/abb6ff",
+  "buildDate": "2026-11-15",
+  "sources": [
+    {
+      "file": "polar_south_80_zit-1.grd",
+      "url": "https://luna1.diviner.ucla.edu/~jpierre/diviner/level4_polar/24x6_240m/additional_maps/polar_south_80_zit-1.grd",
+      "bytes": 25705152,
+      "sha256": "068b0801c06dced95260b068dfa1d80e43d2de8a29e865e2a9e206235c6b31df"
+    },
+    {
+      "file": "polar_south_80_Tmax.grd",
+      "url": "https://luna1.diviner.ucla.edu/~jpierre/diviner/level4_polar/24x6_240m/additional_maps/polar_south_80_Tmax.grd",
+      "bytes": 25705152,
+      "sha256": "52798fde0435e12789d5208e12179aef5285c8352abca92759fecf82c3124133"
+    }
+  ],
+  "rule": "Thermally stable, possible ice: zit-1 is depth in m at which sublimation loss falls to 1 kg/m²/Gyr. Tmax is Fourier-smoothed maximum temperature, used for orientation and display, not classification.",
+  "classes": {
+    "surface": "depth = 0",
+    "shallow": "depth ≤ depthMaxM (default 1 m), surface included",
+    "any": "any finite depth"
+  },
+  "shallowMaxM": 1,
+  "grid": {
+    "size": 2533,
+    "kmPerPixel": 0.24003595749798665,
+    "halfKm": 304.0055401712001,
+    "radiusKm": 304.00560801988075,
+    "projection": "South polar stereographic; R = 1737.4 km; 0°E = +y, 90°E = +x",
+    "registration": "pixel centres; row 0 at +y, column 0 at -x",
+    "maxLatDeg": -80
+  },
+  "resolution": "240 m raster; 1 cm conservative depth bins; 2 K temperature bins; 1 km / 2 km distance grids",
+  "orientation": {
+    "chosen": "x,y",
+    "matrix": [
+      1,
+      0,
+      0,
+      1
+    ],
+    "mapping": "[mapX,mapY] = matrix × [sourceX,sourceY] × 1737.4 km",
+    "method": "All finite Tmax pixel centres within 80°S; Tmax < 110 K versus LOLA 120 m PSR. Highest intersection-over-union (IoU).",
+    "reference": "psr_120m.bin",
+    "scores": [
+      {
+        "name": "x,y",
+        "matrix": [
+          1,
+          0,
+          0,
+          1
+        ],
+        "samples": 5038164,
+        "tp": 179254,
+        "tn": 4632181,
+        "fp": 66236,
+        "fn": 160493,
+        "agreement": 0.9549976936042575,
+        "iou": 0.4415308030139193,
+        "balancedAgreement": 0.7567563685186488
+      },
+      {
+        "name": "y,x",
+        "matrix": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "samples": 5038164,
+        "tp": 50530,
+        "tn": 4503447,
+        "fp": 194960,
+        "fn": 289227,
+        "agreement": 0.9038961415309228,
+        "iou": 0.0944985852329363,
+        "balancedAgreement": 0.553614512871394
+      },
+      {
+        "name": "-x,y",
+        "matrix": [
+          -1,
+          0,
+          0,
+          1
+        ],
+        "samples": 5038164,
+        "tp": 38724,
+        "tn": 4491644,
+        "fp": 206766,
+        "fn": 301030,
+        "agreement": 0.8992101090794186,
+        "iou": 0.07085559540364487,
+        "balancedAgreement": 0.5349844647020544
+      },
+      {
+        "name": "-y,-x",
+        "matrix": [
+          0,
+          -1,
+          -1,
+          0
+        ],
+        "samples": 5038164,
+        "tp": 36989,
+        "tn": 4489912,
+        "fp": 208501,
+        "fn": 302762,
+        "agreement": 0.8985219615717154,
+        "iou": 0.06746715014263514,
+        "balancedAgreement": 0.532247004611027
+      },
+      {
+        "name": "x,-y",
+        "matrix": [
+          1,
+          0,
+          0,
+          -1
+        ],
+        "samples": 5038164,
+        "tp": 31364,
+        "tn": 4484286,
+        "fp": 214126,
+        "fn": 308388,
+        "agreement": 0.8962888067954914,
+        "iou": 0.056626188438609226,
+        "balancedAgreement": 0.5233701361945946
+      },
+      {
+        "name": "y,-x",
+        "matrix": [
+          0,
+          1,
+          -1,
+          0
+        ],
+        "samples": 5038164,
+        "tp": 30092,
+        "tn": 4483010,
+        "fp": 215398,
+        "fn": 309664,
+        "agreement": 0.8957830670061554,
+        "iou": 0.05420477921441618,
+        "balancedAgreement": 0.5213622767572057
+      },
+      {
+        "name": "-y,x",
+        "matrix": [
+          0,
+          -1,
+          1,
+          0
+        ],
+        "samples": 5038164,
+        "tp": 28426,
+        "tn": 4481344,
+        "fp": 217064,
+        "fn": 311330,
+        "agreement": 0.8951217149739469,
+        "iou": 0.051050608814338566,
+        "balancedAgreement": 0.518733223163
+      },
+      {
+        "name": "-x,-y",
+        "matrix": [
+          -1,
+          0,
+          0,
+          -1
+        ],
+        "samples": 5038164,
+        "tp": 27142,
+        "tn": 4480060,
+        "fp": 218348,
+        "fn": 312614,
+        "agreement": 0.8946120054845377,
+        "iou": 0.04863251293665697,
+        "balancedAgreement": 0.516706989780671
+      }
+    ]
+  },
+  "depth": {
+    "file": "ice_depth_240m.bin",
+    "encoding": "Uint8, row-major: 0 = surface, 1–254 = ceil(depth in cm), 255 = no stable ice within modelled depth / no data",
+    "noData": 255
+  },
+  "tmax": {
+    "file": "ice_tmax_240m.bin",
+    "encoding": "Uint8, row-major: byte = round(Tmax / 2); decoded kelvin = byte × 2; 255 = no data",
+    "noData": 255
+  },
+  "distances": [
+    {
+      "file": "ice_dist_2km.bin",
+      "cellKm": 2,
+      "size": 320,
+      "halfKm": 320,
+      "encoding": "Uint8 planes: surface, shallow (≤ 1 m), any; rounded map-plane km",
+      "capKm": 254,
+      "noData": 255
+    },
+    {
+      "file": "ice_dist_1km.bin",
+      "cellKm": 1,
+      "size": 640,
+      "halfKm": 320,
+      "encoding": "Uint8 planes: surface, shallow (≤ 1 m), any; rounded map-plane km",
+      "capKm": 254,
+      "noData": 255
+    }
+  ],
+  "patch": {
+    "minKm2": 0.5,
+    "connectivity": 8,
+    "area": "Sum of pixel ground areas: stepKm² / (1 + (x²+y²)/(4R²))²",
+    "distanceRule": "Nearest qualifying pixel centre; 0 only if qualifying pixels cover > half the cell by pixel-centre count; otherwise rounded, at least 1 km. 254 = capped distance; 255 = outside coverage or no qualifying target.",
+    "stats": {
+      "surface": {
+        "patches": 1712,
+        "kept": 754,
+        "pixels": 229021
+      },
+      "shallow": {
+        "patches": 6763,
+        "kept": 3138,
+        "pixels": 2303518
+      },
+      "any": {
+        "patches": 6763,
+        "kept": 3138,
+        "pixels": 2303518
+      }
+    }
+  },
+  "limits": [
+    "Thermally stable, possible ice; thermal modelling does not establish abundance or composition.",
+    "A first-look screen, not a certified landing analysis.",
+    "NaN depth inside coverage means no stable ice within modelled depth; it does not rule out deeper ice.",
+    "Depth is rounded up to cm, so non-default drill limits can conservatively exclude a sub-cm boundary bin.",
+    "Tmax is rounded to 2 K; use raw Tmax for the 110 K orientation threshold.",
+    "Distances are straight lines in the map plane, not traversability or driving distance.",
+    "Patches are clipped to the 80°S coverage boundary. Shallow (1 m) and any coincide in this source (maximum depth below 0.73 m)."
+  ]
+}

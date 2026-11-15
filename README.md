@@ -24,7 +24,7 @@ Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 | `demo/` | The web app: `index.html` (built single file), `src/` (ES modules), `data/` (terrain and ephemeris packs), `vendor/` |
 | `tools/` | Zero-dependency Node build and data scripts (`node tools/build.mjs` rebuilds `demo/index.html`) |
 | `tests/` | Node test suite: `node --test 'tests/*.test.mjs'` |
-| `mcp/` | MCP server exposing the compute tools |
+| `mcp/` | MCP server exposing the compute tools, site search, slip checks, the mission bridge, prompts and resources (`mcp/README.md`) |
 
 To run the app locally: `python3 -m http.server 8731 --directory demo`, then open http://localhost:8731/
 (south-pole navigator) or http://localhost:8731/globe.html (3D global terrain).
@@ -110,6 +110,7 @@ as the submission rules require.
 | LRO LOLA GDR polar DEMs `LDEM_75S_240M`, `_75S_120M`, `_80S_40M`, `_875S_20M`, `LDEM_75N_240M` | NASA PDS Geosciences Node, https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ | South-pole terrain down to 20 m; north-pole cap at 480 m |
 | LRO LOLA GDR polar DEMs `LDEM_875S_5M`, `LDEM_85S_10M`, `LDEM_80S_20M` (byte ranges only) | same | 10 × 10 km patches at 5 / 10 / 20 m around each landing site (`tools/fetch-hires.mjs`), for the descent view and the globe |
 | Mazarico et al. PSR and average-visibility rasters (`LPSR_75S_120M_201608`, `AVGVISIB_75S_120M_201608`, `_EARTH`) | http://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG | Permanently shadowed regions and long-term Sun/Earth visibility |
+| Diviner south-pole ice-table depth and maximum-temperature grids (`polar_south_80_zit-1.grd`, `polar_south_80_Tmax.grd`); Schorghofer & Williams (2020), PSJ 1:54, DOI 10.3847/PSJ/abb6ff | UCLA Diviner, https://luna1.diviner.ucla.edu/~jpierre/diviner/level4_polar/24x6_240m/additional_maps/ | Thermally stable, possible ice: 240 m surface / shallow stability, temperature and distances to patches ≥ 0.5 km² (`tools/build-ice.mjs`); thermal modelling, not a detection |
 | JPL Horizons ephemeris | https://ssd.jpl.nasa.gov/api/horizons.api | Sun and Earth directions from the Moon, 2026-11 to 2029-01 |
 | three.js 0.187.0 (MIT) | https://registry.npmjs.org/three/-/three-0.187.0.tgz | 3D globe rendering (`demo/vendor/three.classic.js`, see `demo/vendor/VENDOR.md`) |
 | driver.js 1.10.2, deep-chat 2.5.1 (MIT) | registry.npmjs.org | Guided tour and assistant panel in the navigator |
@@ -133,6 +134,7 @@ identifiers are used or generated.
 |---|---|---|
 | Code, tests, data scripts and documentation written during the event (`demo/src/`, `tools/`, `tests/`, `docs/`) | Claude (Anthropic) through Claude Code | The team chose the challenge, set the priorities and the order of the phases, and reviewed each result; Claude wrote most of the code, tests and documents and checked the pages in headless Chrome. Commits it wrote carry a `Co-Authored-By: Claude` line. |
 | The lander track (`demo/src/lander/`, `demo/lander.html`, `docs/LANDER.md`, `tests/lander-*`) | Claude (Anthropic) through Claude Code, in a separate session | Same way of working: a brief from the team, code and tests by Claude, results reviewed. |
+| MCP v2 (15 Nov): search, slip and landing-window tools, the mission bridge and the Diviner ice packs (`demo/src/search.js`, `demo/src/tools-v2/`, `demo/src/mission-io.js`, `demo/src/ice.js`, `tools/build-ice.mjs`, their tests; design and briefs in `docs/mcp-v2/`) | Claude (Anthropic) through Claude Code; an OpenAI model (gpt-6-astra) through opencode | Claude wrote the design, the shared modules (`criteria.js`, `point-eval.js`, the MCP prompts and resources) and a brief per package; the OpenAI model implemented the four packages and their tests from those briefs; Claude reviewed, fixed and integrated them and ran the tests and a real MCP client end to end. |
 | The pre-event visualisation MVP (12–13 Nov, see Project history) | Claude (Anthropic) through Claude Code; an OpenAI model through opencode | Claude wrote the MVP; the OpenAI model did two independent code reviews. |
 | Research before the event (challenge analysis, past winners, a participant guide) | ChatGPT (OpenAI) | Background reading and summaries only; none of it is in the code. |
 | The navigator's "Ask" assistant (`demo/src/agent/`) | Optional: an Anthropic or OpenAI-compatible model with the user's own API key | Answers questions with the page's own tools. By default it runs a scripted offline demo and calls no model. |

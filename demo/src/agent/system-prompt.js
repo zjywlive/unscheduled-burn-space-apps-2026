@@ -1,6 +1,6 @@
 // Pure prompt builder. Pass the current state.js state or get_state result on each turn.
 // State supplies tool inputs, never computed evidence; only the allowlisted fields enter the prompt.
-const AUDIENCES = {
+export const AUDIENCES = {
   planner: 'Audience: planner. Lead with the best supported option and its trade-off; name the ranking objective and the compared interval, and label battery, panel, orbit and slope-limit inputs as assumptions.',
   educator: 'Audience: educator. Explain the cause with a simple spatial example tied to the selected place and time; distinguish an instant, a stay and a long-term average, and define technical terms when first used.',
   public: 'Audience: public. Use everyday words, no jargon or unexplained abbreviations: say sunlight, Earth in view and hills blocking the view; explain what the screen means before naming a technical term.',

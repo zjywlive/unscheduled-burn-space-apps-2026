@@ -18680,7 +18680,7 @@ function buildSystemPrompt({ audience = 'planner', state } = {}) {
   ].join('\n');
 }
 
-return { buildSystemPrompt };
+return { AUDIENCES, buildSystemPrompt };
 })();
 __m['agent/compact.js'] = (() => {
 // A JSON-compatible object, ready for JSON.stringify in a tool_result. No rounding or row truncation.
@@ -22316,6 +22316,7 @@ __m['tools-v2/refs.js'] = (() => {
 //
 //   refs.put(kind, value, { prefix }) → id          kind: 'search' | 'mission' | 'route'
 //   refs.get(kind, id) → value | null               id omitted → the latest of that kind
+//   refs.list(kind) → ids held, oldest first
 //   refs.place(input) → { site } | { error } | null  a PLACE that names a reference (null when it does not)
 //
 // PLACE forms resolved here (tools-core.js resolvePlace hands them over):
@@ -22356,6 +22357,7 @@ function createRefs({ limit = REF_LIMIT } = {}) {
   }
 
   const latestId = (kind) => (latest.has(kind) && table(kind).has(latest.get(kind)) ? latest.get(kind) : null);
+  const list = (kind) => [...table(kind).keys()];
 
   function place(input) {
     if (!input || typeof input !== 'object') return null;
@@ -22375,14 +22377,20 @@ function createRefs({ limit = REF_LIMIT } = {}) {
       const m = get('mission', input.mission_id);
       if (!m) return { error: input.mission_id ? `Mission ${input.mission_id} is no longer held. Run mission_open again.` : 'No mission is open. Run mission_open first, then refer to its points as landing, W1, W2, …' };
       const want = String(input.mission_point).trim().toLowerCase();
-      const p = (m.points ?? []).find((x) => String(x.name).toLowerCase() === want);
+      // canonical names (landing, W2, …) first, then names the user gave (aliases), which must be unique
+      let p = (m.points ?? []).find((x) => String(x.name).toLowerCase() === want);
+      if (!p) {
+        const hits = (m.points ?? []).filter((x) => (x.aliases ?? []).some((a) => String(a).toLowerCase() === want));
+        if (hits.length > 1) return { error: `Point name ${input.mission_point} is ambiguous; use ${hits.map((x) => x.name).join(' or ')}.` };
+        p = hits[0];
+      }
       if (!p) return { error: `No point ${input.mission_point} in mission ${input.mission_id ?? latestId('mission')}. It has ${(m.points ?? []).map((x) => x.name).join(', ') || 'no points'}.` };
       return { site: { id: p.name, name: `${m.name ? `${m.name} · ` : ''}${p.name}`, latDeg: p.latDeg, lonDeg: p.lonDeg, verified: true } };
     }
     return { error: 'search_id goes with candidate, and mission_id with mission_point.' };
   }
 
-  return { put, get, latestId, place, limit };
+  return { put, get, latestId, list, place, limit };
 }
 
 return { REF_LIMIT, REF_FIELDS, createRefs };
@@ -23091,7 +23099,19 @@ function createCoreTools(ctx, { extensions = [] } = {}) {
         out.nasaAverage = n ? { sunPct: round(n.sunPct, 1), earthPct: round(n.earthPct, 1) } : { sunPct: null, earthPct: null, note: 'No data at this point.' };
         res.nasaAverage = '18.6-year averages in 1 h steps, 480 m pixels (Mazarico et al. 2011, 2016 update): share of time with ANY part of the disc above the local horizon, so higher than this product\'s centre-of-disc figures.';
       } else out.nasaAverage = na('The NASA average map');
-      return withAbout(out, about({ units: { heightM: 'm, LOLA datum (1737.4 km sphere)', '*Deg': 'degrees', '*Km': 'km', '*Pct': 'percent of time', mapKm: 'polar stereographic map km (pole at 0, 0°E up)' }, resolution: res }));
+      // v2: thermally stable ice (Diviner), only when the ice packs are built and loaded (tools/build-ice.mjs)
+      const ice = await provided(ctx.ice);
+      if (ice) {
+        const here = ice.at(x, y);
+        const near = (cls) => { const t = ice.nearest(x, y, { cls, withinKm: 20 }); return t ? { km: round(t.distKm, 1), latDeg: round(t.latDeg, 4), lonDeg: round(t.lonDeg, 4), depthM: round(t.depthM, 2) } : null; };
+        out.ice = {
+          here: here ? { stability: here.cls, iceTableDepthM: here.depthM === null || here.depthM === undefined ? null : round(here.depthM, 2), tmaxK: round(here.tmaxK, 0) } : null,
+          nearestSurfaceStable: near('surface'), nearestShallowStable: near('shallow'),
+          note: 'Thermal stability (possible ice), not detected ice. Searched up to 20 km; null = none within 20 km.',
+        };
+        res.ice = `Diviner thermal model (Schorghofer & Williams 2020), ${ice.meta?.resolution ?? '240 m'}: surface = stable at the surface; shallow = ice table within ${ice.shallowMaxM ?? 1} m (depth to a sublimation loss of 1 kg/m²/Gyr); Tmax = maximum temperature.`;
+      }
+      return withAbout(out, about({ units: { heightM: 'm, LOLA datum (1737.4 km sphere)', '*Deg': 'degrees', '*Km': 'km', '*Pct': 'percent of time', mapKm: 'polar stereographic map km (pole at 0, 0°E up)', ...(ice ? { tmaxK: 'kelvin', iceTableDepthM: 'm' } : {}) }, resolution: res }));
     },
 
     energy_summary(input) {
@@ -23286,6 +23306,7 @@ function createCoreTools(ctx, { extensions = [] } = {}) {
 
   const byName = new Map(specs.map((s) => [s.name, s]));
   const api = {
+    refs,   // v2: held results (search, mission, route) for MCP resources; null without extensions
     list: specs.map((s) => s.name),
     specs() {
       return specs.map((s) => ({ name: s.name, description: s.description, input_schema: structuredClone(s.schema) }));

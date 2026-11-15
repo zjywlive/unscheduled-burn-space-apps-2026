@@ -12,8 +12,13 @@
 //   extras        psr_120m.bin, nasa_sun_480m.bin, nasa_earth_480m.bin (point_facts, route PSR km)
 //   dem240        dem_240m.bin (point slope on the planner grid, route_candidates); 'lazy' (default)
 //                 reads it on first use, true reads it now, false leaves it out
+//   v2 (MCP v2, docs/mcp-v2/DESIGN.md), all read on first use:
+//     fine        () → the 1 km cell grid { grid, slope, shadow } (horizon_1km, slope_1km, shadow_1km)
+//     ice         () → ice.js createIce over ice.json and its packs, or null when they are not built
+//     readText    (path) → { text } | { error }: a local JSON file the user named (mission_open), ≤ 5 MB
 // A missing file leaves its ctx entry out; the tools then say "not available" instead of guessing.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEphemeris } from '../demo/src/ephemeris.js';
 import { createDem } from '../demo/src/terrain.js';
@@ -21,6 +26,9 @@ import { createHeatGrid } from '../demo/src/heat.js';
 import { staticGrid } from '../demo/src/score.js';
 import { createPsr } from '../demo/src/psr.js';
 import { createNasaAvg } from '../demo/src/nasa-avg.js';
+import { createIce } from '../demo/src/ice.js';
+
+export const MAX_MISSION_FILE_BYTES = 5 * 1024 * 1024;
 
 export const DEFAULT_DATA_DIR = fileURLToPath(new URL('../demo/data/', import.meta.url));
 
@@ -42,7 +50,7 @@ function demLevel(r, level) {
 
 export function loadCoreContext({ dataDir = DEFAULT_DATA_DIR, terrain = true, extras = true, dem240 = 'lazy' } = {}) {
   const r = reader(dataDir);
-  const ctx = { eph: createEphemeris(r.json('ephemeris.json')), sites: r.json('sites.json'), files: ['ephemeris.json', 'sites.json'] };
+  const ctx = { eph: createEphemeris(r.json('ephemeris.json')), sites: r.json('sites.json'), files: ['ephemeris.json', 'sites.json'], readText: readLocalText };
   if (!terrain || !r.has('terrain.json')) return ctx;
   const meta = r.json('terrain.json');
   ctx.files.push('terrain.json');
@@ -75,5 +83,34 @@ export function loadCoreContext({ dataDir = DEFAULT_DATA_DIR, terrain = true, ex
     }
     ctx.files.push(l240.file);
   }
+  // v2: the 1 km grid for refining search candidates, the ice packs and local mission files
+  const h1 = meta.horizons?.find((h) => h.cellKm === 1), slope1 = meta.slope?.find((s) => s.cellKm === 1), shadow1 = meta.shadow?.find((s) => s.cellKm === 1);
+  if (h1 && slope1 && shadow1 && r.has(h1.file) && r.has(slope1.file) && r.has(shadow1.file)) {
+    let fine = null;
+    ctx.fine = () => (fine ??= { grid: createHeatGrid({ horizon: r.bytes(h1.file), ...h1 }), label: '1 km', slope: staticGrid(r.bytes(slope1.file), slope1.scale ?? 0.25), shadow: staticGrid(r.bytes(shadow1.file), 1) });
+    ctx.files.push(h1.file, slope1.file, shadow1.file);
+  }
+  if (r.has('ice.json')) {
+    let ice;
+    ctx.ice = () => {
+      if (ice === undefined) {
+        try { ice = createIce({ meta: r.json('ice.json'), read: (name) => r.bytes(name) }) ?? null; }
+        catch (e) { ice = null; console.error(`ice packs not loaded: ${e.message}`); }
+      }
+      return ice;
+    };
+    ctx.files.push('ice.json');
+  }
   return ctx;
+}
+
+// Node only: what mission_open may read. A path the user gave, JSON or GeoJSON text, at most 5 MB.
+export function readLocalText(path) {
+  if (typeof path !== 'string' || !path.trim()) return { error: 'path must be a non-empty string.' };
+  const full = resolvePath(path.replace(/^~(?=\/|$)/, process.env.HOME ?? '~'));
+  let st;
+  try { st = statSync(full); } catch { return { error: `No file at ${full}.` }; }
+  if (!st.isFile()) return { error: `${full} is not a file.` };
+  if (st.size > MAX_MISSION_FILE_BYTES) return { error: `${full} is ${Math.round(st.size / 1048576)} MB; mission files are read up to 5 MB.` };
+  try { return { text: readFileSync(full, 'utf8'), path: full }; } catch (e) { return { error: `Cannot read ${full}: ${e.message}` }; }
 }

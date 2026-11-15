@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { createCoreTools } from '../demo/src/tools-core.js';
+import { V2_EXTENSIONS } from '../demo/src/tools-v2/index.js';
 import { loadCoreContext } from '../tools/core-context.mjs';
 import { buildInstructions, OPEN_SPEC } from '../mcp/navigator.mjs';
 
@@ -53,7 +54,7 @@ async function exchange(messages, args = [fileURLToPath(server)]) {
 test('MCP handshake, initialized notification, ping and clean EOF; stdout is only JSON-RPC', async () => {
   const { replies, stderr } = await exchange([...handshake, request(0, 'ping')]);
   assert.deepEqual(replies, [
-    { jsonrpc: '2.0', id: 'init', result: { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'lunar-site-navigator', version: '1.0.0' }, instructions: buildInstructions() } },
+    { jsonrpc: '2.0', id: 'init', result: { protocolVersion: '2025-11-25', capabilities: { tools: {}, prompts: {}, resources: {} }, serverInfo: { name: 'lunar-site-navigator', version: '2.0.0' }, instructions: buildInstructions() } },
     { jsonrpc: '2.0', id: 0, result: {} },
   ]);
   assert.equal(stderr, '');
@@ -66,13 +67,14 @@ test('MCP version negotiation counteroffers its supported revision', async () =>
   }
 });
 
-test('MCP tools/list exports the twelve live core schemas plus open_in_navigator, with read-only annotations', async () => {
+test('MCP tools/list exports the live core schemas (v1 + v2) plus open_in_navigator, with read-only annotations', async () => {
   const { replies, stderr } = await exchange([...handshake, request(1, 'tools/list'), request(2, 'tools/list', { _meta: {} })]);
-  const specs = createCoreTools(loadCoreContext()).toolDefinitions();
+  const specs = createCoreTools(loadCoreContext(), { extensions: V2_EXTENSIONS }).toolDefinitions();
   const listed = replies[1].result.tools;
-  assert.equal(listed.length, 13);
-  assert.deepEqual(listed.slice(0, 12).map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })), specs);
-  assert.deepEqual(listed[12], OPEN_SPEC);
+  assert.equal(listed.length, specs.length + 1);
+  assert.ok(specs.length >= 12);
+  assert.deepEqual(listed.slice(0, specs.length).map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })), specs);
+  assert.deepEqual(listed[specs.length], OPEN_SPEC);
   for (const tool of listed) {
     assert.equal(tool.inputSchema.type, 'object');
     assert.ok(tool.inputSchema.properties);

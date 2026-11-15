@@ -1,9 +1,11 @@
-// Tools-only MCP 2025-11-25 over newline-delimited stdio; Node built-ins only.
+// MCP 2025-11-25 over newline-delimited stdio (tools, prompts, resources); Node built-ins only.
 // Protocol references and intentionally omitted features: README.md and B-report.md.
 import { createInterface } from 'node:readline';
 import { createCoreTools } from '../demo/src/tools-core.js';
+import { V2_EXTENSIONS } from '../demo/src/tools-v2/index.js';
 import { loadCoreContext, DEFAULT_DATA_DIR } from '../tools/core-context.mjs';
 import { buildInstructions, OPEN_SPEC, openInNavigator } from './navigator.mjs';
+import { listPrompts, getPrompt, listResources, readResource, RESOURCE_TEMPLATES } from './catalog.mjs';
 
 const VERSION = '2025-11-25';
 const object = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -28,7 +30,7 @@ export async function serve({ input = process.stdin, output = process.stdout, lo
     if (!core) {
       try {
         const loaded = await loadContext();
-        core = createCoreTools(loaded);
+        core = createCoreTools(loaded, { extensions: V2_EXTENSIONS });
         ctx = loaded;
       } catch (error) {
         const message = `Cannot load lunar data from ${DEFAULT_DATA_DIR}: ${error.message}. Ensure the repository's demo/data files are present and readable.`;
@@ -54,14 +56,31 @@ export async function serve({ input = process.stdin, output = process.stdout, lo
       state = 'initializing';
       return {
         protocolVersion: VERSION,
-        capabilities: { tools: {} },
-        serverInfo: { name: 'lunar-site-navigator', version: '1.0.0' },
+        capabilities: { tools: {}, prompts: {}, resources: {} },
+        serverInfo: { name: 'lunar-site-navigator', version: '2.0.0' },
         // Only sites.json is read here (the site id table); everything else stays lazy.
         instructions: buildInstructions(),
       };
     }
-    if (method !== 'tools/list' && method !== 'tools/call') throw rpcError(-32601, `Method not found: ${method}`);
+    const CATALOG = ['prompts/list', 'prompts/get', 'resources/list', 'resources/read', 'resources/templates/list'];
+    if (method !== 'tools/list' && method !== 'tools/call' && !CATALOG.includes(method)) throw rpcError(-32601, `Method not found: ${method}`);
     if (state !== 'ready') throw rpcError(-32000, 'Send initialize and notifications/initialized before using tools.');
+    if (CATALOG.includes(method) && params.cursor !== undefined) throw rpcError(-32602, `Invalid cursor: ${method} returns one complete page.`);
+    if (method === 'prompts/list') return { prompts: listPrompts() };
+    if (method === 'prompts/get') {
+      if (typeof params.name !== 'string' || (params.arguments !== undefined && !object(params.arguments))) throw rpcError(-32602, 'prompts/get requires a name string and an optional arguments object.');
+      const p = getPrompt(params.name, params.arguments ?? {});
+      if (p.error) throw rpcError(-32602, p.error);
+      return p;
+    }
+    if (method === 'resources/templates/list') return { resourceTemplates: structuredClone(RESOURCE_TEMPLATES) };
+    if (method === 'resources/list') return { resources: listResources(core?.refs ?? null) };
+    if (method === 'resources/read') {
+      if (typeof params.uri !== 'string') throw rpcError(-32602, 'resources/read requires a uri string.');
+      const r = readResource(params.uri, core?.refs ?? null);
+      if (r.error) throw rpcError(r.code ?? -32602, r.error);
+      return r;
+    }
     if (method === 'tools/list') {
       // One complete page; no cursor is ever issued.
       if (params.cursor !== undefined) throw rpcError(-32602, 'Invalid cursor: tools/list returns one complete page.');

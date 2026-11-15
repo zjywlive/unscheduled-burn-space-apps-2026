@@ -72,6 +72,8 @@ try {
   const link = await call('open_in_navigator', { site_id: 'im2', landing: '2027-01-13', stay_days: 14, slip_days: 14, mode: 'change', sheet: 'compare' });
   console.log(link.opens);
   console.log(link.url);
+
+  if (process.argv.includes('--v2')) await v2();
 } finally {
   child.stdin.end();
   const terminate = setTimeout(() => child.kill('SIGTERM'), 2000);
@@ -81,3 +83,42 @@ try {
   assert.deepEqual(exit, { code: 0, signal: null }, 'Server must shut down cleanly on stdin EOF.');
 }
 console.log('\nServer exited cleanly on stdin EOF.');
+
+// --v2: the three example requests of docs/mcp-v2/DESIGN.md §8, end to end over stdio.
+async function v2() {
+  const row = (o) => console.log(`  ${JSON.stringify(o)}`);
+  console.log('\n=== Request 1: flat, Sun and Earth together 300 h, near a PSR, possible ice, and a route ===');
+  const find = await call('find_landing_sites', { criteria: { preset: 'ice_prospector', slope_max_deg: 5, both_continuous_h_min: 300, continuous_from: 'from_landing', psr_distance_km: { max: 5 } }, count: 5, min_spacing_km: 10 });
+  console.log(find.headline);
+  console.log(`funnel: ${find.funnel.map((f) => `${f.stage} ${f.cells}`).join(' → ')}`);
+  for (const c of find.candidates) row({ ref: c.ref, lat: c.lat_deg, lon: c.lon_deg, landing: c.best_landing ?? c.landing, passingDays: c.passing_landings, bothFromLandingH: c.metrics.both_from_landing_h, slope: c.metrics.slope_deg, psrKm: c.metrics.psr_km, ice: c.science_target && { km: c.science_target.dist_km, at: [c.science_target.lat_deg, c.science_target.lon_deg], source: c.science_target.source } });
+  console.log(`assumed: ${find.assumed.join(' | ')}`);
+  const s1 = find.candidates[0];
+  if (s1?.science_target) {
+    const route = await call('route_candidates', { points: [{ candidate: 'S1' }, { lat_deg: s1.science_target.lat_deg, lon_deg: s1.science_target.lon_deg }], landing: (s1.best_landing ?? s1.landing).slice(0, 10), max_slope_deg: 15 });
+    for (const r of route.routes) row({ route: r.label, km: r.lengthKm, maxSlope: r.maxSlopeDeg, sunPct: r.sunSharePct, psrKm: r.psrKm });
+  }
+  const csv = await request('resources/read', { uri: `lsn://search/${find.search_id}.csv` });
+  console.log(`resource lsn://search/${find.search_id}.csv: ${csv.contents[0].text.split('\n').length - 2} rows`);
+
+  console.log('\n=== Request 2: light and Earth at W2 and W4 of my mission ===');
+  const mission = await call('mission_open', { source: { path: fileURLToPath(new URL('../tests/fixtures/mission-record.json', import.meta.url)) } });
+  console.log(mission.headline);
+  const cond = await call('mission_conditions', { points: ['W2', 'W4'] });
+  console.log(cond.headline);
+  for (const p of cond.points) {
+    const a = p.pass?.arrival;
+    row({ point: p.name, arrive: p.arrive, afterLandingH: p.arrival_after_landing_h, sunOnArrival: a && { visible: a.sun.visible, aboveSkylineDeg: a.sun.aboveSkylineDeg }, earthOnArrival: a && { visible: a.earth.visible, aboveSkylineDeg: a.earth.aboveSkylineDeg }, sunsetInH: p.pass?.sun?.nextSet?.inH, earthsetInH: p.pass?.earth?.nextSet?.inH, stayBothH: p.stay?.bothH, risks: p.risks });
+  }
+
+  console.log('\n=== Request 3: landing sites still usable if the mission slips 7 days ===');
+  const slip = await call('check_slip_robustness', { landing: '2027-01-13', slip: { to_days: 7 } });
+  console.log(slip.headline);
+  for (const r of slip.rows) row({ place: r.place.id, survives: r.survives_all, firstFail: r.first_fail && `${r.first_fail.check} at +${r.first_fail.slip_h} h` });
+  const robust = await call('find_landing_sites', { landing: '2027-01-13', slip: { to_days: 7 }, count: 5 });
+  console.log(robust.headline);
+  for (const c of robust.candidates) row({ ref: c.ref, lat: c.lat_deg, lon: c.lon_deg, survives: c.slip?.survives_all, worstBothFromLandingH: c.slip?.worst?.both_continuous_h_min ?? null });
+  const both = await call('find_landing_sites', { landing: '2027-10-07', slip: { to_days: 7 }, criteria: { slope_max_deg: 5, psr_distance_km: { min: 1, max: 5 }, inside_psr: false, both_continuous_h_min: 300 } });
+  console.log(`Requests 1 + 3 together: ${both.feasibility.status}. ${both.feasibility.why}`);
+  for (const r of both.feasibility.relaxations ?? []) row(r);
+}

@@ -1,6 +1,6 @@
 # Lunar Site Navigator MCP
 
-A zero-dependency, tools-only MCP server for the same stateless calculations used by Lunar Site Navigator. It reads the repository's local data, needs no browser or API key, and writes no user data. Node built-ins only; tested only on Node 26.0.0 (other versions not tried).
+A zero-dependency MCP server (tools, prompts and resources) for the same calculations used by Lunar Site Navigator. It reads the repository's local data, needs no browser or API key, and writes no user data. Node built-ins only; tested only on Node 26.0.0 (other versions not tried).
 
 ## Who this is for
 
@@ -94,15 +94,15 @@ Say these to a connected assistant (each step uses the previous answer):
 
 ## Protocol
 
-Implements **MCP 2025-11-25**, the last initialization-based revision, with `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`. The only advertised capability is `{ "tools": {} }`. The `initialize` result carries `instructions`: coverage, UTC, the site id table (generated from `demo/data/sites.json`, the only file read at handshake), the 24-scenario batch limit with a split example, which inputs are assumptions, and that results are first-look screening. An unsupported requested version receives `2025-11-25` as a counteroffer; a client unable to use that version must disconnect.
+Implements **MCP 2025-11-25**, the last initialization-based revision, with `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`, `prompts/list`, `prompts/get`, `resources/list`, `resources/read` and `resources/templates/list`. Advertised capabilities: `{ "tools": {}, "prompts": {}, "resources": {} }` (no subscriptions or list-changed notifications). The `initialize` result carries `instructions`: coverage, UTC, the site id table (generated from `demo/data/sites.json`, the only file read at handshake), the 24-scenario batch limit with a split example, which inputs are assumptions, and that results are first-look screening. An unsupported requested version receives `2025-11-25` as a counteroffer; a client unable to use that version must disconnect.
 
 The current **2026-07-28** revision uses per-request metadata and `server/discover` instead of this handshake. This server intentionally implements the task's initialization-based interface. A modern-only client is incompatible; a dual-era client can fall back to the legacy handshake.
 
-The twelve compute tool definitions are generated from `core.specs()` at runtime, mapping `input_schema` to `inputSchema`, with read-only, idempotent, non-destructive, closed-world hints. All tools fit in one page; no cursor is issued. Results include identical JSON in a text block and `structuredContent`. Core `{ error }` results (and invalid `open_in_navigator` input) become `isError: true`; malformed call envelopes and unknown tool names are protocol errors.
+The compute tool definitions (twelve v1 tools plus the v2 tools in `demo/src/tools-v2/`) are generated from `core.specs()` at runtime, mapping `input_schema` to `inputSchema`, with read-only, idempotent, non-destructive, closed-world hints. All tools fit in one page; no cursor is issued. Results include identical JSON in a text block and `structuredContent`. Core `{ error }` results (and invalid `open_in_navigator` input) become `isError: true`; malformed call envelopes and unknown tool names are protocol errors.
 
 Context loading is deferred until the first tool list or call. Missing required data produces a diagnostic naming the data location and underlying file error: `tools/list` returns `-32603`, while `tools/call` returns an error tool result. Failed loads can be retried. Optional data follows the existing loader's behavior: missing terrain uses a labelled smooth horizon, and dependent tools report unavailable data rather than invent values. The 240 m DEM remains lazy.
 
-Requests execute serially; tool calls are limited to 60 per second per process. Rate-limit errors use `-32000`. Unknown notifications are ignored without a reply. Cancellation does not interrupt an ongoing computation; no progress, task execution, resource, prompt, sampling, HTTP or authorization extension is offered. The subprocess's local OS permissions control data access. This is not a general JSON Schema validator: argument validation uses the existing core's schema subset.
+Requests execute serially; tool calls are limited to 60 per second per process. Rate-limit errors use `-32000`. Unknown notifications are ignored without a reply. Cancellation does not interrupt an ongoing computation; no progress, task execution, sampling, HTTP or authorization extension is offered. The subprocess's local OS permissions control data access. This is not a general JSON Schema validator: argument validation uses the existing core's schema subset.
 
 ## Tools
 
@@ -121,6 +121,34 @@ Requests execute serially; tool calls are limited to 60 per second per process. 
 | `relay_coverage` | Coverage under an assumed illustrative relay orbit |
 | `route_candidates` | Shortest, flattest and sunniest candidate rover routes |
 | `open_in_navigator` | A link that opens the web page on a place, landing, stay, slip, map mode, playhead and detail-sheet tab (MCP server only; computes nothing) |
+
+**v2 tools** (design: `docs/mcp-v2/DESIGN.md`). They share one constraint language, `criteria` (fields and presets: resource `lsn://criteria/presets`), report every check with its value and margin, name the reading of vague words in `assumed[]`, and treat "no site meets this" as a result (`feasibility`: the binding constraint, the best achievable value, relaxations).
+
+| Name | Purpose |
+| --- | --- |
+| `find_landing_sites` | Search the south-polar cap (or a region) for sites that meet `criteria` on a landing date, a window or any date, optionally robust to a slip; funnel, candidates `S1…`, near misses, feasibility |
+| `check_slip_robustness` | For given places (default: curated terrain sites), check `criteria` at every slip offset; survivors, first failure, worst values |
+| `landing_windows` | For one place, every landing time span that meets `criteria`, robust windows, and the slip budget of a planned date |
+| `mission_open` | Load a mission exported from the page (record, config or GeoJSON file, pasted JSON, or a share link) and name its points (`landing`, `W1…`, `stop1…`, `haven1…`, …) |
+| `mission_conditions` | Sun and Earth at mission points when the rover passes and over the stay, with risks |
+
+After a search or `mission_open`, any place argument also accepts `{ "candidate": "S1" }` or `{ "mission_point": "W2" }`.
+
+## Prompts and resources
+
+Prompts (slash commands in clients that show them) carry the page assistant's three audience voices:
+
+| Prompt | Audience | Does |
+| --- | --- | --- |
+| `plan_landing_site` | planner | requirements → `find_landing_sites` → feasibility → route sketch → table and link |
+| `respond_to_slip` | planner | `compare_scenarios` → `landing_windows` slip budget → nearby alternatives |
+| `check_my_mission` | planner | `mission_open` → `mission_conditions`, risks first |
+| `build_lesson` | educator | contrasting places with real numbers, questions whose answers name the tool call that produced them |
+| `explain_simply` | public / educator | one question, at most three numbers, a link |
+| `virtual_visit` | public | `sky_at` + `skyline` + `next_events` in the first person |
+| `my_first_mission` | public | a guided site → date → slip → map walk-through |
+
+Resources: `lsn://sites`, `lsn://criteria/presets`, `lsn://about/data` (coverage, resolution and the README source table), `lsn://glossary`; templates `lsn://search/{search_id}.csv` / `.geojson` (search candidates) and `lsn://mission/{mission_id}` / `.geojson` (an opened mission). Searches and missions are held in memory, the last 32 of each.
 
 `open_in_navigator` returns `{ url, opens }`, where `opens` is one sentence describing what the page shows. The hash is written by the page's own `demo/src/state.js` `toHash` and read back with `parseHash`; anything the page would read differently is a tool error. The page address is `LSN_PAGE_URL` when set, otherwise the `file://` URL of `demo/index.html` next to this server. The standalone MCP package does not contain the page: set `LSN_PAGE_URL` to wherever the web page lives (for example the unzipped v5 package's `lunar-site-navigator.html`); otherwise `opens` says the page file was not found.
 
