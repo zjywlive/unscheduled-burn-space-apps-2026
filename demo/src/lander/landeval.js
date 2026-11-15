@@ -10,8 +10,13 @@
 //   deps: { eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin? }
 //   evaluate → Promise<{ list: [pick, spot 1…5], grid, limit, battH, stayDays } | null (superseded by a newer call)>
 //   hooks: { onGrid(grid), onProgress(stage 1 | 2, fraction) }
+//   evaluateRegion(shape, hooks) → the same search inside a drawn region (polar map km, or latitude/longitude,
+//     georegion.js) instead of 15 km around a point: about REGION_CELLS grid points over it, then the eight best in
+//     detail, five kept → { list: [spot 1…5], grid, limit, battH, stayDays, region: true }
 import { loadData } from '../data-loader.js';
-import { createDem, toXY, skylineFor, TERRAIN_MAX_LAT } from '../terrain.js';
+import { createDem, toXY, fromXY, skylineFor, TERRAIN_MAX_LAT } from '../terrain.js';
+import { contains as polarContains, bbox as polarBbox } from '../map/shapes.js';
+import { isGeo, geoContains, geoOutline } from '../georegion.js';
 import { createPsr, PSR_PACK } from '../psr.js';
 import { loadSiteTerrain } from './terrain-local.js';
 import { pickLandingWindow, skyAt, mapScale, slopeDeg } from './landing.js';
@@ -23,6 +28,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
 const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
 export const SEARCH_RADIUS_KM = 15;
+export const REGION_CELLS = 500;   // grid points screened over a drawn region (the step follows its area)
 
 export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCtx, getVehicle, getFromMs, getStayDays, getMargin = () => NaN }) {
   // the layers: navigator 1 km and 2 km slope and shadow grids, the LOLA PSR map, the 120 m polar DEM; fine: the
@@ -155,7 +161,89 @@ export function createLandingEvaluator({ eph, sites, meta, getDem, hires = null,
     list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
     return { list, grid, limit, battH, stayDays };
   }
+  // ---- inside a drawn region ----
+  async function evaluateRegion(shape, { onGrid = () => {}, onProgress = () => {} } = {}) {
+    const my = ++token;
+    await loadLayers();
+    if (my !== token) return null;
+    const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
+    const fromMs = getFromMs();
+    const dem = getDem();
+    // candidate points: a lat/lon (geo) region on a cos-latitude grid, a polar one on its map-km box, ~REGION_CELLS
+    const pts = [];
+    let stepKm;
+    if (isGeo(shape)) {
+      const inside = geoContains(shape), o = geoOutline(shape);
+      let la0 = 90, la1 = -90;
+      for (const q of o) { la0 = Math.min(la0, q.latDeg); la1 = Math.max(la1, q.latDeg); }
+      const lons = o.map((q) => q.lonDeg), c = o[0].lonDeg;
+      const rel = lons.map((l) => ((l - c + 540) % 360) - 180);
+      const lo0 = c + Math.min(...rel), lo1 = c + Math.max(...rel);
+      const midCos = Math.max(0.05, Math.cos(((la0 + la1) / 2) * Math.PI / 180));
+      const areaKm2 = (la1 - la0) * 30.32 * (lo1 - lo0) * 30.32 * midCos;
+      stepKm = Math.max(2, Math.sqrt(areaKm2 / REGION_CELLS));
+      const dLat = stepKm / 30.32;
+      for (let la = la0 + dLat / 2; la < la1; la += dLat) {
+        const dLon = dLat / Math.max(0.05, Math.cos((la * Math.PI) / 180));
+        for (let lo = lo0 + dLon / 2; lo < lo1; lo += dLon) {
+          const lon = ((lo % 360) + 360) % 360;
+          if (inside(la, lon)) { const [x, y] = toXY(la, lon); pts.push({ latDeg: la, lonDeg: lon, xKm: x, yKm: y }); }
+        }
+      }
+    } else {
+      const b = polarBbox(shape), area = (b.x1 - b.x0) * (b.y1 - b.y0);
+      stepKm = Math.max(1, Math.sqrt(area / REGION_CELLS));
+      for (let y = b.y0 + stepKm / 2; y < b.y1; y += stepKm) for (let x = b.x0 + stepKm / 2; x < b.x1; x += stepKm) {
+        if (polarContains(shape, x, y)) { const ll = fromXY(x, y); pts.push({ latDeg: ll.latDeg, lonDeg: ll.lonDeg, xKm: x, yKm: y }); }
+      }
+    }
+    if (!pts.length) return { list: [], grid: pts, limit, battH, stayDays, region: true, stepKm };
+    pts.cellKm = stepKm;
+    onGrid(pts);
+    // the global terrain around the region's middle (its tiles serve the skylines and slopes off the pole)
+    const mid = pts[Math.floor(pts.length / 2)];
+    const anyGlobal = pts.some((p) => p.latDeg > TERRAIN_MAX_LAT);
+    if (anyGlobal) { try { await siteCtx.around(mid, Math.min(400, Math.sqrt(pts.length) * stepKm)); } catch { /* coarse tiles stand in */ } }
+    if (my !== token) return null;
+    const land0 = pickLandingWindow(eph, mid, mid.latDeg <= TERRAIN_MAX_LAT ? skylineFor(dem, mid) : siteCtx.quickMask(mid), fromMs)?.tMs ?? fromMs;
+    const dirs4 = skyDirections(eph, land0, stayDays, 4);
+    const margin = getMargin();
+    // slope off the pole: over 1 km on the global terrain, from heights 0.5 km either side
+    const slopeLL = (p) => {
+      const h = (la, lo) => siteCtx.sampleLL(la, lo), d = 0.5 / 30.32, dl = d / Math.max(0.05, Math.cos((p.latDeg * Math.PI) / 180));
+      const gx = (h(p.latDeg, p.lonDeg + dl) - h(p.latDeg, p.lonDeg - dl)) / 1000, gy = (h(p.latDeg + d, p.lonDeg) - h(p.latDeg - d, p.lonDeg)) / 1000;
+      return Math.atan(Math.hypot(gx, gy)) * 180 / Math.PI;
+    };
+    for (let n = 0; n < pts.length; n++) {
+      const p = pts[n], polar = p.latDeg <= TERRAIN_MAX_LAT;
+      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
+      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: polar ? slopeAt(p.xKm, p.yKm) : slopeLL(p), shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
+      if (n % 16 === 15 || n === pts.length - 1) {
+        const done = pts.slice(0, n + 1), sc = suitability(done, { limitDeg: limit, battH });
+        done.forEach((q, i) => { q.score = sc[i].score; q.ok = sc[i].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        onProgress(1, (n + 1) / pts.length);
+        await tick();
+        if (my !== token) return null;
+      }
+    }
+    // the eight best that pass, apart by two grid steps (in map km at their latitude), in detail; five kept
+    const best = bestPoints(pts.map((p) => ({ ...p, xKm: p.xKm / mapScale(p.latDeg), yKm: p.yKm / mapScale(p.latDeg) })), { count: 8, minKm: 2 * stepKm });
+    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: toXY(p.latDeg, p.lonDeg)[0], yKm: toXY(p.latDeg, p.lonDeg)[1], score: p.score }));
+    onProgress(2, 0);
+    for (let n = 0; n < cands.length; n++) {
+      Object.assign(cands[n], await detail(cands[n], { vehicle, limit, battH, stayDays, fromMs }));
+      if (my !== token) return null;
+      onProgress(2, (n + 1) / cands.length);
+      await tick();
+    }
+    const count = (c, g) => c.figs.filter((f) => f.grade === g).length;
+    cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
+    const list = cands.slice(0, 5);
+    list.forEach((c, n) => { c.name = `Spot ${n + 1}`; c.distKm = 0; });
+    return { list, grid: pts, limit, battH, stayDays, region: true, stepKm, screened: pts.length, passed: pts.filter((p) => p.ok).length };
+  }
+
   const cancel = () => { token++; };
 
-  return { L, loadLayers, slopeAt, shadowAt, detail, evaluate, cancel };
+  return { L, loadLayers, slopeAt, shadowAt, detail, evaluate, evaluateRegion, cancel };
 }

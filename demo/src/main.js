@@ -368,7 +368,7 @@ function start() {
     globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
     // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
     globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
-    globeMap.onLandSpot = (n) => selectLanding(n);
+    globeMap.onLandSpot = (n) => selectLanding(land.region ? n - 1 : n);
     // a click on a region's outline or on a route: the panel turns to it (a candidate route is chosen as well)
     globeMap.isDrawing = () => !!mapView?.drawing;
     globeMap.onFocus = (f) => {
@@ -583,10 +583,10 @@ function start() {
     getFromMs: () => (state.windowOn && Number.isFinite(state.landingMs) ? state.landingMs - 2 * DAY_MS : state.cursorMs),
     getStayDays: () => state.stayDays,
   });
-  let land = { pick: null, busy: null, result: null, sel: 0, error: null };
+  let land = { pick: null, region: null, busy: null, result: null, sel: 0, error: null };
   const landCard = mapView ? createLandCard({ actionBar: mapView.actionBar }, {
     onUse: (c) => useLanding(c),
-    onSearch: () => { if (land.pick) proposeLanding(land.pick); },
+    onSearch: () => { if (land.region) searchRegion(land.region); else if (land.pick) proposeLanding(land.pick); },
     onSelect: (n) => selectLanding(n),
   }) : null;
   if (landCard) mapView.mountFold('land', landCard.el);
@@ -602,13 +602,15 @@ function start() {
   // the point, the square and the spots on the globe, while the panel is open (globemap.js skips an unchanged set)
   function landMarks() {
     if (!globeMap) return;
-    if (kind !== 'land' || !land.pick) { globeMap.setLanding(null); return; }
-    const spots = (land.result?.list ?? []).slice(1).map((c, i) => ({ n: i + 1, latDeg: c.latDeg, lonDeg: c.lonDeg, grade: c.verdict.grade, title: `${c.name}: ${c.verdict.text}` }));
-    globeMap.setLanding({ pick: land.pick, box: land.box ?? null, spots, sel: land.sel });
+    if (kind !== 'land' || !(land.pick || land.region)) { globeMap.setLanding(null); return; }
+    // in a region every result is a numbered spot (1…5); around a point the point itself is result 0
+    const off = land.region ? 1 : 0, from = land.region ? 0 : 1;
+    const spots = (land.result?.list ?? []).slice(from).map((c, i) => ({ n: i + 1, latDeg: c.latDeg, lonDeg: c.lonDeg, grade: c.verdict.grade, title: `${c.name}: ${c.verdict.text}` }));
+    globeMap.setLanding({ pick: land.pick, box: land.box ?? null, spots, sel: land.sel + off });
   }
   function proposeLanding(p) {
     const pick = { latDeg: +p.latDeg.toFixed(5), lonDeg: +(((p.lonDeg % 360) + 360) % 360).toFixed(5) };
-    land = { pick, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null };
+    land = { pick, region: null, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null };
     showLanding();
     landEval.evaluate(pick.latDeg, pick.lonDeg, {
       onGrid: (g) => { if (land.pick === pick && land.box !== g.box) { land.box = g.box; showLanding(); } },
@@ -622,6 +624,32 @@ function start() {
       land = { ...land, busy: null, error: `The search failed: ${e?.message ?? e}` };
       showLanding();
     });
+  }
+  // Where to land inside a drawn region (its outline is already on the globe): the best spots in it
+  function searchRegion(slot) {
+    const shape = shapes[slot];
+    if (!shape) return;
+    const token = {};
+    land = { pick: null, region: slot, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null, token };
+    kind = 'land';
+    update({ tool: 'select' });
+    showLanding();
+    landEval.evaluateRegion(shape, {
+      onProgress: (stage, f) => { if (land.token !== token) return; land.busy = { stage, f }; landCard?.update({ busy: land.busy }); },
+    }).then((res) => {
+      if (!res || land.token !== token) return;
+      land = { ...land, busy: null, result: res, sel: 0 };
+      showLanding();
+    }).catch((e) => {
+      if (land.token !== token) return;
+      land = { ...land, busy: null, error: `The search failed: ${e?.message ?? e}` };
+      showLanding();
+    });
+  }
+  // the Regions panel's bar: Where to land in the current region
+  function syncRegionLandBar() {
+    const slot = state.slot ?? 'A', sh = shapes[slot];
+    mapView?.actionBar.set('region', 'land', sh ? [{ id: 'land-region', label: `Where to land in ${slot}`, short: 'Land', icon: 'go', title: `Find the best landing spots inside region ${slot} (the Where to land method, over the whole region)`, onClick: () => searchRegion(slot) }] : []);
   }
   function selectLanding(n) {
     const c = land.result?.list[n];
@@ -1580,7 +1608,7 @@ function start() {
   function render() {
     syncGlobeSite();
     globeMap?.update();
-    try { landMarks(); } catch { /* before Where to land exists */ }
+    try { landMarks(); syncRegionLandBar(); } catch { /* before Where to land exists */ }
     saveMission();
     syncLanded();
     derived = compute();
