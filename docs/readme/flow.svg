@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 290" width="1280" height="290" role="img" aria-label="Plan before launch, then fly: 1 Map, 2 Finalise, 3 Execute.">
+  <defs>
+    <linearGradient id="line" x1="0" x2="1">
+      <stop offset="0" stop-color="#ffb547" stop-opacity=".25"/>
+      <stop offset=".5" stop-color="#ffb547" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#7fb3ff" stop-opacity=".7"/>
+    </linearGradient>
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="5"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <path id="track" d="M 230 170 L 1050 170"/>
+  </defs>
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .dash { stroke-dasharray: 6 8; animation: flow 1.4s linear infinite; }
+    @keyframes flow { to { stroke-dashoffset: -28 } }
+  </style>
+  <rect width="1280" height="290" rx="18" fill="#0a0e19"/>
+  <text x="435" y="40" text-anchor="middle" class="mono" font-size="16" letter-spacing="4" fill="#ffb547">PLAN BEFORE LAUNCH</text>
+  <path d="M 60 52 L 60 60 L 810 60 L 810 52" fill="none" stroke="#ffb547" stroke-opacity=".45"/>
+  <text x="1050" y="40" text-anchor="middle" class="mono" font-size="16" letter-spacing="4" fill="#7fb3ff">THEN FLY</text>
+  <path d="M 880 52 L 880 60 L 1220 60 L 1220 52" fill="none" stroke="#7fb3ff" stroke-opacity=".45"/>
+  <use xlink:href="#track" stroke="url(#line)" stroke-width="2.5" class="dash" fill="none"/>
+  <!-- the probe runs behind the cards, so it shows only between stages -->
+  <g filter="url(#glow)">
+    <circle r="7" fill="#ffcf7a">
+      <animateMotion dur="6s" repeatCount="indefinite" keyPoints="0;0;.5;.5;1;1" keyTimes="0;.06;.33;.39;.66;1" calcMode="linear"><mpath xlink:href="#track"/></animateMotion>
+    </circle>
+  </g>
+  <g>
+    <rect x="60" y="80" width="340" height="180" rx="14" fill="#101628" stroke="#ffb547" stroke-width="1.5" stroke-opacity=".25"><animate attributeName="stroke-opacity" values=".25;1;.25;.25" keyTimes="0;.06;.3;1" dur="6s" repeatCount="indefinite"/></rect>
+    <circle cx="100" cy="120" r="18" fill="#ffb547"/>
+    <text x="100" y="126.5" text-anchor="middle" class="sans" font-weight="800" font-size="18" fill="#0a0e19">1</text>
+    <text x="132" y="130" class="sans" font-weight="700" font-size="30" fill="#fff">Map</text>
+    <text x="84" y="180" class="mono" font-size="17" fill="#c3cce0">site · landing date · slip</text>
+    <text x="84" y="207" class="mono" font-size="17" fill="#c3cce0">rover route · departure</text>
+    <text x="84" y="240" class="mono" font-size="15" fill="#7d8aa8">on the 3D Moon, down to 20 m</text>
+  </g>
+  <g>
+    <rect x="470" y="80" width="340" height="180" rx="14" fill="#101628" stroke="#ffb547" stroke-width="1.5" stroke-opacity=".25"><animate attributeName="stroke-opacity" values=".25;.25;1;.25;.25" keyTimes="0;.33;.39;.6;1" dur="6s" repeatCount="indefinite"/></rect>
+    <circle cx="510" cy="120" r="18" fill="#ffb547"/>
+    <text x="510" y="126.5" text-anchor="middle" class="sans" font-weight="800" font-size="18" fill="#0a0e19">2</text>
+    <text x="542" y="130" class="sans" font-weight="700" font-size="30" fill="#fff">Finalise</text>
+    <text x="494" y="180" class="mono" font-size="17" fill="#c3cce0">go / no-go checks</text>
+    <text x="494" y="207" class="mono" font-size="17" fill="#c3cce0">last vehicle change</text>
+    <text x="494" y="240" class="mono" font-size="15" fill="#7d8aa8">freeze the configuration</text>
+  </g>
+  <g>
+    <rect x="880" y="80" width="340" height="180" rx="14" fill="#101628" stroke="#7fb3ff" stroke-width="1.5" stroke-opacity=".25"><animate attributeName="stroke-opacity" values=".25;.25;1;.25" keyTimes="0;.66;.72;1" dur="6s" repeatCount="indefinite"/></rect>
+    <circle cx="920" cy="120" r="18" fill="#7fb3ff"/>
+    <text x="920" y="126.5" text-anchor="middle" class="sans" font-weight="800" font-size="18" fill="#0a0e19">3</text>
+    <text x="952" y="130" class="sans" font-weight="700" font-size="30" fill="#fff">Execute</text>
+    <text x="904" y="180" class="mono" font-size="17" fill="#c3cce0">launch → lunar orbit</text>
+    <text x="904" y="207" class="mono" font-size="17" fill="#c3cce0">powered descent → touchdown</text>
+    <text x="904" y="240" class="mono" font-size="15" fill="#7d8aa8">then the planned rover drive</text>
+  </g>
+</svg>

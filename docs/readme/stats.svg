@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 150" width="1280" height="150" role="img" aria-label="20 m south-pole terrain; 5 to 20 m landing-site patches; real Sun and Earth positions 2026 to 2029; 861 tests passing; zero npm installs.">
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .sweep { animation: sweep 7s ease-in-out infinite; }
+    @keyframes sweep { 0% { transform: translateX(-300px) } 60%,100% { transform: translateX(1400px) } }
+  </style>
+  <defs>
+    <linearGradient id="sh" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".07"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <clipPath id="r"><rect width="1280" height="150" rx="18"/></clipPath>
+  </defs>
+  <rect width="1280" height="150" rx="18" fill="#0a0e19"/>
+  <g clip-path="url(#r)"><rect class="sweep" x="0" y="0" width="220" height="150" fill="url(#sh)" transform="skewX(-20)"/></g>
+  <g class="k"><text x="128" y="78" text-anchor="middle" class="sans" font-size="50" font-weight="800" fill="#ffcf7a">20 m</text><text x="128" y="114" text-anchor="middle" class="mono" font-size="16" fill="#9fb0d2">south-pole terrain</text></g>
+  <g class="k"><text x="384" y="78" text-anchor="middle" class="sans" font-size="50" font-weight="800" fill="#ffcf7a">5–20 m</text><text x="384" y="114" text-anchor="middle" class="mono" font-size="16" fill="#9fb0d2">landing-site patches</text></g>
+  <g class="k"><text x="640" y="78" text-anchor="middle" class="sans" font-size="50" font-weight="800" fill="#fff">2026–29</text><text x="640" y="114" text-anchor="middle" class="mono" font-size="16" fill="#9fb0d2">real Sun &amp; Earth paths</text></g>
+  <g class="k"><text x="896" y="78" text-anchor="middle" class="sans" font-size="50" font-weight="800" fill="#7fb3ff">861</text><text x="896" y="114" text-anchor="middle" class="mono" font-size="16" fill="#9fb0d2">tests passing</text></g>
+  <g class="k"><text x="1152" y="78" text-anchor="middle" class="sans" font-size="50" font-weight="800" fill="#7fb3ff">0</text><text x="1152" y="114" text-anchor="middle" class="mono" font-size="16" fill="#9fb0d2">npm installs</text></g>
+  <g stroke="#232b44"><line x1="256" y1="40" x2="256" y2="112"/><line x1="512" y1="40" x2="512" y2="112"/><line x1="768" y1="40" x2="768" y2="112"/><line x1="1024" y1="40" x2="1024" y2="112"/></g>
+</svg>
