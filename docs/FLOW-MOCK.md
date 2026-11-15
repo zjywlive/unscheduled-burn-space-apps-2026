@@ -52,3 +52,35 @@ row of chips (site, landing, verdict, compare count) jumps back to any step. Ste
 Checked in the browser at 1440×900: all five steps render; site switch flies the globe; Date calendar and
 stay change the numbers; Compare adds columns and Make plan works; ▶ moves the clock and the dial; no
 console errors. Cold start of the embedded globe takes about 10 s.
+
+## 5. Integrated mock: where the steps live in the app (15 Nov 2026)
+
+`demo/mock-integrated.html` (http://localhost:8741/mock-integrated.html) loads the **real app** below a
+yellow MOCK strip and adds the steps to it from outside after it loads; no app file changes. The step
+panels' numbers come from the app's own tools (`window.__lsn.core`: site_summary, compare_scenarios,
+next_events, best_landing_dates, energy_summary) and their buttons change the plan through the app's own
+commands (select_site, set_landing, set_stay, open_site_detail). The pass marks (power never empty,
+Earth ≥ 50 %, Sun ≥ 70 %) are the mock's.
+
+The strip switches between three versions (the app reloads; the plan is kept):
+
+- **A · Steps in the top bar.** The stage bar `Plan 1 Map › 2 Finalise · Fly 3 Execute` becomes
+  `Plan 1 Site › 2 Date › 3 Verdict › 4 Compare › 5 Route › 6 Finalise · Fly 7 Execute`. To make room,
+  the six map-mode buttons fold into one `Map: Both in view ▾` button (the same buttons in a popover).
+  Below 1400 px wide the steps show numbers only, the current one named (as the stage bar's compact mode).
+  Measured: fits at 1440 and 1280 with no overlap.
+- **B · Steps on the right panel.** The top bar stays as today; a row of five tabs (Site · Date · Verdict
+  · Compare · Route) sits on top of the inspector, which moves down 42 px.
+- **Today.** The app with nothing added, for comparison.
+
+Entering and leaving: there is no separate mode. Opening the app lands on the last step (Site the first
+time). Steps 1 (Site) and 5 (Route) show the app's own inspector, site list and route card; steps 2–4 put a
+panel where the inspector sits. The Moon, the tools, the action bar, the Sky dial and the time bar work in
+every step; a click on the Moon or a new date redraws the open step. Going on is 6 Finalise in the same
+bar; on the Finalise and Execute pages (variant A) steps 1–5 lead back to the map at that step with the
+plan unchanged. The old `#…` links still open the map as today (the step is kept by the mock in
+sessionStorage; the real build would add a `step=` hash key, absent = today's behaviour).
+
+Verified in the browser: A and B at 1440×900, A at 1280×800; Date (calendar from 35 real scenarios,
+best starts), Verdict, Compare (+slip, other site, Make plan changes the app's landing), Route (opens the
+app's route card), Finalise → step 3 back to the map with the changed date kept; no console errors.

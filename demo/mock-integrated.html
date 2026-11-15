@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integrated flow mock · Lunar Site Navigator</title>
+<!-- A MOCK of the plan steps built into the real app (docs/FLOW-MOCK.md §5). The page below the strip is the real app
+     (index.html, then finalise.html / lander.html when you go on); this file adds the steps on top of it from the
+     outside, after it loads. No app file changes. The numbers in the step panels come from the app's own tools
+     (window.__lsn.core: site_summary, compare_scenarios, next_events, best_landing_dates, energy_summary), and the
+     panels change the plan through the app's own commands (select_site, set_landing, set_stay). -->
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0c0e; color: #ececec; font: 12px/1.4 Inter, system-ui, -apple-system, sans-serif; overflow: hidden; }
+  .strip { height: 30px; white-space: nowrap; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #2a2210; border-bottom: 1px solid rgba(242,179,61,0.5); color: #f2b33d; }
+  .strip b { color: #ffd88a; }
+  .strip .seg { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(0,0,0,0.3); border: 1px solid rgba(242,179,61,0.35); }
+  .strip .seg button { height: 22px; padding: 0 10px; border: 0; border-radius: 999px; background: none; color: #d9c08a; font: inherit; cursor: pointer; }
+  .strip .seg button[aria-pressed="true"] { background: #f2b33d; color: #1a1406; font-weight: 600; }
+  .strip .msg { margin-left: auto; color: #b9a172; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  iframe { display: block; width: 100%; height: calc(100% - 31px); border: 0; }
+</style>
+</head>
+<body>
+<div class="strip">
+  <b>MOCK</b><span>Plan steps built into the real app</span>
+  <span class="seg" role="group" aria-label="Variant">
+    <button data-v="A">A · Steps in the top bar</button>
+    <button data-v="B">B · Steps on the right panel</button>
+    <button data-v="today">Today (no change)</button>
+  </span>
+  <span class="msg" id="msg">Loading the app…</span>
+</div>
+<iframe id="app" title="Lunar Site Navigator (the real app)"></iframe>
+<script>
+const frame = document.getElementById('app');
+const store = { get: (k, d) => { try { return sessionStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* private mode */ } } };
+let variant = store.get('mk-variant', 'A');
+let step = store.get('mk-step', 'site');
+const STEPS = [['site', 'Site'], ['date', 'Date'], ['verdict', 'Verdict'], ['compare', 'Compare'], ['route', 'Route']];
+// the app keeps its plan in the URL: reopen the page the frame was on (a variant switch reloads this page)
+frame.src = (() => { const u = store.get('mk-url', ''); return /^https?:\/\/[^/]+\/(index|finalise|lander)\.html/.test(u) && u.startsWith(location.origin) ? u : 'index.html'; })();
+setInterval(() => { try { store.set('mk-url', frame.contentWindow.location.href); } catch { /* navigating */ } }, 1000);
+const say = (t) => { document.getElementById('msg').textContent = t; };
+document.querySelectorAll('.strip [data-v]').forEach((b) => {
+  b.setAttribute('aria-pressed', String(b.dataset.v === variant));
+  b.addEventListener('click', () => { variant = b.dataset.v; store.set('mk-variant', variant); location.reload(); });
+});
+
+const DAY = 86400e3, HOUR = 3600e3;
+const iso = (ms) => new Date(ms).toISOString().slice(0, 16) + 'Z';
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+const dayOf = (ms) => Math.floor(ms / DAY) * DAY;
+const fmtDay = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const fmtDT = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+const hrs = (h) => `${Math.round(h)} h`;
+const dark = (h) => (h >= 48 ? `${Math.round(h / 24)} d` : `${Math.round(h)} h`);
+const GR = { ok: 'Pass', near: 'Marginal', bad: 'Fail' };
+
+// the CSS added to the app's document (its own variables where it has them)
+const CSS = `
+.mk-steps { flex-wrap: nowrap; }
+.mk-steps a { cursor: pointer; }
+.mk-steps.narrow a:not([aria-current]) .lbl { display: none; }
+.mk-steps.narrow .grp { display: none; }
+.mk-modes-btn { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: var(--text, #ececec); font: 500 12px Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+.mk-modes-btn:hover { background: rgba(255,255,255,0.12); }
+.mk-modes-hidden { display: none !important; }
+.mk-modes-pop { display: flex !important; flex-wrap: wrap; gap: 6px; position: fixed !important; z-index: 60; padding: 8px; border-radius: 12px; background: rgba(20,21,24,0.96); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 12px 40px rgba(0,0,0,0.5); max-width: 640px; }
+.mk-chips { position: fixed; z-index: 40; display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(20,21,24,0.9); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.mk-chips button { flex: 1; min-width: 0; padding: 0 4px; height: 28px; border: 0; border-radius: 999px; background: none; color: var(--muted, #a7abb1); font: 500 12px Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+.mk-chips button:hover { color: var(--text, #ececec); background: rgba(255,255,255,0.06); }
+.mk-chips button[aria-current="step"] { background: #ececec; color: #0b0c0e; }
+.mk-chips .n { display: inline-grid; place-items: center; width: 15px; height: 15px; margin-right: 4px; border-radius: 50%; background: rgba(255,255,255,0.12); font-size: 9.5px; font-weight: 700; }
+.mk-chips button[aria-current="step"] .n { background: #0b0c0e; color: #ececec; }
+.mk-shift { transform: translateY(var(--mk-shift, 0px)); }
+.mk-hide { visibility: hidden !important; }
+.mk-panel { position: fixed; z-index: 30; display: flex; flex-direction: column; overflow: hidden; color: var(--text, #ececec); font: 13px/1.45 Inter, system-ui, sans-serif; }
+.mk-panel[hidden] { display: none; }
+.mk-head { padding: 14px 16px 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.mk-head h2 { margin: 0; font-size: 15px; font-weight: 600; } .mk-head p { margin: 3px 0 0; color: var(--muted, #a7abb1); font-size: 12px; }
+.mk-body { flex: 1; overflow: auto; padding: 12px 16px; }
+.mk-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid rgba(255,255,255,0.1); }
+.mk-foot .grow { flex: 1; }
+.mk-btn { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: inherit; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.mk-btn:hover { background: rgba(255,255,255,0.12); }
+.mk-btn.pri { background: #ececec; color: #0b0c0e; border-color: #ececec; font-weight: 600; }
+.mk-btn.ghost { background: none; border-color: transparent; color: var(--muted, #a7abb1); }
+.mk-lbl { margin: 12px 0 4px; color: var(--muted, #a7abb1); font-size: 11px; }
+.mk-lbl:first-child { margin-top: 0; }
+.mk-in { width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.3); color: inherit; font: inherit; color-scheme: dark; box-sizing: border-box; }
+.mk-seg { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); }
+.mk-seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--muted, #a7abb1); font: inherit; font-size: 12px; cursor: pointer; }
+.mk-seg button[aria-pressed="true"] { background: rgba(255,255,255,0.16); color: var(--text, #ececec); }
+.mk-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.mk-cal button { height: 34px; padding: 0; border: 0; border-radius: 6px; font: 600 11px/1.1 Inter, system-ui, sans-serif; color: rgba(0,0,0,0.78); cursor: pointer; }
+.mk-cal button small { display: block; font-weight: 400; font-size: 9px; }
+.mk-cal button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; }
+.mk-cal .wd { color: var(--muted, #a7abb1); font-size: 10px; text-align: center; }
+.mk-legend { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--muted, #a7abb1); font-size: 11px; }
+.mk-legend i { width: 40px; height: 8px; border-radius: 3px; background: linear-gradient(90deg, #3a3d42, #c9a24a, #7fd18b); }
+.mk-best { display: grid; gap: 4px; }
+.mk-best button { display: flex; justify-content: space-between; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.mk-best button:hover { border-color: rgba(255,255,255,0.3); }
+.mk-verdict { padding: 10px 12px; border-radius: 10px; font-weight: 600; line-height: 1.4; }
+.mk-verdict small { display: block; margin-top: 3px; font-weight: 400; font-size: 11.5px; color: var(--muted, #a7abb1); }
+.mk-verdict.ok { background: rgba(127,209,139,0.13); color: #7fd18b; } .mk-verdict.near { background: rgba(242,179,61,0.13); color: #f2b33d; } .mk-verdict.bad { background: rgba(229,72,77,0.14); color: #e5484d; }
+.mk-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.mk-tile { padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); }
+.mk-tile .k { color: var(--muted, #a7abb1); font-size: 11px; } .mk-tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; } .mk-tile .s { color: var(--muted, #a7abb1); font-size: 11px; }
+.mk-tile.sun .v { color: var(--sun, #f2b33d); } .mk-tile.earth .v { color: var(--earth, #4cb3f0); }
+.mk-bar { display: grid; grid-template-columns: 78px 1fr 46px; align-items: center; gap: 8px; margin: 5px 0; font-size: 11px; color: var(--muted, #a7abb1); }
+.mk-bar i { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; } .mk-bar i b { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+.mk-bar span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #ececec); }
+.mk-checks { display: grid; gap: 6px; margin-top: 10px; }
+.mk-check { display: flex; gap: 10px; align-items: baseline; padding: 7px 9px; border-radius: 8px; background: rgba(255,255,255,0.03); font-size: 12px; }
+.mk-check small { display: block; color: var(--muted, #a7abb1); font-size: 11px; }
+.mk-g { flex: none; width: 54px; padding: 2px 0; border-radius: 999px; text-align: center; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.mk-g.ok { background: rgba(127,209,139,0.18); color: #7fd18b; } .mk-g.near { background: rgba(242,179,61,0.18); color: #f2b33d; } .mk-g.bad { background: rgba(229,72,77,0.2); color: #e5484d; }
+.mk-note { margin-top: 10px; color: var(--muted, #a7abb1); font-size: 11.5px; }
+.mk-note a { color: var(--text, #ececec); text-decoration: underline dotted; cursor: pointer; }
+.mk-adds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.mk-adds select { height: 30px; max-width: 140px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: inherit; padding: 0 8px; font: inherit; font-size: 12px; }
+.mk-cmp { width: 100%; border-collapse: collapse; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.mk-cmp th, .mk-cmp td { padding: 5px 2px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: right; white-space: nowrap; }
+.mk-cmp th:first-child, .mk-cmp td:first-child { text-align: left; color: var(--muted, #a7abb1); font-weight: 400; }
+.mk-cmp thead th { font-weight: 600; vertical-align: bottom; } .mk-cmp thead th small { display: block; color: var(--muted, #a7abb1); font-weight: 400; font-size: 10px; }
+.mk-cmp .d { display: block; font-size: 10px; } .mk-cmp .up { color: #7fd18b; } .mk-cmp .down { color: #e5484d; } .mk-cmp .same { color: var(--muted, #a7abb1); }
+.mk-cmp .mini.x { height: 16px; padding: 0 4px; border: 0; }
+.mk-cmp tr.v td { white-space: normal; }
+.mk-cmp .mini { height: 22px; padding: 0 7px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: none; color: var(--muted, #a7abb1); font: inherit; font-size: 10.5px; cursor: pointer; }
+.mk-wait { color: var(--muted, #a7abb1); font-size: 12px; }
+`;
+
+const waitFor = (fn, ms = 45000) => new Promise((res, rej) => { const t0 = Date.now(); const tick = () => { let v; try { v = fn(); } catch { v = null; } if (v) res(v); else if (Date.now() - t0 > ms) rej(new Error('timeout')); else setTimeout(tick, 150); }; tick(); });
+
+frame.addEventListener('load', async () => {
+  const w = frame.contentWindow, d = frame.contentDocument;
+  const page = (w.location.pathname.split('/').pop() || 'index.html');
+  if (variant === 'today') { say(`Today: ${page} as it is, nothing added.`); return; }
+  const st = d.createElement('style'); st.textContent = CSS; d.head.appendChild(st);
+  try {
+    if (page === 'index.html') { await waitFor(() => w.__lsn?.api && w.__lsn.core && d.querySelector('.topbar-stages .lsn-stages') && d.querySelector('.point-panel')); setupMap(w, d); }
+    else { await waitFor(() => d.querySelector('.lsn-stages a[data-stage="map"]'), 15000); setupOther(w, d, page); }
+  } catch { say(`${page}: the app did not finish loading in time (reload to try again).`); }
+});
+
+// ---------- the step bar ----------
+function stepBar(d, { onStep, mapHref, orig }) {
+  const nav = d.createElement('nav');
+  nav.className = 'lsn-stages mk-steps';
+  nav.setAttribute('aria-label', 'Mission steps');
+  const mark = (text, cls) => { const s = d.createElement('span'); s.className = cls; s.textContent = text; s.setAttribute('aria-hidden', 'true'); nav.appendChild(s); };
+  mark('Plan', 'grp');
+  STEPS.forEach(([id, label], i) => {
+    if (i) mark('›', 'sep');
+    const a = d.createElement('a');
+    a.dataset.mk = id;
+    a.innerHTML = `<span class="n">${i + 1}</span><span class="lbl">${label}</span>`;
+    a.href = mapHref ?? '#';
+    a.title = { site: 'Where to land: a listed site, coordinates or a click; screen an area if unsure', date: 'When to land and how long to stay', verdict: 'Is it viable: Sun, Earth, power and communications over the stay', compare: 'The plan against a slipped date, another site or the best date nearby', route: 'The rover route from the landing spot' }[id];
+    a.addEventListener('click', (e) => { store.set('mk-step', id); if (onStep) { e.preventDefault(); onStep(id); } });
+    nav.appendChild(a);
+  });
+  mark('›', 'sep');
+  const proxy = (stage, n, label) => {
+    const o = orig?.querySelector(`a[data-stage="${stage}"]`);
+    const a = d.createElement('a');
+    a.dataset.stage = stage;
+    a.innerHTML = `<span class="n">${n}</span><span class="lbl">${label}</span>`;
+    const sync = () => { if (!o) return; o.dispatchEvent(new Event('pointerenter')); a.href = o.href; a.title = o.title; a.toggleAttribute('data-locked', o.hasAttribute('data-locked')); };
+    a.href = o?.href ?? `${stage === 'execute' ? 'lander' : stage}.html`;
+    a.addEventListener('pointerenter', sync); a.addEventListener('focus', sync); a.addEventListener('click', sync);
+    nav.appendChild(a);
+    return a;
+  };
+  proxy('finalise', 6, 'Finalise');
+  mark('Fly', 'grp');
+  proxy('execute', 7, 'Execute');
+  nav.mark = (id) => nav.querySelectorAll('a[data-mk]').forEach((a) => (a.dataset.mk === id ? a.setAttribute('aria-current', 'step') : a.removeAttribute('aria-current')));
+  return nav;
+}
+
+// Finalise / Execute pages: their stage bar's "Map" becomes steps 1–5, each going back to the map at that step
+function setupOther(w, d, page) {
+  if (variant !== 'A') { say(`${page}: variant B leaves this page's stage bar as it is (Map › Finalise › Execute).`); return; }
+  for (const orig of d.querySelectorAll('.lsn-stages')) {
+    const map = orig.querySelector('a[data-stage="map"]');
+    if (!map) continue;
+    const nav = stepBar(d, { mapHref: map.href, orig });
+    const cur = orig.querySelector('a[aria-current="step"]')?.dataset.stage;
+    if (cur) nav.querySelector(`a[data-stage="${cur}"]`)?.setAttribute('aria-current', 'step');
+    orig.style.display = 'none';
+    orig.after(nav);
+  }
+  say(`${page}: steps 1–5 lead back to the map at that step; Finalise and Execute work as today.`);
+}
+
+// ---------- the map page ----------
+function setupMap(w, d) {
+  const L = w.__lsn;
+  const host = d.querySelector('.topbar-stages'), orig = host.querySelector('.lsn-stages');
+  const pp = d.querySelector('.point-panel');
+  const panel = d.createElement('section');
+  panel.className = 'mk-panel';
+  panel.hidden = true;
+  const cs = w.getComputedStyle(pp);
+  for (const k of ['background', 'backgroundColor', 'backdropFilter', 'webkitBackdropFilter', 'border', 'borderRadius', 'boxShadow']) panel.style[k] = cs[k];
+  d.body.appendChild(panel);
+  let bar = null, chips = null;
+  const SHIFT = 42;
+
+  if (variant === 'A') {
+    bar = stepBar(d, { onStep: (id) => go(id), orig });
+    const fit = () => bar.classList.toggle('narrow', w.innerWidth < 1400);   // as the stage bar's compact mode: numbers, the current step named
+    fit(); w.addEventListener('resize', fit);
+    orig.style.display = 'none';
+    host.appendChild(bar);
+    // the map modes fold into one button so the steps fit
+    const modes = d.querySelector('.topbar-modes');
+    if (modes) {
+      const btn = d.createElement('button');
+      btn.type = 'button'; btn.className = 'mk-modes-btn';
+      const label = () => { const on = [...modes.querySelectorAll('button[aria-pressed="true"]')].find((b) => !/^Any$/.test(b.textContent.trim())); btn.textContent = `Map: ${on ? on.textContent.trim() : 'Both in view'} ▾`; };
+      label();
+      modes.classList.add('mk-modes-hidden');
+      modes.before(btn);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = modes.classList.toggle('mk-modes-pop');
+        modes.classList.toggle('mk-modes-hidden', !open);
+        if (open) { const r = btn.getBoundingClientRect(); modes.style.left = `${Math.max(8, Math.min(r.left, w.innerWidth - 650))}px`; modes.style.top = `${r.bottom + 6}px`; }
+      });
+      modes.addEventListener('click', () => setTimeout(label, 50));
+      d.addEventListener('click', (e) => { if (!modes.contains(e.target) && e.target !== btn && modes.classList.contains('mk-modes-pop')) { modes.classList.remove('mk-modes-pop'); modes.classList.add('mk-modes-hidden'); } });
+    }
+  } else {
+    chips = d.createElement('div');
+    chips.className = 'mk-chips';
+    chips.setAttribute('role', 'tablist');
+    chips.innerHTML = STEPS.map(([id, label], i) => `<button type="button" data-mk="${id}" title="Step ${i + 1}">${label}</button>`).join('');
+    chips.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => go(b.dataset.mk)));
+    d.body.appendChild(chips);
+    pp.classList.add('mk-shift');
+    pp.style.setProperty('--mk-shift', `${SHIFT}px`);
+  }
+
+  // the panel sits where the inspector sits, from its top to just above the time bar
+  const base = { left: 0, top: 0, width: 0 };
+  const measure = () => {
+    pp.classList.remove('mk-shift');
+    const r = pp.getBoundingClientRect();
+    if (variant === 'B') pp.classList.add('mk-shift');
+    if (r.width) Object.assign(base, { left: r.left, top: r.top, width: r.width });
+    const dockTop = L.dock?.el?.getBoundingClientRect().top || w.innerHeight - 140;
+    const top = base.top + (variant === 'B' ? SHIFT : 0);
+    Object.assign(panel.style, { left: `${base.left}px`, top: `${top}px`, width: `${base.width}px`, height: `${Math.max(240, dockTop - 12 - top)}px` });
+    if (chips) Object.assign(chips.style, { left: `${base.left}px`, top: `${base.top}px`, width: `${base.width}px` });
+  };
+  measure();
+  w.addEventListener('resize', measure);
+
+  const state = () => L.api.getState();
+  const place = (s) => (s.id && s.id !== 'custom' ? { site_id: s.id } : { lat_deg: s.latDeg, lon_deg: s.lonDeg });
+  const run = async (name, input) => { const r = await L.core.run(name, input); if (r?.error) throw new Error(r.error); return r; };
+  const cmd = (name, input) => L.commands.run(name, input);
+  const grade = (s, e) => {
+    const power = e ? (e.planned.atEmptyH <= 0 ? 'ok' : e.planned.atEmptyH <= 24 ? 'near' : 'bad') : (s.longestDarkH <= 24 ? 'ok' : s.longestDarkH <= 48 ? 'near' : 'bad');
+    const comms = s.earthPct >= 50 ? 'ok' : s.earthPct >= 25 ? 'near' : 'bad';
+    const sun = s.sunPct >= 70 ? 'ok' : s.sunPct >= 40 ? 'near' : 'bad';
+    const all = [power, comms, sun];
+    return { power, comms, sun, overall: all.includes('bad') ? 'bad' : all.includes('near') ? 'near' : 'ok' };
+  };
+  const VERD = { ok: 'Viable', near: 'Marginal', bad: 'Not viable' };
+
+  let token = 0;
+  const frameFor = (title, sub, body, foot) => { panel.innerHTML = `<div class="mk-head"><h2>${title}</h2><p>${sub}</p></div><div class="mk-body">${body}</div><div class="mk-foot">${foot}</div>`; };
+  const footNav = (prev, next, label) => `${prev ? `<button class="mk-btn ghost" data-go="${prev}">← Back</button>` : ''}<span class="grow"></span>${next ? `<button class="mk-btn pri" data-go="${next}">${label} →</button>` : ''}`;
+  const wire = () => panel.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
+
+  async function renderDate() {
+    const my = ++token, s = state(), P = place(s.site);
+    const start = dayOf(s.landingMs) - 7 * DAY - ((new Date(dayOf(s.landingMs) - 7 * DAY).getUTCDay() + 6) % 7) * DAY;   // a Monday
+    const days = Array.from({ length: 35 }, (_, i) => start + i * DAY);
+    frameFor('When to land', `${s.site.name ?? 'Custom site'} · landing time (UTC) and stay`,
+      `<div class="mk-lbl">Landing (UTC)</div><input class="mk-in" type="datetime-local" id="mk-land" value="${iso(s.landingMs).slice(0, 16)}">
+       <div class="mk-lbl">Stay</div><div class="mk-seg" id="mk-stay">${[7, 14, 30].map((n) => `<button aria-pressed="${n === s.stayDays}" data-n="${n}">${n} days</button>`).join('')}</div>
+       <div class="mk-lbl">Landing days · hours with the Sun and the Earth both in view over a ${s.stayDays}-day stay</div>
+       <div class="mk-cal" id="mk-cal">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((x) => `<span class="wd">${x}</span>`).join('')}<span class="mk-wait" style="grid-column:1/-1">Computing…</span></div>
+       <div class="mk-legend"><i></i>fewer → more hours</div>
+       <div class="mk-lbl">Best starts nearby</div><div class="mk-best" id="mk-best"><span class="mk-wait">Computing…</span></div>`,
+      footNav('site', 'verdict', 'See the verdict'));
+    wire();
+    const land = panel.querySelector('#mk-land');
+    land.addEventListener('change', () => { if (land.value) cmd('set_landing', { date: `${land.value}Z` }); });
+    panel.querySelectorAll('#mk-stay button').forEach((b) => b.addEventListener('click', () => cmd('set_stay', { days: +b.dataset.n })));
+    try {
+      const res = [];
+      for (let i = 0; i < days.length; i += 24) res.push(...(await run('compare_scenarios', { stay_days: s.stayDays, scenarios: days.slice(i, i + 24).map((t) => ({ ...P, landing: isoDay(t) })) })).scenarios);
+      if (my !== token) return;
+      const max = Math.max(1, ...res.map((r) => r.bothH));
+      panel.querySelector('#mk-cal').innerHTML = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((x) => `<span class="wd">${x}</span>`).join('') + res.map((r, i) => {
+        const f = r.bothH / max, c = f > 0.66 ? '#7fd18b' : f > 0.33 ? '#c9a24a' : '#4a4d52';
+        return `<button style="background:${c}" data-t="${days[i]}" aria-pressed="${dayOf(s.landingMs) === days[i]}" title="${fmtDay(days[i])}: ${Math.round(r.bothH)} h Sun and Earth, longest dark ${dark(r.longestDarkH)}">${new Date(days[i]).getUTCDate()}<small>${Math.round(r.bothH)} h</small></button>`;
+      }).join('');
+      panel.querySelectorAll('#mk-cal button').forEach((b) => b.addEventListener('click', () => cmd('set_landing', { date: `${isoDay(+b.dataset.t)}T${iso(s.landingMs).slice(11, 16)}Z` })));
+      const best = await run('best_landing_dates', { ...P, stay_days: s.stayDays, from: isoDay(s.landingMs - 28 * DAY), to: isoDay(s.landingMs + 56 * DAY), count: 4 });
+      if (my !== token) return;
+      panel.querySelector('#mk-best').innerHTML = best.candidates.map((c) => `<button data-l="${c.landing}"><span>${new Date(c.landing).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</span><span>${c.display} both · dark ${dark(c.exact.longestDarkH)}</span></button>`).join('') || '<span class="mk-wait">None in range.</span>';
+      panel.querySelectorAll('#mk-best button').forEach((b) => b.addEventListener('click', () => cmd('set_landing', { date: b.dataset.l })));
+    } catch (e) { panel.querySelector('#mk-cal').innerHTML = `<span class="mk-wait">${e.message}</span>`; }
+  }
+
+  async function renderVerdict() {
+    const my = ++token, s = state(), P = place(s.site);
+    frameFor('Is it viable?', `${s.site.name ?? 'Custom site'} · landing ${fmtDT(s.landingMs)} · ${s.stayDays}-day stay`, '<span class="mk-wait">Computing…</span>', footNav('date', 'compare', 'Compare options'));
+    wire();
+    try {
+      const [sum, ev, en] = await Promise.all([
+        run('site_summary', { stay_days: s.stayDays, scenarios: [{ ...P, landing: iso(s.landingMs) }] }),
+        run('next_events', { ...P, at: iso(s.cursorMs ?? s.landingMs) }),
+        run('energy_summary', { ...P, landing: iso(s.landingMs), stay_days: s.stayDays }).catch(() => null),
+      ]);
+      if (my !== token) return;
+      const r = sum.results[0], g = grade(r, en), cov = r.stay.coveredH || 1;
+      const why = [];
+      if (g.power !== 'ok') why.push(en ? `the battery runs empty for ${hrs(en.planned.atEmptyH)}` : `a ${dark(r.longestDarkH)} dark spell`);
+      if (g.comms !== 'ok') why.push(`the Earth is in view only ${Math.round(r.earthPct)} % of the stay`);
+      if (g.sun !== 'ok') why.push(`the Sun is in view only ${Math.round(r.sunPct)} % of the stay`);
+      const head = g.overall === 'ok' ? 'Viable: power and communications hold for the whole stay.' : `${VERD[g.overall]}: ${why.join('; ')}.`;
+      const bar = (k, h, c) => `<div class="mk-bar"><span>${k}</span><i><b style="width:${(h / cov) * 100}%;background:${c}"></b></i><span>${Math.round(h)} h</span></div>`;
+      const body = (b, name) => `<div class="mk-tile ${name}"><div class="k">${name === 'sun' ? 'Sun' : 'Earth'} now · ${fmtDT(Date.parse(ev.at)).slice(5, 16)}</div><div class="v">${b.elDeg.toFixed(1)}°</div><div class="s">${b.visible ? 'in view' : `behind the skyline (${b.skylineDeg.toFixed(1)}°)`} · ${b.countdown ?? ''}</div></div>`;
+      panel.querySelector('.mk-body').innerHTML = `
+        <div class="mk-verdict ${g.overall}">${head}<small>${en ? `Battery ${en.assumptions.batteryHours} h of load, panels ${en.assumptions.panelToLoad}× the load, tracking (assumed, as Power in Details).` : ''} Direct-to-Earth link.</small></div>
+        <div class="mk-tiles">${body(ev.sun, 'sun')}${body(ev.earth, 'earth')}</div>
+        <div class="mk-lbl">Over the stay (${Math.round(cov)} h)</div>
+        ${bar('Sunlit', r.sunH, 'var(--sun, #f2b33d)')}${bar('Earth in view', r.earthH, 'var(--earth, #4cb3f0)')}${bar('Both', r.bothH, '#fff')}
+        <div class="mk-checks">
+          <div class="mk-check"><span class="mk-g ${g.power}">${GR[g.power]}</span><span>Power<small>${en ? (en.planned.atEmptyH > 0 ? `Battery empty ${hrs(en.planned.atEmptyH)}, asleep ${hrs(en.planned.asleepH)}` : `Never empty; lowest ${en.planned.minBatteryH.toFixed(1)} h of load left`) : ''} · longest dark ${dark(r.longestDarkH)}</small></span></div>
+          <div class="mk-check"><span class="mk-g ${g.comms}">${GR[g.comms]}</span><span>Communications<small>Earth in view ${Math.round(r.earthPct)} % of the stay (≥ 50 % passes)</small></span></div>
+          <div class="mk-check"><span class="mk-g ${g.sun}">${GR[g.sun]}</span><span>Sunlight<small>Sun in view ${Math.round(r.sunPct)} % (≥ 70 % passes), peak ${r.peakSunElDeg.toFixed(1)}°</small></span></div>
+        </div>
+        <p class="mk-note">The numbers are the app's (site_summary, next_events, energy_summary); the pass marks are the mock's. <a data-detail="overview">Full details</a> · <a data-detail="power">Power</a> · <a data-detail="comms">Comms</a></p>`;
+      panel.querySelectorAll('[data-detail]').forEach((a) => a.addEventListener('click', () => cmd('open_site_detail', { tab: a.dataset.detail })));
+    } catch (e) { panel.querySelector('.mk-body').innerHTML = `<span class="mk-wait">${e.message}</span>`; }
+  }
+
+  let cols = null, colsKey = '';
+  async function renderCompare() {
+    const my = ++token, s = state(), P = place(s.site);
+    const key = `${s.site.id}|${s.site.latDeg}|${s.landingMs}|${s.stayDays}`;
+    if (!cols || colsKey !== key) {
+      colsKey = key;
+      cols = [{ label: `+${s.slipDays || 14} d`, site: s.site, landingMs: s.landingMs + (s.slipDays || 14) * DAY }];
+      try {
+        const b = await run('best_landing_dates', { ...P, stay_days: s.stayDays, from: isoDay(s.landingMs + DAY), to: isoDay(s.landingMs + 28 * DAY), count: 1 });
+        if (b.candidates[0]) cols.push({ label: 'Best nearby', site: s.site, landingMs: Date.parse(b.candidates[0].landing) });
+      } catch { /* none */ }
+    }
+    frameFor('Compare options', 'The plan against a slipped date, another site or the best date nearby. Any column can become the plan.', '<span class="mk-wait">Computing…</span>', footNav('verdict', 'route', 'Plan the route'));
+    wire();
+    try {
+      const all = [{ label: 'Plan', site: s.site, landingMs: s.landingMs, plan: true }, ...cols];
+      const res = await run('compare_scenarios', { stay_days: s.stayDays, scenarios: all.map((c) => ({ ...place(c.site), landing: iso(c.landingMs) })) });
+      if (my !== token) return;
+      const rows = [['Both', 'bothH', 1], ['Sunlit', 'sunH', 1], ['Earth', 'earthH', 1], ['Max dark', 'longestDarkH', -1]];   // Both = Sun and Earth in view; Max dark = the longest spell without the Sun
+      const sc = res.scenarios;
+      const others = L.api.sites.filter((x) => x.id !== s.site.id && x.latDeg < -80);
+      panel.querySelector('.mk-body').innerHTML = `
+        <div class="mk-adds"><button class="mk-btn" data-add="7">+ Slip 7 d</button><button class="mk-btn" data-add="14">+ Slip 14 d</button>
+          <select id="mk-site" aria-label="Add another site"><option value="">+ Other site…</option>${others.map((x) => `<option value="${x.id}">${x.name}</option>`).join('')}</select></div>
+        <table class="mk-cmp"><thead><tr><th></th>${all.map((c, i) => `<th>${c.label}${i ? ` <button class="mini x" data-del="${i - 1}" aria-label="Remove">×</button>` : ''}<small>${(c.site.name ?? 'Custom').split(' ')[0]} · ${fmtDay(c.landingMs)}</small></th>`).join('')}</tr></thead><tbody>
+        ${rows.map(([k, f, better]) => `<tr><td>${k}</td>${sc.map((r, i) => { const v = r[f], dlt = Math.round(v - sc[0][f]); const cls = i === 0 || !dlt ? 'same' : dlt * better > 0 ? 'up' : 'down'; return `<td>${hrs(v)}${i ? `<span class="d ${cls}">${dlt > 0 ? '+' : dlt < 0 ? '−' : '±'}${hrs(Math.abs(dlt))}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}
+        <tr class="v"><td>Verdict</td>${sc.map((r) => `<td>${VERD[grade(r, null).overall]}</td>`).join('')}</tr>
+        <tr><td></td>${all.map((c, i) => (i ? `<td><button class="mini" data-make="${i - 1}">Make plan</button></td>` : '<td></td>')).join('')}</tr>
+        </tbody></table>
+        <p class="mk-note">Numbers from compare_scenarios (the app's Compare). <a data-detail="compare">Open Compare in Details</a></p>`;
+      const push = (c) => { cols.push(c); if (cols.length > 3) cols.shift(); renderCompare(); };
+      panel.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => push({ label: `+${b.dataset.add} d`, site: s.site, landingMs: s.landingMs + +b.dataset.add * DAY })));
+      panel.querySelector('#mk-site').addEventListener('change', (e) => { const x = L.api.sites.find((y) => y.id === e.target.value); if (x) push({ label: x.name.split(' ')[0], site: x, landingMs: s.landingMs }); });
+      panel.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { cols.splice(+b.dataset.del, 1); renderCompare(); }));
+      panel.querySelectorAll('[data-make]').forEach((b) => b.addEventListener('click', async () => {
+        const c = cols[+b.dataset.make];
+        if (c.site.id !== s.site.id || c.site.latDeg !== s.site.latDeg) await cmd('select_site', c.site.id && c.site.id !== 'custom' ? { site_id: c.site.id } : { lat_deg: c.site.latDeg, lon_deg: c.site.lonDeg });
+        await cmd('set_landing', { date: iso(c.landingMs) });
+        cols = null;
+      }));
+      panel.querySelectorAll('[data-detail]').forEach((a) => a.addEventListener('click', () => cmd('open_site_detail', { tab: a.dataset.detail })));
+    } catch (e) { panel.querySelector('.mk-body').innerHTML = `<span class="mk-wait">${e.message}</span>`; }
+  }
+
+  const RENDER = { date: renderDate, verdict: renderVerdict, compare: renderCompare };
+  function go(id) {
+    step = id; store.set('mk-step', id);
+    bar?.mark(id);
+    chips?.querySelectorAll('button').forEach((b) => (b.dataset.mk === id ? b.setAttribute('aria-current', 'step') : b.removeAttribute('aria-current')));
+    const own = !!RENDER[id];
+    panel.hidden = !own;
+    pp.classList.toggle('mk-hide', own);
+    measure();
+    if (own) RENDER[id]();
+    if (id === 'site') {
+      const reopen = d.querySelector('.side-reopen');
+      if (reopen && reopen.offsetParent) reopen.click();
+      say('Step 1 Site: the site list and the inspector are the app\'s own. Click the Moon, a site or Coordinates; Where to land (in the point bar) screens an area.');
+    } else if (id === 'route') {
+      const a = [...d.querySelectorAll('a.ab-btn')].find((x) => /rover route/i.test(x.textContent));
+      if (a) a.click();
+      say('Step 5 Route: the app\'s own route card (Short, Flat, Sunny). Finalise is the next step in the bar.');
+    } else say(`Step ${STEPS.findIndex(([k]) => k === id) + 1} ${STEPS.find(([k]) => k === id)[1]}: a mock panel in the inspector's place; numbers from the app's tools, changes through its commands.`);
+  }
+
+  // follow the app: a new site, date or stay redraws the open step (the Verdict's "now" follows the clock)
+  let last = '';
+  setInterval(() => {
+    if (!RENDER[step]) return;
+    const s = state();
+    const key = `${s.site.id}|${s.site.latDeg}|${s.site.lonDeg}|${s.landingMs}|${s.stayDays}${step === 'verdict' ? `|${Math.floor((s.cursorMs ?? 0) / HOUR)}` : ''}`;
+    if (key !== last) { last = key; RENDER[step](); }
+  }, 700);
+  go(store.get('mk-step', step));   // a step link on Finalise / Execute set it before coming back
+}
+</script>
+</body>
+</html>
