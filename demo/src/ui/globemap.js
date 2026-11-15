@@ -17,6 +17,7 @@ import { toXY, fromXY, TERRAIN_MAX_LAT } from '../terrain.js';
 import { loadData } from '../data-loader.js';
 import { globalGrid, globalFractions, globalStates } from '../globalheat.js';
 import { heatColour, readColours } from '../map/layers.js';
+import { clampView } from '../map/view.js';
 import { GAZETTEER } from '../lander/gazetteer.js';
 
 const RAD = Math.PI / 180;
@@ -142,7 +143,8 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     const want = viewCovering({ x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad }, frame.geo);
     const cur = frame.view;
     const same = Math.abs(cur.zoom - want.zoom) / want.zoom < 0.04 && Math.hypot(cur.cx - want.cx, cur.cy - want.cy) < 0.02 * (2 * MAX_HALF) / want.zoom;
-    if (!same) { requested = want; api.onPolarView?.(want); }
+    // (the map clamps a view to its square; the clamped view is what it will show)
+    if (!same) { requested = clampView(want); api.onPolarView?.(requested); }
     else requested = { ...cur };
     schedule(60);
   }

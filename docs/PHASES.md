@@ -263,7 +263,7 @@ minimap.
   Save mission; coordinates: Apply, Pick, Add vertex). It sits in the free span between the docked panels and
   shortens its labels (short names, then two rows, then icons) to fit. Globe: Fly to, waypoints, mapped areas.
 
-## Phase 9: plan before launch, then fly (15 Nov, 00:10–01:20 GMT)
+## Phase 9: plan before launch, then fly (15 Nov, 00:10–01:30 GMT)
 
 Asked by the team: all planning happens before launch, the Landing page becomes mission execution, the Rover step
 becomes the Map and covers the whole Moon, and an explicit "Finalise mission configuration" step freezes the plan.
@@ -274,17 +274,20 @@ Landing → Surface operations.
   (`lander.html`). Execute is marked locked until a configuration is frozen. The six execution phases are named once
   (`EXEC_PHASES`, each with the lander phases it covers). The globe is no longer a step: it is the Map's whole-Moon
   level, the surface-operations view, and still a page of its own.
-- **Map: one view of the whole Moon** (`ui/moonlayer.js`; first built as a Moon · Region · Site switch, replaced at the
-  team's request by one continuous view). Zoomed out, the map is the 3D globe in a frame inside the map, under the
-  page's panels (`globe.html#pick=1`; LOLA 7.6 km → 474 m, polar 240–20 m); a click anywhere makes that point the site
-  and the site card follows (north of 80°S the skyline is computed from the global terrain). Zooming in over the
-  south pole (south of 80°S, camera closer than 600 km) hands over to the detailed polar map at the same place and
-  about the same scale; zooming out past the whole polar map (wheel or −) hands back to the globe. A site outside the
-  polar map opens on the globe; choosing a polar site from the list while the globe shows flies down and hands over
-  at the site. The map's zoom buttons drive the globe while it shows; the drawing tools and the map modes are set
-  aside. **Where to land** (`planner.html`, moved off the lander page) is a tool from the action bar, over the page:
-  ellipse scores and better spots near the site, "Use this site" sets the site and its first lit landing time. The
-  point and route action bars end with **Finalise mission**.
+- **Map: the 3D Moon is the map** (`ui/globemap.js`, `globalheat.js`; inventory and parity in [MAP-3D.md](MAP-3D.md)).
+  First built as a Moon · Region · Site switch, then as a globe that handed over to the polar map; at the team's
+  request the polar map is no longer shown at all. One globe zooms from the whole Moon to 20 m. Inside 80°S the polar
+  map keeps running underneath, its view following the ground in sight, and its whole picture (heat modes, PSR,
+  terrain style, contours, graticule and names, sites, best cells, regions, routes with slope colours, traps, havens,
+  stops, waypoints, the self-driving search, station coverage, the Sun and Earth arrows) is draped on the terrain in
+  the globe's shader (`globe-view.js` `setOverlay`). Clicks and drawing gestures on the globe are replayed as the polar
+  map's own pointer events at the same ground point, so picking, snapping, the hover card and the rectangle, circle,
+  polygon and route tools work on the 3D surface; when the polar map moves by itself (fit to a route) the camera
+  follows. Outside 80°S: the heat modes from the ephemeris with a smooth horizon (1° cells), labels for the listed
+  sites and 32 gazetteer features, the globe's terrain style (Topo = height colours, Real light = the Sun at the
+  playhead) and contours. North of 80°S the selected site's skyline is computed from the global LOLA terrain for the
+  site card. **Where to land** (`planner.html`) is a tool from the action bar; the point and route action bars end with
+  **Finalise mission**.
 - **Finalise** (`finalise.html`, `lander/finalise-main.js`, `mission-config.js`): plans the flight to the Map's site
   and time with the lander's planner, finds the landing window (Sun and Earth above the skyline around the requested
   time), reads the chosen rover route, shows the assumed vehicle (editable here for the last time) and what each phase
@@ -299,13 +302,17 @@ Landing → Surface operations.
   is never written by execution.
 - **Build**: `tools/build-lander.mjs` builds `lander.html`, `planner.html` and `finalise.html` from the lander modules;
   the two new pages copy `lander.html`'s CSS at build time.
-- Tests: `tests/moonlayer.test.mjs` (when the globe hands over, the scale it hands over at), `tests/mission-config.test.mjs` (the configuration, its id, storage, changes since freezing, the window,
+- Tests: `tests/globemap.test.mjs` (the polar view that covers the ground in sight, the camera distance, the heading),
+  `tests/globalheat.test.mjs` (smooth-horizon fractions and states), `tests/mission-config.test.mjs` (the configuration, its id, storage, changes since freezing, the window,
   the route summary, the go / no-go levels), `tests/mission-flow.test.mjs` (new stages and links, the execution
   phases cover every lander phase in order), `tests/lander-flow.test.mjs` (what the execution page flies, the pages
-  built). Full suite 741 tests: 725 pass, 16 skipped (data not on disk), 0 fail.
-- Checked in the browser at 1440 × 900 and 375 × 812: polar map → zoom out → whole Moon → click a point (site card at
-  52.5°S 45°W) → zoom in over the pole → polar map; Apollo 11 opens on the globe, choosing Shackleton flies down and
-  hands over at it; Where to land → planner; Finalise → Freeze
+  built). Full suite 744 tests: 728 pass, 16 skipped (data not on disk), 0 fail.
+- Checked in the browser at 1440 × 900 and 375 × 812: the polar layers draped at the cap, zoom out to the near side
+  (maria names, Apollo sites, contours), tilt over Shackleton (relief under the heat and contours), a click on the
+  Sverdrup floor picks it (card: permanent shadow), a rectangle drawn on the surface gives region A's statistics, a
+  route drawn from Shackleton ridge to de Gerlache rim 2 snaps to both sites and plans three candidates, draped with
+  slope colours, traps, the empty-battery mark and station coverage, and the camera follows the fit; Where to land →
+  planner; Finalise → Freeze
   → Execute (phase strip, landing, surface operations with the frozen route); the phone layouts of all three steps.
 - Not done: the user guide (`docs/GUIDE.md`, `docs/guide/`) still shows the old three steps and needs a re-shoot; the
   rover planner itself still needs the polar data (south of 80°S); the launch ascent is not modelled (the timeline
