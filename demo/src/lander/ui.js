@@ -143,7 +143,7 @@ export function renderLanding(el, checks, plan, terrainNote, roverUrl = null, la
     ${roverUrl ? '<p class="note">Next: <b>Plan the rover route</b> in the bar above the view opens step 2 (the navigator\'s route card) at this touchdown point and time.</p>' : ''}`;
 }
 
-const FIELDS = [
+export const FIELDS = [
   ['dryMassKg', 'Dry mass', 'kg'], ['propellantKg', 'Propellant', 'kg'], ['mainThrustN', 'Main engine thrust', 'N'], ['ispS', 'Specific impulse', 's'],
   ['throttleMin', 'Throttle floor', '0–1'], ['reserveDvMs', 'Δv reserve', 'm/s'], ['arrayPowerW', 'Solar array (normal Sun, 1 AU)', 'W'], ['batteryWh', 'Battery', 'Wh'],
 ];
