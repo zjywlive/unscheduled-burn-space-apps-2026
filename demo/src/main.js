@@ -1,12 +1,12 @@
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
 import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } from './mission-flow.js';
-import { createMapLevels } from './ui/maplevels.js';
+import { createMoonLayer, zoomForDist, POLAR_EDGE_LAT } from './ui/moonlayer.js';
 import { createSiteContexts } from './lander/globalsite.js';
 import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
 import { summarize, summarizePair, sampleSeries } from './windows.js';
-import { formatCoords } from './sites.js';
+import { formatCoords, parseCustomSite } from './sites.js';
 import { parseHash, toHash, alternativeOf, cleanMaxSlope, cleanMaxDark, cleanWeights, cleanEnergy, cleanRelay, cleanRoutePlan, shapeParam, cleanStay, SHEET_TABS } from './state.js';
 import { findingSentence, mapFinding } from './finding.js';
 import { fmtDay, fmtSpan, fmtHours, fmtPct, DASH } from './format.js';
@@ -167,9 +167,9 @@ function start() {
   let routePoints = state.routePlan && !state.routePlan.selected ? state.routePlan.points : null;
 
   const shell = createShell(root, { sites, state, onChange: (patch) => update(patch) });
-  // the Map's levels of detail (ui/maplevels.js): the whole Moon and the region in frames over this page;
-  // "Use this site" in the region comes back here with the new site and landing time
-  const levels = createMapLevels(document, { slot: shell.levelSlot, topbar: shell.topbar, getMission: () => readMission(), onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); } });
+  // the Map is one view of the whole Moon (ui/moonlayer.js): the globe when zoomed out, this page's polar map when
+  // zoomed in over the south pole; made once the map exists (below)
+  let moon = null, pickedOnGlobe = false;
 
   // ---------- data packs on demand (§4.1, §5.1) ----------
   const packs = {};   // name → 'loading' | 'ok' | 'error'
@@ -332,7 +332,9 @@ function start() {
     onDial: (on) => settings.set('skyDial', !!on),
     onLivePref: () => renderMap(),
     onDetails: () => openSheet('overview'),
-    onLevel: (lv) => levels.show(lv),
+    onLevel: () => moon?.openRegion(),
+    onBeyondEdge: () => { const v = mapView.frame.view, c = fromXY(v.cx, v.cy); moon?.showMoon({ latDeg: c.latDeg, lonDeg: c.lonDeg, distKm: 1000 }); },
+    onZoomOverride: (dir) => moon?.zoom(dir) ?? false,
     onFinalise: () => goFinalise(),
     onLandNow: () => landHereNow(),
     // phase 6 A: the way out's "Set as alternative" (the slip the time dock offers, −60 to 60 days)
@@ -343,6 +345,32 @@ function start() {
     onProfileHover: (pt) => { profileAt = pt ? { xKm: pt.xKm, yKm: pt.yKm } : null; mapView.setProfileAt(profileAt); },
     describe: (xKm, yKm, target) => describe(xKm, yKm, target),
   }) : null;
+  if (mapView) {
+    moon = createMoonLayer(document, {
+      host: mapView.frame.el, app: shell.app, topbar: shell.topbar, getMission: () => readMission(),
+      // a click on the globe: that point becomes the site, anywhere on the Moon (the globe stays where it is)
+      onPick: ({ latDeg, lonDeg }) => { const r = parseCustomSite(String(latDeg), String(lonDeg)); if (r.ok) { pickedOnGlobe = true; update({ site: r.site }); pickedOnGlobe = false; } },
+      // zoomed in over the south pole: the polar map at the same place and about the same scale
+      onEnterPolar: ({ latDeg, lonDeg, distKm }) => { const [x, y] = toXY(latDeg, lonDeg); update({ viewport: { cx: x, cy: y, zoom: zoomForDist(distKm) } }); },
+      // "Use this site" in Where to land
+      onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); },
+    });
+  }
+  // a new site: outside the polar map the globe shows it; on it, a globe that is showing flies down and hands over
+  let moonSiteKey = null;
+  function syncMoonSite() {
+    const s0 = state.site;
+    if (!moon || !s0) return;
+    const key = `${s0.latDeg},${s0.lonDeg}`;
+    if (key === moonSiteKey) return;
+    const first = moonSiteKey === null;
+    moonSiteKey = key;
+    moon.mark(s0);
+    if (pickedOnGlobe) return;
+    const cam = { latDeg: s0.latDeg, lonDeg: s0.lonDeg };
+    if (s0.latDeg > POLAR_EDGE_LAT) { if (moon.isMoon) moon.flyTo({ ...cam, distKm: 420 }); else moon.showMoon({ ...cam, distKm: first ? 1600 : 420 }); }
+    else if (moon.isMoon) moon.flyTo({ ...cam, distKm: 380 });
+  }
   // ---------- phase 4: the workflow cards in the right panel's folds ----------
   // Each card works only while its fold is open; refreshFolds() runs after every map render and cursor move.
   // fix L5: the cards start from the hash and write their inputs back to it (only the cards' exported
@@ -1341,6 +1369,7 @@ function start() {
   }
   window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
   function render() {
+    syncMoonSite();
     saveMission();
     syncLanded();
     derived = compute();

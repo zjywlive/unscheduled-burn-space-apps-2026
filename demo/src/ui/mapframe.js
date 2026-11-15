@@ -853,7 +853,18 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
 
   function zoomBy(factor, px = geo.Cx, py = geo.Cy) {
     stopFly();
+    // zooming out of the whole polar map: the parent goes on to the whole Moon (cb.onBeyondEdge)
+    if (factor < 1 && view.zoom <= MIN_ZOOM + 1e-9 && cb.onBeyondEdge) { cb.onBeyondEdge(); return; }
     setView(zoomAtR(view, px, py, factor), true);
+  }
+  // a wheel that keeps zooming out at the whole polar map (about two notches past it) leaves for the whole Moon
+  let edgePush = 0, edgeAt = 0;
+  function pushEdge(dy) {
+    const now = performance.now();
+    if (now - edgeAt > 600) edgePush = 0;
+    edgeAt = now;
+    edgePush += dy;
+    if (edgePush > 220) { edgePush = 0; cb.onBeyondEdge?.(); }
   }
 
   // fix L3: a programmatic move eases to its target (about half a second; at once with reduced motion).
@@ -951,6 +962,7 @@ export function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     stopFly();
     const [px, py] = local(e);
     const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    if (dy > 0 && view.zoom <= MIN_ZOOM + 1e-9) { pushEdge(dy); return; }
     gesture = { kind: 'wheel' };
     setSnap(null); hover.update(null);
     setView(zoomAtR(view, px, py, Math.exp(-dy * 0.002)), false);

@@ -125,13 +125,11 @@ export function createShell(root, { sites, state, onChange }) {
   // phase 5: the modes and Layers sit in the middle of the top bar in the big layout (ui/mapview.js moves them)
   const topModes = h('div', { class: 'topbar-modes' });
 
-  const levelSlot = h('div', { class: 'topbar-levels' });
   const topbar = h('header', { class: 'topbar' },
     h('div', { class: 'topbar-brand' }, brand('brand-top'),
       h('div', { class: 'site-picker' }, h('label', { class: 'sr-only', for: siteSelect.id }, 'Landing site'), siteSelect)),
-    // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map; then its levels of
-    // detail (Moon, Region, Site: ui/maplevels.js fills levelSlot)
-    h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null, levelSlot),
+    // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map
+    h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null),
     h('div', { class: 'topbar-nav' },
       h('nav', { class: 'views', 'aria-label': 'Views' }, viewButtons),
       topModes,
@@ -222,7 +220,7 @@ export function createShell(root, { sites, state, onChange }) {
     regions: { finding, panorama, elevation, compare, events, evidence, brief, mapTitle, mapFinding, mapCard, pointCard, filtersCard, regionCard, routeCard },
     sheetParts, mapSection,
     tourButton, askButton, settingsButton, topModes,
-    app, sidebar, sideToggle, sideReopen, levelSlot, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
+    app, sidebar, sideToggle, sideReopen, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
     sync,
   };
 }

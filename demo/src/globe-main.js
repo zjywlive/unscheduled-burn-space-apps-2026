@@ -175,7 +175,16 @@ export function startGlobe() {
       let hashTimer = 0;
       const routeMode = hashFlag('route') || cfgMode;
       const keep = `${hashFlag('route') ? '&route=1' : ''}${embed ? '&embed=1' : ''}${pickMode ? '&pick=1' : ''}${cfgMode ? '&cfg=1' : ''}`;
-      const onCamera = (c) => { clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + keep), 300); };
+      // pick mode: the Map hears where the camera is (it hands over to its polar map when zoomed in over the pole)
+      let camSent = 0, camTimer = 0;
+      const sendCam = (c) => { try { window.parent.postMessage({ type: 'lsn-camera', latDeg: c.lat, lonDeg: c.lon, distKm: c.dist }, '*'); } catch { /* no parent */ } };
+      const onCamera = (c) => {
+        clearTimeout(hashTimer); hashTimer = setTimeout(() => history.replaceState(null, '', cameraToHash(c) + keep), 300);
+        if (!pickMode) return;
+        const now = performance.now();
+        clearTimeout(camTimer);
+        if (now - camSent > 120) { camSent = now; sendCam(c); } else camTimer = setTimeout(() => { camSent = performance.now(); sendCam(c); }, 130);
+      };
       // tiles over a high-resolution patch may refine to its pixel size (5 m: depth 12, 10 m: 11), elsewhere 20 m (10)
       const capDepth = (b) => { const k = hires.finestKmAt(b); return k === null ? 10 : k <= 0.0051 ? 12 : k <= 0.0101 ? 11 : 10; };
       const fromHash = cameraFromHash(location.hash);
@@ -189,7 +198,7 @@ export function startGlobe() {
       view = createGlobeView(canvas, terrain, { requestSouth, initial: startAt, onCamera, capDepth });
       view.onFrame(frame);
       window.__globe = { view, terrain, pyramid, hires };   // for debugging from the console
-      showLanding(view, mission, labels, labelEls, chips);
+      if (!pickMode) showLanding(view, mission, labels, labelEls, chips);
       // camera buttons; using them (other than zoom and tilt) leaves the route's follow mode
       const controls = embed ? null : createCameraControls(view, { onUser: (a) => { if (!['in', 'out', 'tiltUp', 'tiltDown'].includes(a)) window.__globe.route?.stopFollow?.(); } });
       window.__globe.controls = controls;
@@ -220,14 +229,11 @@ export function startGlobe() {
   })();
 }
 
-// The Map's whole-Moon level: a click (not a drag) on the terrain picks the point. In the Map's frame it goes to the
-// Map (postMessage { type: 'lsn-pick' }), which opens the region around it; on its own page, the region planner.
+// The Map's whole-Moon view (in a frame on index.html): a click (not a drag) on the terrain picks the site (postMessage
+// { type: 'lsn-pick' }); the Map sends lsn-fly { latDeg, lonDeg, distKm } and lsn-zoom { dir }. On its own page a
+// click opens the region planner at the point.
 function startPick(view) {
   const framed = window.parent && window.parent !== window;
-  const hint = document.createElement('div');
-  hint.className = 'glass pick-hint';
-  hint.innerHTML = '<b>Whole Moon</b> · drag to turn, scroll to zoom · <b>click a point</b> to look at the region around it';
-  document.body.appendChild(hint);
   let down = null;
   view.canvas.addEventListener('pointerdown', (e) => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
   view.canvas.addEventListener('pointerup', (e) => {
@@ -236,10 +242,31 @@ function startPick(view) {
     const hit = view.pick(e.clientX, e.clientY);
     if (!hit) return;
     const latDeg = +hit.latDeg.toFixed(4), lonDeg = +(((hit.lonDeg % 360) + 360) % 360).toFixed(4);
-    hint.innerHTML = `<b>${Math.abs(latDeg).toFixed(2)}°${latDeg < 0 ? 'S' : 'N'} ${lonDeg.toFixed(2)}°E</b> · opening the region around it…`;
     if (framed) window.parent.postMessage({ type: 'lsn-pick', latDeg, lonDeg }, '*');
     else location.href = stageUrl('region', { latDeg, lonDeg });
   });
+  // the Map's selected site, drawn as a label that stays on screen (lsn-mark { latDeg, lonDeg, name })
+  const mark = document.createElement('div');
+  mark.className = 'site site-lander pick-mark';
+  mark.hidden = true;
+  document.getElementById('labels')?.appendChild(mark);
+  let markAt = null;
+  view.onFrame(() => {
+    if (!markAt) return;
+    const p = view.project(markAt.latDeg, markAt.lonDeg);
+    mark.hidden = !p;
+    if (p) mark.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+  });
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || e.source !== window.parent) return;
+    const c = view.camera;
+    if (d.type === 'lsn-mark' && Number.isFinite(d.latDeg)) { markAt = d; mark.textContent = d.name || 'Site'; view.redraw?.(); }
+    if (d.type === 'lsn-fly' && Number.isFinite(d.latDeg)) view.flyTo({ lat: d.latDeg, lon: d.lonDeg, dist: d.distKm ?? c.dist, tilt: 0, heading: 0, ms: 1400 });
+    if (d.type === 'lsn-zoom') view.flyTo({ lat: c.lat, lon: c.lon, dist: Math.max(0.5, Math.min(14000, c.dist * (d.dir === 'in' ? 1 / 1.8 : 1.8))), tilt: c.tilt, heading: c.heading, ms: 450 });
+  });
+  // the Map may send before this view exists: it waits for this
+  if (framed) window.parent.postMessage({ type: 'lsn-ready' }, '*');
 }
 
 // Where the craft lands: the touchdown written by the lander page (a lander on its legs), else the mission's

@@ -25,7 +25,7 @@ const SCENARIOS = [
     { label: 'startup data packs registered', expr: "typeof window.__lsnData === 'function' && ['dem_480m', 'horizon_grid', 'slope_2km', 'shadow_2km'].every((n) => document.querySelector(`script[src=\"data/js/${n}.js\"]`) && !(n in window.__lsnStore)) && document.querySelector('.map-frame')?.dataset.demKm === '0.48'" },
     // an on-demand pack injected as a classic script loads from file:// (slope_1km: small, made by workflow A)
     { label: 'on-demand data pack loads from file://', expr: "new Promise((ok) => { const s = document.createElement('script'); s.src = 'data/js/slope_1km.js'; s.onload = () => ok('slope_1km' in window.__lsnStore); s.onerror = () => ok(false); document.head.append(s); })" },
-  ], mustContain: ['Lunar south pole', 'South pole map', 'Selected point', 'Best cells', 'data-heat="done"', 'of the mapped area has both Sun and Earth in view', 'Top 5 for this mode', 'class="timedock', 'Now, over skyline', 'data-action="details"', '>Live<', '>Layers<'] },
+  ], mustContain: ['Lunar south pole', 'Moon map', 'Selected point', 'Best cells', 'data-heat="done"', 'of the mapped area has both Sun and Earth in view', 'Top 5 for this mode', 'class="timedock', 'Now, over skyline', 'data-action="details"', '>Live<', '>Layers<'] },
   { hash: '#view=map&mode=change&slip=0', mustContain: ['Set a slip to see what changes.'] },
   { hash: '#view=map&mode=now', mustContain: ['Sun only', 'Earth only', '>Live<', 'of the mapped area has both Sun and Earth in view.'] },
   { hash: '#view=map&mode=sun', mustContain: ['of the mapped area is sunlit for at least half', 'data-heat="done"'] },

@@ -698,21 +698,25 @@ th:last-child, td:last-child { padding-right: 0; }
 .terrain-table .terrain-note { font-size: var(--fs-small); line-height: 16px; }
 
 /* styles/phase10-flow.css */
-/* ---------- mission flow: the steps and the Map's levels of detail (mission-flow.js, ui/maplevels.js) ---------- */
-/* the top bar's flow group: the steps (Plan 1 Map › 2 Finalise · Fly 3 Execute), then Moon · Region · Site */
+/* ---------- mission flow: the steps and the whole Moon in the Map (mission-flow.js, ui/moonlayer.js) ---------- */
+/* the top bar's steps: Plan 1 Map › 2 Finalise · Fly 3 Execute */
 .topbar-stages { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .is-bigmap .topbar-stages { margin-left: 0; flex: none; }
 @media (max-width: 1100px) {
   .topbar-stages { order: 1; width: 100%; margin: 0 0 8px; overflow-x: auto; scrollbar-width: none; }
   .topbar-stages::-webkit-scrollbar { display: none; }
 }
-.map-levels { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); flex: none; }
-.map-levels button { height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: none; color: #9aa0a6; font: 500 12px/1 Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
-.map-levels button:hover { color: #e8eaed; background: rgba(255, 255, 255, 0.08); }
-.map-levels button[aria-pressed="true"] { color: #0b0c0e; background: #e8eaed; }
-.map-levels button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 1px; }
+/* the whole Moon inside the map (ui/moonlayer.js): over the polar map's canvas, under its tools and zoom buttons
+   (.map-ui, z 5) and the page's panels; the drawing tools and the map modes do not apply to it */
+.moon-layer { position: absolute; inset: 0; z-index: 4; background: #000; border-radius: inherit; overflow: hidden; }
+.moon-layer[hidden] { display: none; }
+.moon-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+.moon-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); margin: 0; max-width: calc(100% - 24px); text-align: center; pointer-events: none; }
+.is-bigmap .moon-hint { top: calc(var(--big-top, 56px) + 64px); bottom: auto; }
+.map-moon-on .map-ui-tl, .map-moon-on .map-ui-tc, .map-moon-on .map-ui-bl, .map-moon-on .skydial { visibility: hidden; }
+.map-moon-on .topbar-modes { opacity: 0.45; pointer-events: none; }
 
-/* the whole Moon and the region: frames over the page under the top bar */
+/* "Where to land": the planner over the page under the top bar */
 .map-level-layer { position: fixed; left: 0; right: 0; top: var(--level-top, 56px); bottom: 0; z-index: 900; background: #000; }
 .map-level-layer[hidden] { display: none; }
 .map-level-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
@@ -2876,110 +2880,127 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
 
 return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
 })();
-__m['ui/maplevels.js'] = (() => {
-// The Map's three levels of detail (mission step 1), switched in the top bar:
-//   Moon    the whole Moon in 3D (globe.html#pick=1 in a frame): LOLA 7.6 km → 474 m, polar 240–20 m; a click picks
-//           a point and opens the region around it
-//   Region  "Where to land" (planner.html in a frame): about ±200 km around the point, polar data south of 80°S or
-//           the global LOLA terrain with a computed skyline elsewhere; landing ellipse scores, better spots;
-//           "Use this site" makes it the mission's site and comes back to the site level
-//   Site    this page's own analysis (heat maps, sky dial, route card, comms, havens), detailed south of 80°S
-// The frames are made on first use and kept, so going back and forth is instant; they cover the page below the top
-// bar, which stays (stage bar, levels, site). Messages from the frames: lsn-pick { latDeg, lonDeg } (globe),
-// lsn-site { mission } and lsn-close (planner). index.html?level=moon|region opens on that level.
+__m['ui/moonlayer.js'] = (() => {
+// The Map is one view of the whole Moon (mission step 1). Zoomed out it is the 3D globe (globe.html#pick=1 in a frame
+// inside the map, under the page's panels): LOLA 7.6 km → 474 m, polar 240–20 m. Zooming in over the south pole
+// (south of 80°S, closer than HANDOFF_KM) hands over to the detailed polar map at the same place and scale; zooming
+// out of the whole polar map hands back to the globe. A click on the globe picks the site anywhere on the Moon (the
+// site card follows). Sites outside the polar map are shown on the globe.
+// "Where to land" (planner.html) is a tool over the page, not a level: it opens full-screen under the top bar and
+// "Use this site" comes back with the site and its first lit landing time.
+// Messages: from the globe lsn-ready (its view exists), lsn-camera { latDeg, lonDeg, distKm }, lsn-pick { latDeg, lonDeg }; to it lsn-fly
+// { latDeg, lonDeg, distKm }, lsn-zoom { dir }. From the planner lsn-site { mission }, lsn-close.
 const { stageUrl } = __m['mission-flow.js'];
 
+const HANDOFF_KM = 600;         // camera distance under which the globe hands over to the polar map
+const POLAR_EDGE_LAT = -80;     // the polar map's data edge
 // bumped when the framed pages change, so a browser that cached an older globe.html / planner.html loads the new one
-const FRAME_V = 'flow1';
+const FRAME_V = 'flow4';
 
-const LEVELS = Object.freeze([
-  { id: 'moon', label: 'Moon', title: 'The whole Moon in 3D: click a point to look at the region around it' },
-  { id: 'region', label: 'Region', title: 'Where to land: about ±200 km around the site, landing ellipse scores and better spots nearby' },
-  { id: 'site', label: 'Site', title: 'The site analysis: Sun and Earth over the stay, power, comms and the rover route (detailed south of 80°S)' },
-]);
-
-function createMapLevels(doc, { slot, topbar, getMission, onSite }) {
-  const seg = doc.createElement('div');
-  seg.className = 'map-levels';
-  seg.setAttribute('role', 'group');
-  seg.setAttribute('aria-label', 'Map level of detail');
-  const buttons = LEVELS.map((lv) => {
-    const b = doc.createElement('button');
-    b.type = 'button'; b.dataset.level = lv.id; b.textContent = lv.label; b.title = lv.title;
-    b.addEventListener('click', () => show(lv.id));
-    seg.appendChild(b);
-    return b;
-  });
-  slot?.appendChild(seg);
-
-  const layer = doc.createElement('section');
-  layer.className = 'map-level-layer';
-  layer.hidden = true;
-  doc.body.appendChild(layer);
-  const frames = {};
-  let level = 'site', regionAt = null;
-
-  // the layer starts under the top bar (which wraps on narrow screens)
-  const place = () => { const r = topbar?.getBoundingClientRect(); doc.documentElement.style.setProperty('--level-top', `${Math.max(0, Math.round(r ? r.bottom : 0))}px`); };
-  if (typeof ResizeObserver === 'function' && topbar) new ResizeObserver(place).observe(topbar);
-  doc.defaultView.addEventListener('resize', place);
-  // on narrow screens the top bar scrolls with the page: the action bar (phase10-flow.css) and the layer follow it
-  doc.defaultView.addEventListener('scroll', place, { passive: true });
-  place();
-
-  function frame(id, src) {
-    let f = frames[id];
-    if (!f) {
-      f = doc.createElement('iframe');
-      f.className = 'map-level-frame';
-      f.title = id === 'moon' ? 'The whole Moon in 3D' : 'Where to land';
-      f.setAttribute('allow', 'fullscreen');
-      layer.appendChild(f);
-      frames[id] = f;
-    }
-    if (src && f.dataset.src !== src) { f.dataset.src = src; f.src = src; }
-    return f;
-  }
-  function moonSrc() {
-    const m = getMission();
-    const lat = m?.latDeg ?? -60, lon = m?.lonDeg ?? 0;
-    return `globe.html?v=${FRAME_V}#lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&dist=6200&tilt=0&heading=0&pick=1`;
-  }
-  function show(id, { at = null } = {}) {
-    place();
-    level = id;
-    for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.level === id));
-    layer.hidden = id === 'site';
-    doc.documentElement.classList.toggle('map-level-open', id !== 'site');
-    if (id === 'moon') frame('moon', frames.moon?.dataset.src ?? moonSrc());
-    if (id === 'region') {
-      const m = getMission();
-      const p = at ?? regionAt ?? (m ? { latDeg: m.latDeg, lonDeg: m.lonDeg } : null);
-      regionAt = p;
-      const url = stageUrl('region', p ? { ...p, landingMs: m?.landingMs } : m);
-      frame('region', `${url}${url.includes('?') ? '&' : '?'}v=${FRAME_V}`);
-    }
-    for (const [k, f] of Object.entries(frames)) f.hidden = k !== id;
-    // the site level's own map is under the layer: give the keyboard back to it
-    if (id === 'site') doc.getElementById('main')?.focus?.({ preventScroll: true });
-  }
-  doc.defaultView.addEventListener('message', (e) => {
-    const d = e.data;
-    if (!d || typeof d !== 'object') return;
-    const from = Object.values(frames).find((f) => f.contentWindow === e.source);
-    if (!from) return;
-    if (d.type === 'lsn-pick' && Number.isFinite(d.latDeg) && Number.isFinite(d.lonDeg)) show('region', { at: { latDeg: d.latDeg, lonDeg: d.lonDeg } });
-    else if (d.type === 'lsn-site' && d.mission) { regionAt = { latDeg: d.mission.latDeg, lonDeg: d.mission.lonDeg }; show('site'); onSite?.(d.mission); }
-    else if (d.type === 'lsn-close') show('site');
-  });
-  doc.defaultView.addEventListener('keydown', (e) => { if (e.key === 'Escape' && level !== 'site' && !e.defaultPrevented) show('site'); });
-  for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.level === 'site'));
-  const q = /[?&]level=(moon|region)\b/.exec(doc.defaultView.location.search);
-  if (q) setTimeout(() => show(q[1]), 0);
-  return { show, get level() { return level; }, el: seg };
+// the polar map's zoom for a globe camera distance (km): at HANDOFF_KM about the whole 80°S cap
+const zoomForDist = (distKm) => Math.min(32, Math.max(1, 650 / Math.max(1, distKm)));
+// should the globe hand over? only while zooming in, over the polar cap
+function handsOver(cam, prevDist) {
+  return Number.isFinite(cam?.distKm) && cam.distKm < HANDOFF_KM && cam.latDeg <= POLAR_EDGE_LAT && (prevDist === null || cam.distKm < prevDist);
 }
 
-return { LEVELS, createMapLevels };
+function createMoonLayer(doc, { host, app, topbar, getMission, onPick, onEnterPolar, onSite }) {
+  const win = doc.defaultView;
+  // ---- the whole Moon, inside the map ----
+  const layer = doc.createElement('div');
+  layer.className = 'moon-layer';
+  layer.hidden = true;
+  const hint = doc.createElement('p');
+  hint.className = 'map-chip moon-hint';
+  hint.innerHTML = '<b>Whole Moon</b> · click to choose a site · zoom into the south pole for the detailed site map';
+  layer.appendChild(hint);
+  host.appendChild(layer);
+  let globe = null, ready = false, queued = null, shown = false, prevDist = null;
+  const post = (msg) => { if (ready) globe.contentWindow.postMessage(msg, '*'); else queued = msg; };
+  function showMoon({ latDeg = -60, lonDeg = 0, distKm = 1400 } = {}) {
+    if (!globe) {
+      globe = doc.createElement('iframe');
+      globe.className = 'moon-frame';
+      globe.title = 'The whole Moon in 3D: click to choose a site';
+
+      globe.src = `globe.html?v=${FRAME_V}#lat=${latDeg.toFixed(3)}&lon=${lonDeg.toFixed(3)}&dist=${Math.round(distKm)}&tilt=0&heading=0&pick=1`;
+      layer.prepend(globe);
+    } else post({ type: 'lsn-fly', latDeg, lonDeg, distKm });
+    prevDist = distKm;
+    flyTarget = null;
+    shown = true;
+    layer.hidden = false;
+    app?.classList.add('map-moon-on');
+  }
+  function hideMoon() {
+    shown = false;
+    layer.hidden = true;
+    app?.classList.remove('map-moon-on');
+  }
+  // a fly to a site: if it hands over on the way down, the polar map opens at the site, not where the camera passed
+  let flyTarget = null;
+  function flyTo(cam) { if (shown) { prevDist = null; flyTarget = cam; post({ type: 'lsn-fly', ...cam }); } }
+  // the selected site on the globe (sent again once the globe has loaded)
+  let markMsg = null;
+  function mark(site) { markMsg = { type: 'lsn-mark', latDeg: site.latDeg, lonDeg: site.lonDeg, name: site.name }; if (ready) globe.contentWindow.postMessage(markMsg, '*'); }
+
+  // ---- "Where to land": the planner over the page, under the top bar ----
+  const region = doc.createElement('section');
+  region.className = 'map-level-layer';
+  region.hidden = true;
+  doc.body.appendChild(region);
+  let planner = null;
+  const place = () => { const r = topbar?.getBoundingClientRect(); doc.documentElement.style.setProperty('--level-top', `${Math.max(0, Math.round(r ? r.bottom : 0))}px`); };
+  if (typeof ResizeObserver === 'function' && topbar) new ResizeObserver(place).observe(topbar);
+  win.addEventListener('resize', place);
+  // on narrow screens the top bar scrolls with the page: the action bar (phase10-flow.css) and the layer follow it
+  win.addEventListener('scroll', place, { passive: true });
+  place();
+  function openRegion(at = null) {
+    place();
+    const m = getMission();
+    const p = at ?? (m ? { latDeg: m.latDeg, lonDeg: m.lonDeg } : null);
+    const url = stageUrl('region', p ? { ...p, landingMs: m?.landingMs } : m);
+    const src = `${url}${url.includes('?') ? '&' : '?'}v=${FRAME_V}`;
+    if (!planner) {
+      planner = doc.createElement('iframe');
+      planner.className = 'map-level-frame';
+      planner.title = 'Where to land';
+      region.appendChild(planner);
+    }
+    if (planner.dataset.src !== src) { planner.dataset.src = src; planner.src = src; }
+    region.hidden = false;
+    doc.documentElement.classList.add('map-level-open');
+  }
+  function closeRegion() {
+    region.hidden = true;
+    doc.documentElement.classList.remove('map-level-open');
+  }
+
+  win.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || typeof d !== 'object') return;
+    if (globe && e.source === globe.contentWindow) {
+      if (d.type === 'lsn-ready') { ready = true; if (markMsg) globe.contentWindow.postMessage(markMsg, '*'); if (queued) { globe.contentWindow.postMessage(queued, '*'); queued = null; } }
+      else if (d.type === 'lsn-camera' && shown) {
+        if (handsOver(d, prevDist)) { const at = flyTarget && flyTarget.latDeg <= POLAR_EDGE_LAT ? flyTarget : d; flyTarget = null; hideMoon(); onEnterPolar?.(at); }
+        prevDist = d.distKm;
+      } else if (d.type === 'lsn-pick' && Number.isFinite(d.latDeg) && Number.isFinite(d.lonDeg)) onPick?.(d);
+    } else if (planner && e.source === planner.contentWindow) {
+      if (d.type === 'lsn-site' && d.mission) { closeRegion(); onSite?.(d.mission); }
+      else if (d.type === 'lsn-close') closeRegion();
+    }
+  });
+  win.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !region.hidden && !e.defaultPrevented) closeRegion(); });
+  return {
+    showMoon, hideMoon, flyTo, mark, openRegion, closeRegion,
+    get isMoon() { return shown; },
+    // the map's zoom buttons while the globe shows: they zoom the globe
+    zoom(dir) { if (!shown || (dir !== 'in' && dir !== 'out')) return false; post({ type: 'lsn-zoom', dir }); return true; },
+  };
+}
+
+return { HANDOFF_KM, POLAR_EDGE_LAT, zoomForDist, handsOver, createMoonLayer };
 })();
 __m['terrain.js'] = (() => {
 // South-pole terrain: polar stereographic projection, LOLA height lookup and the terrain skyline
@@ -7570,13 +7591,11 @@ function createShell(root, { sites, state, onChange }) {
   // phase 5: the modes and Layers sit in the middle of the top bar in the big layout (ui/mapview.js moves them)
   const topModes = h('div', { class: 'topbar-modes' });
 
-  const levelSlot = h('div', { class: 'topbar-levels' });
   const topbar = h('header', { class: 'topbar' },
     h('div', { class: 'topbar-brand' }, brand('brand-top'),
       h('div', { class: 'site-picker' }, h('label', { class: 'sr-only', for: siteSelect.id }, 'Landing site'), siteSelect)),
-    // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map; then its levels of
-    // detail (Moon, Region, Site: ui/maplevels.js fills levelSlot)
-    h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null, levelSlot),
+    // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map
+    h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null),
     h('div', { class: 'topbar-nav' },
       h('nav', { class: 'views', 'aria-label': 'Views' }, viewButtons),
       topModes,
@@ -7667,7 +7686,7 @@ function createShell(root, { sites, state, onChange }) {
     regions: { finding, panorama, elevation, compare, events, evidence, brief, mapTitle, mapFinding, mapCard, pointCard, filtersCard, regionCard, routeCard },
     sheetParts, mapSection,
     tourButton, askButton, settingsButton, topModes,
-    app, sidebar, sideToggle, sideReopen, levelSlot, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
+    app, sidebar, sideToggle, sideReopen, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
     sync,
   };
 }
@@ -12351,7 +12370,18 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
 
   function zoomBy(factor, px = geo.Cx, py = geo.Cy) {
     stopFly();
+    // zooming out of the whole polar map: the parent goes on to the whole Moon (cb.onBeyondEdge)
+    if (factor < 1 && view.zoom <= MIN_ZOOM + 1e-9 && cb.onBeyondEdge) { cb.onBeyondEdge(); return; }
     setView(zoomAtR(view, px, py, factor), true);
+  }
+  // a wheel that keeps zooming out at the whole polar map (about two notches past it) leaves for the whole Moon
+  let edgePush = 0, edgeAt = 0;
+  function pushEdge(dy) {
+    const now = performance.now();
+    if (now - edgeAt > 600) edgePush = 0;
+    edgeAt = now;
+    edgePush += dy;
+    if (edgePush > 220) { edgePush = 0; cb.onBeyondEdge?.(); }
   }
 
   // fix L3: a programmatic move eases to its target (about half a second; at once with reduced motion).
@@ -12449,6 +12479,7 @@ function createMapFrame({ coarseGrid, pyramid, features, sites }, cb) {
     stopFly();
     const [px, py] = local(e);
     const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    if (dy > 0 && view.zoom <= MIN_ZOOM + 1e-9) { pushEdge(dy); return; }
     gesture = { kind: 'wheel' };
     setSnap(null); hover.update(null);
     setView(zoomAtR(view, px, py, Math.exp(-dy * 0.002)), false);
@@ -13461,6 +13492,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const tools = createMapTools({
     onTool: (tool) => cb.onTool(tool),
     onZoom: (dir) => {
+      if (cb.onZoomOverride?.(dir)) return;   // the whole Moon is showing: its camera takes the zoom
       if (dir === 'fullscreen') setFullScreen(!fullUi);
       else if (dir === 'reset') frame.resetView();
       else frame.zoomBy(dir === 'in' ? 1.5 : 1 / 1.5);
@@ -13488,7 +13520,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const scaleLabel = h('span', { class: 'map-scale-label num' });
   const scaleEl = h('div', { class: 'map-chip map-scale', role: 'img', title: SCALE_TIP }, scaleBar, scaleLabel);
   const frame = createMapFrame(deps, {
-    onViewport: cb.onViewport, onPick: cb.onPick, onBest: cb.onBest, onRegionBest: cb.onRegionBest,
+    onViewport: cb.onViewport, onPick: cb.onPick, onBest: cb.onBest, onRegionBest: cb.onRegionBest, onBeyondEdge: () => cb.onBeyondEdge?.(),
     // fix L8: once a shape is finished the drawing hint goes, until the next one is started
     onShape: (shape) => { last.shapeDone = true; cb.onShape(shape); syncTools(); syncStatus(); },
     onDrawing: (drawing) => { last.drawing = drawing; if (drawing) last.shapeDone = false; syncTools(); syncStatus(); },
@@ -13507,7 +13539,7 @@ function createMapView({ mapCard, pointCard, filtersCard, regionCard, routeCard,
   const fieldModes = h('div', { class: 'field field-inline field-modes' }, h('span', { class: 'sr-only', id: ids('mode-label') }, 'Map mode'), modeWrap);
   const mapBody = h('div', { class: 'map-body' }, frame.el, status);
   mapCard.append(
-    h('div', { class: 'card-head' }, h('h2', { id: 'lsn-map-head' }, 'South pole map')),
+    h('div', { class: 'card-head' }, h('h2', { id: 'lsn-map-head' }, 'Moon map')),
     h('div', { class: 'map-controls' }, fieldModes, pickField),
     message,
     mapBody);
@@ -22139,12 +22171,12 @@ __m['main.js'] = (() => {
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
 const { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } = __m['mission-flow.js'];
-const { createMapLevels } = __m['ui/maplevels.js'];
+const { createMoonLayer, zoomForDist, POLAR_EDGE_LAT } = __m['ui/moonlayer.js'];
 const { createSiteContexts } = __m['lander/globalsite.js'];
 const { bootScreen } = __m['boot.js'];
 const { createEphemeris, bodyAzEl } = __m['ephemeris.js'];
 const { summarize, summarizePair, sampleSeries } = __m['windows.js'];
-const { formatCoords } = __m['sites.js'];
+const { formatCoords, parseCustomSite } = __m['sites.js'];
 const { parseHash, toHash, alternativeOf, cleanMaxSlope, cleanMaxDark, cleanWeights, cleanEnergy, cleanRelay, cleanRoutePlan, shapeParam, cleanStay, SHEET_TABS } = __m['state.js'];
 const { findingSentence, mapFinding } = __m['finding.js'];
 const { fmtDay, fmtSpan, fmtHours, fmtPct, DASH } = __m['format.js'];
@@ -22305,9 +22337,9 @@ function start() {
   let routePoints = state.routePlan && !state.routePlan.selected ? state.routePlan.points : null;
 
   const shell = createShell(root, { sites, state, onChange: (patch) => update(patch) });
-  // the Map's levels of detail (ui/maplevels.js): the whole Moon and the region in frames over this page;
-  // "Use this site" in the region comes back here with the new site and landing time
-  const levels = createMapLevels(document, { slot: shell.levelSlot, topbar: shell.topbar, getMission: () => readMission(), onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); } });
+  // the Map is one view of the whole Moon (ui/moonlayer.js): the globe when zoomed out, this page's polar map when
+  // zoomed in over the south pole; made once the map exists (below)
+  let moon = null, pickedOnGlobe = false;
 
   // ---------- data packs on demand (§4.1, §5.1) ----------
   const packs = {};   // name → 'loading' | 'ok' | 'error'
@@ -22470,7 +22502,9 @@ function start() {
     onDial: (on) => settings.set('skyDial', !!on),
     onLivePref: () => renderMap(),
     onDetails: () => openSheet('overview'),
-    onLevel: (lv) => levels.show(lv),
+    onLevel: () => moon?.openRegion(),
+    onBeyondEdge: () => { const v = mapView.frame.view, c = fromXY(v.cx, v.cy); moon?.showMoon({ latDeg: c.latDeg, lonDeg: c.lonDeg, distKm: 1000 }); },
+    onZoomOverride: (dir) => moon?.zoom(dir) ?? false,
     onFinalise: () => goFinalise(),
     onLandNow: () => landHereNow(),
     // phase 6 A: the way out's "Set as alternative" (the slip the time dock offers, −60 to 60 days)
@@ -22481,6 +22515,32 @@ function start() {
     onProfileHover: (pt) => { profileAt = pt ? { xKm: pt.xKm, yKm: pt.yKm } : null; mapView.setProfileAt(profileAt); },
     describe: (xKm, yKm, target) => describe(xKm, yKm, target),
   }) : null;
+  if (mapView) {
+    moon = createMoonLayer(document, {
+      host: mapView.frame.el, app: shell.app, topbar: shell.topbar, getMission: () => readMission(),
+      // a click on the globe: that point becomes the site, anywhere on the Moon (the globe stays where it is)
+      onPick: ({ latDeg, lonDeg }) => { const r = parseCustomSite(String(latDeg), String(lonDeg)); if (r.ok) { pickedOnGlobe = true; update({ site: r.site }); pickedOnGlobe = false; } },
+      // zoomed in over the south pole: the polar map at the same place and about the same scale
+      onEnterPolar: ({ latDeg, lonDeg, distKm }) => { const [x, y] = toXY(latDeg, lonDeg); update({ viewport: { cx: x, cy: y, zoom: zoomForDist(distKm) } }); },
+      // "Use this site" in Where to land
+      onSite: (m) => { const url = stageUrl('map', m); location.hash = url.slice(url.indexOf('#')); },
+    });
+  }
+  // a new site: outside the polar map the globe shows it; on it, a globe that is showing flies down and hands over
+  let moonSiteKey = null;
+  function syncMoonSite() {
+    const s0 = state.site;
+    if (!moon || !s0) return;
+    const key = `${s0.latDeg},${s0.lonDeg}`;
+    if (key === moonSiteKey) return;
+    const first = moonSiteKey === null;
+    moonSiteKey = key;
+    moon.mark(s0);
+    if (pickedOnGlobe) return;
+    const cam = { latDeg: s0.latDeg, lonDeg: s0.lonDeg };
+    if (s0.latDeg > POLAR_EDGE_LAT) { if (moon.isMoon) moon.flyTo({ ...cam, distKm: 420 }); else moon.showMoon({ ...cam, distKm: first ? 1600 : 420 }); }
+    else if (moon.isMoon) moon.flyTo({ ...cam, distKm: 380 });
+  }
   // ---------- phase 4: the workflow cards in the right panel's folds ----------
   // Each card works only while its fold is open; refreshFolds() runs after every map render and cursor move.
   // fix L5: the cards start from the hash and write their inputs back to it (only the cards' exported
@@ -23479,6 +23539,7 @@ function start() {
   }
   window.addEventListener('storage', (e) => { if (e.key === 'lsn-mission') syncLanded(true); });
   function render() {
+    syncMoonSite();
     saveMission();
     syncLanded();
     derived = compute();

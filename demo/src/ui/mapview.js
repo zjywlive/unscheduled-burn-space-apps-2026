@@ -126,6 +126,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const tools = createMapTools({
     onTool: (tool) => cb.onTool(tool),
     onZoom: (dir) => {
+      if (cb.onZoomOverride?.(dir)) return;   // the whole Moon is showing: its camera takes the zoom
       if (dir === 'fullscreen') setFullScreen(!fullUi);
       else if (dir === 'reset') frame.resetView();
       else frame.zoomBy(dir === 'in' ? 1.5 : 1 / 1.5);
@@ -153,7 +154,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const scaleLabel = h('span', { class: 'map-scale-label num' });
   const scaleEl = h('div', { class: 'map-chip map-scale', role: 'img', title: SCALE_TIP }, scaleBar, scaleLabel);
   const frame = createMapFrame(deps, {
-    onViewport: cb.onViewport, onPick: cb.onPick, onBest: cb.onBest, onRegionBest: cb.onRegionBest,
+    onViewport: cb.onViewport, onPick: cb.onPick, onBest: cb.onBest, onRegionBest: cb.onRegionBest, onBeyondEdge: () => cb.onBeyondEdge?.(),
     // fix L8: once a shape is finished the drawing hint goes, until the next one is started
     onShape: (shape) => { last.shapeDone = true; cb.onShape(shape); syncTools(); syncStatus(); },
     onDrawing: (drawing) => { last.drawing = drawing; if (drawing) last.shapeDone = false; syncTools(); syncStatus(); },
@@ -172,7 +173,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   const fieldModes = h('div', { class: 'field field-inline field-modes' }, h('span', { class: 'sr-only', id: ids('mode-label') }, 'Map mode'), modeWrap);
   const mapBody = h('div', { class: 'map-body' }, frame.el, status);
   mapCard.append(
-    h('div', { class: 'card-head' }, h('h2', { id: 'lsn-map-head' }, 'South pole map')),
+    h('div', { class: 'card-head' }, h('h2', { id: 'lsn-map-head' }, 'Moon map')),
     h('div', { class: 'map-controls' }, fieldModes, pickField),
     message,
     mapBody);
