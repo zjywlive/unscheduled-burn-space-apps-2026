@@ -20,7 +20,11 @@ export function writeInsetPref(on, storage) { try { store(storage)?.setItem(INSE
 
 export function createMapFloats(doc = document) {
   const el = h('div', { class: 'map-floats' });
-  (doc.querySelector('.app') ?? doc.body).append(el);
+  const host = doc.querySelector('.app') ?? doc.body;
+  host.append(el);
+  // its height as --floats-h, so the route profile above it stops short of the terrain dock (phase4-bigmap.css)
+  const RO = doc.defaultView?.ResizeObserver;
+  if (RO) new RO(() => host.style.setProperty('--floats-h', `${Math.round(el.offsetHeight)}px`)).observe(el);
   return el;
 }
 

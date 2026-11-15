@@ -52,10 +52,11 @@ carries each one. Code references are to `demo/src/`.
 | Sun and Earth arrows, shadow line at the view centre | ephemeris | Left out (they belong to the polar map's view centre); the sky dial shows the directions at the site |
 | Snap ring, keyboard crosshair, draft shape | drawing state | Draped (refreshed every 30 ms while drawing) |
 | Hover card | `describe()` | Shown by the real pointer |
-| Readout line, scale bar, legend, terrain chip, Sun & Earth panel | page | Unchanged (they belong to the page, not the canvas) |
+| Readout line, scale bar, legend, terrain chip, Sun & Earth panel | page | The page's own: the Sun & Earth panel above the terrain chip at the window's left edge (right of the site list when it is open), the slope legend beside them; the route profile above ends short of them |
 | Sky dial | site | Placed at the site's screen position on the globe; hidden when the site is out of sight |
 | Wheel, drag, pinch, double-click, keyboard zoom | viewport | The globe's camera: wheel, drag to pan, right-drag or shift-drag to turn and tilt, double-click to zoom in; the map's + / − buttons zoom the camera |
 | Rover routes north of 80°S | global LOLA 474 m | The Route tool draws on the globe anywhere (snaps to listed sites). A route with a point north of 80°S is planned by the same planner (A* candidates, directional limits, one-way stretches, traps) on the global terrain in a local frame that turns the sphere so the route's centre sits at the south pole, where the planner's stereographic formulas hold exactly (`localframe.js`); the sunny candidate and the drive use the ephemeris Sun over a smooth horizon (assumed); no PSR or havens there (polar data). Drawn on the globe as a ribbon; Fly along in 3D, Finalise and Execute take it as any route |
+| The rover route across pages | route plan | Kept in the browser (`lsn-route-plan`, mission-flow.js) as well as the hash: a Map link without a route (the 3D globe's **← Back to route planning**, a stage link) brings the last one back, planned again with the chosen candidate. It goes only when the user clears it or draws a new one. The 3D globe opened from the route card (3D, Fly) is a new tab; its back button closes it and returns to the Map's tab, or loads the Map when it cannot close |
 | Regions north of 80°S | — | Refused with a note: their statistics come from the polar Sun and Earth grids |
 
 ## Known limits

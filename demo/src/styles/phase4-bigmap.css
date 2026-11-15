@@ -284,7 +284,8 @@ html.lsn-bigmap, html.lsn-bigmap body { height: 100%; overflow: hidden; }
 .profile-dock { display: none; }
 .is-bigmap .profile-dock {
   display: block; position: fixed; z-index: 30; top: 72px; left: calc(16px + var(--left-w, 0px) + var(--left-gap, 0px) + 58px);
-  width: min(380px, calc(100vw - 520px)); max-height: calc(100vh - 72px - 128px); overflow: auto;
+  width: min(380px, calc(100vw - 520px)); overflow: auto;
+  max-height: calc(100vh - 72px - 128px - var(--floats-h, 0px) - 10px);   /* ends above the floats row (Sun & Earth, Terrain) */
   background: var(--glass-panel); -webkit-backdrop-filter: var(--glass-fx); backdrop-filter: var(--glass-fx);
   border: 1px solid var(--hair); box-shadow: var(--glass-shadow); border-radius: var(--r1, 12px);
   --faint: #bebebe; --muted: #c6c6c6;

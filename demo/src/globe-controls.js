@@ -13,6 +13,10 @@ const ICON = {
 const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 
 export const CONTROLS_CSS = `
+.back-route { display: flex; align-items: center; height: 28px; margin: 0 0 8px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16);
+  background: #e8eaed; color: #0b0c0e; font: 500 12px/1 Inter, system-ui, sans-serif; cursor: pointer; }
+.back-route:hover { background: #fff; }
+
 .cam-ctl { position: fixed; right: 16px; bottom: 16px; padding: 8px; display: grid; grid-template-columns: auto auto; gap: 8px; align-items: start; z-index: 5; user-select: none; }
 body:not(.route-mode) .cam-ctl { bottom: 92px; }
 .cam-ctl .pad { display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(3, 30px); gap: 2px; }

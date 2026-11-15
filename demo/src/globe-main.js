@@ -52,6 +52,18 @@ export function startGlobe() {
   // the mission's steps (mission-flow.js): the globe is the Map's 3D view (planning)
   const stagesSlot = document.getElementById('stages');
   if (stagesSlot) stagesSlot.replaceChildren(stageBar(document, 'map'));
+  // opened from the Map's route card (3D, Fly: route=1): a way back to route planning. The Map's tab is still open
+  // when it opened this one, so closing returns to it as it was; otherwise the Map loads and brings the route back
+  // from the storage (mission-flow.js readRoutePlan)
+  if (stagesSlot && !embed && hashFlag('route')) {
+    const back = Object.assign(document.createElement('button'), { type: 'button', className: 'back-route', textContent: '← Back to route planning', title: 'Return to the Map with this route; it stays until you clear it or draw a new one' });
+    back.addEventListener('click', () => {
+      const opener = (() => { try { return window.opener && !window.opener.closed && /(index\.html|\/)$/.test(window.opener.location.pathname) ? window.opener : null; } catch { return null; } })();
+      if (opener) { try { opener.focus(); } catch { /* focus refused */ } window.close(); }
+      setTimeout(() => { location.href = `${stageUrl('map', readMission())}&plan=1`; }, opener ? 200 : 0);   // still here: not closable
+    });
+    stagesSlot.prepend(back);
+  }
   let inflight = 0;
   const counted = (p) => { inflight++; showLoading(); return p.finally(() => { inflight--; showLoading(); }); };
   const load = (name) => counted(loadData(name, { timeoutMs: 60000 }));

@@ -1229,7 +1229,8 @@ html.lsn-bigmap, html.lsn-bigmap body { height: 100%; overflow: hidden; }
 .profile-dock { display: none; }
 .is-bigmap .profile-dock {
   display: block; position: fixed; z-index: 30; top: 72px; left: calc(16px + var(--left-w, 0px) + var(--left-gap, 0px) + 58px);
-  width: min(380px, calc(100vw - 520px)); max-height: calc(100vh - 72px - 128px); overflow: auto;
+  width: min(380px, calc(100vw - 520px)); overflow: auto;
+  max-height: calc(100vh - 72px - 128px - var(--floats-h, 0px) - 10px);   /* ends above the floats row (Sun & Earth, Terrain) */
   background: var(--glass-panel); -webkit-backdrop-filter: var(--glass-fx); backdrop-filter: var(--glass-fx);
   border: 1px solid var(--hair); box-shadow: var(--glass-shadow); border-radius: var(--r1, 12px);
   --faint: #bebebe; --muted: #c6c6c6;
@@ -2758,6 +2759,20 @@ function readMission(storage) {
   } catch { return null; }
 }
 
+// The rover route being planned on the Map ({ points, maxSlopeDeg, selected }, map km): kept here as well as in the
+// page's hash, so it survives a trip to another page (the 3D globe, Finalise) and comes back with the Map. It goes
+// only when the user clears it or draws a new one (main.js persistRoutePlan).
+const ROUTE_PLAN_KEY = 'lsn-route-plan';
+function readRoutePlan(storage) {
+  try {
+    const r = JSON.parse(store(storage)?.getItem(ROUTE_PLAN_KEY) ?? 'null');
+    return r && Array.isArray(r.points) && r.points.length >= 2 ? r : null;
+  } catch { return null; }
+}
+function writeRoutePlan(plan, storage) {
+  try { if (plan) store(storage)?.setItem(ROUTE_PLAN_KEY, JSON.stringify(plan)); else store(storage)?.removeItem(ROUTE_PLAN_KEY); } catch { /* storage blocked: the hash still carries it */ }
+}
+
 function writeMission(patch, storage) {
   const next = { ...(readMission(storage) ?? {}), ...patch, updatedMs: Date.now() };
   try { store(storage)?.setItem(MISSION_KEY, JSON.stringify(next)); } catch { /* storage blocked: the links still carry the site */ }
@@ -2891,7 +2906,7 @@ function stageBar(doc, current, { getMission = () => readMission(), compact = fa
   return nav;
 }
 
-return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
+return { MISSION_KEY, ROUTE_KEY, CONFIG_KEY, STAGES, EXEC_PHASES, execPhaseOf, readMission, ROUTE_PLAN_KEY, readRoutePlan, writeRoutePlan, writeMission, hasRoute, hasConfig, moonKm, landedFor, landFromHash, stageUrl, STAGE_CSS, stageBar };
 })();
 __m['terrain.js'] = (() => {
 // South-pole terrain: polar stereographic projection, LOLA height lookup and the terrain skyline
@@ -17245,7 +17260,11 @@ function writeInsetPref(on, storage) { try { store(storage)?.setItem(INSET_KEY, 
 
 function createMapFloats(doc = document) {
   const el = h('div', { class: 'map-floats' });
-  (doc.querySelector('.app') ?? doc.body).append(el);
+  const host = doc.querySelector('.app') ?? doc.body;
+  host.append(el);
+  // its height as --floats-h, so the route profile above it stops short of the terrain dock (phase4-bigmap.css)
+  const RO = doc.defaultView?.ResizeObserver;
+  if (RO) new RO(() => host.style.setProperty('--floats-h', `${Math.round(el.offsetHeight)}px`)).observe(el);
   return el;
 }
 
@@ -24173,7 +24192,7 @@ return { createStoryMode };
 __m['main.js'] = (() => {
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
-const { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } = __m['mission-flow.js'];
+const { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl, readRoutePlan, writeRoutePlan } = __m['mission-flow.js'];
 const { createGlobeMap } = __m['ui/globemap.js'];
 const { createRegionLayer } = __m['ui/regionlayer.js'];
 const { createLocalFrame, centreOf, localDem, mapPlan } = __m['localframe.js'];
@@ -24332,6 +24351,9 @@ function start() {
   let state = parseHash(location.hash, sites, eph);
   state.viewport = clampView(state.viewport);
   if (!state.windowOn) state.mapMode = 'now';   // no mission window: the Live view
+  // the rover route: a link without one (the 3D globe's way back, a stage link) brings back the stored one
+  if (!state.routePlan && !/[#&]rp=/.test(location.hash)) state.routePlan = cleanRoutePlan(readRoutePlan());
+  else writeRoutePlan(state.routePlan);
   // phase 5 (T): settings for things rarely changed (palette, smoothing, glass, scale bar, sky dial, motion, AI)
   const settings = createSettings();
   applyDisplay(settings.get());
@@ -24621,7 +24643,11 @@ function start() {
   let rp = { points: state.routePlan?.points ?? null, maxSlopeDeg: state.routePlan?.maxSlopeDeg ?? null, plan: null, selected: null, hovered: null }, rpAbort = null, plannedRoute = null;
   // fix L5: a planned route in the hash is planned again once the first heat map is in
   let rpRestore = state.routePlan?.selected ? { ...state.routePlan } : null;
-  function persistRoutePlan() { persist({ routePlan: cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null) }); }
+  function persistRoutePlan() {
+    const routePlan = cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null);
+    writeRoutePlan(routePlan);   // kept until the user clears it or draws a new one (mission-flow.js)
+    persist({ routePlan });
+  }
   const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar, maxLatDeg: 90 }, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
@@ -26063,6 +26089,8 @@ function start() {
     if (lh) { landHash = lh; setTimeout(() => syncLanded(true), 0); }
     if (planNow) setTimeout(() => openPlanAtSite(), 0);
     const next = parseHash(location.hash, sites, eph);
+    if (!/[#&]rp=/.test(location.hash)) next.routePlan = state.routePlan;   // a link without a route keeps the current one
+    else writeRoutePlan(next.routePlan);
     const openTab = next.sheet;
     next.picking = state.picking;
     next.tool = state.tool;

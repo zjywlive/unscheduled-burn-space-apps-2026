@@ -1,6 +1,6 @@
 // Assembles the page: reads the data packs, keeps the state, schedules rendering and the heat jobs,
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
-import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl } from './mission-flow.js';
+import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl, readRoutePlan, writeRoutePlan } from './mission-flow.js';
 import { createGlobeMap } from './ui/globemap.js';
 import { createRegionLayer } from './ui/regionlayer.js';
 import { createLocalFrame, centreOf, localDem, mapPlan } from './localframe.js';
@@ -159,6 +159,9 @@ function start() {
   let state = parseHash(location.hash, sites, eph);
   state.viewport = clampView(state.viewport);
   if (!state.windowOn) state.mapMode = 'now';   // no mission window: the Live view
+  // the rover route: a link without one (the 3D globe's way back, a stage link) brings back the stored one
+  if (!state.routePlan && !/[#&]rp=/.test(location.hash)) state.routePlan = cleanRoutePlan(readRoutePlan());
+  else writeRoutePlan(state.routePlan);
   // phase 5 (T): settings for things rarely changed (palette, smoothing, glass, scale bar, sky dial, motion, AI)
   const settings = createSettings();
   applyDisplay(settings.get());
@@ -448,7 +451,11 @@ function start() {
   let rp = { points: state.routePlan?.points ?? null, maxSlopeDeg: state.routePlan?.maxSlopeDeg ?? null, plan: null, selected: null, hovered: null }, rpAbort = null, plannedRoute = null;
   // fix L5: a planned route in the hash is planned again once the first heat map is in
   let rpRestore = state.routePlan?.selected ? { ...state.routePlan } : null;
-  function persistRoutePlan() { persist({ routePlan: cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null) }); }
+  function persistRoutePlan() {
+    const routePlan = cleanRoutePlan(rp.points ? { points: rp.points, maxSlopeDeg: rp.maxSlopeDeg, selected: rp.selected } : null);
+    writeRoutePlan(routePlan);   // kept until the user clears it or draws a new one (mission-flow.js)
+    persist({ routePlan });
+  }
   const routePlanCard = mapView ? createRoutePlanCard({ actionBar: mapView?.actionBar, maxLatDeg: 90 }, {
     onPoints: (points) => { rp = { ...rp, points }; routePlanCard.update({ points }); redrawRoutes(); persistRoutePlan(); },
     onLimit: (deg) => { rp = { ...rp, maxSlopeDeg: deg }; persistRoutePlan(); },
@@ -1890,6 +1897,8 @@ function start() {
     if (lh) { landHash = lh; setTimeout(() => syncLanded(true), 0); }
     if (planNow) setTimeout(() => openPlanAtSite(), 0);
     const next = parseHash(location.hash, sites, eph);
+    if (!/[#&]rp=/.test(location.hash)) next.routePlan = state.routePlan;   // a link without a route keeps the current one
+    else writeRoutePlan(next.routePlan);
     const openTab = next.sheet;
     next.picking = state.picking;
     next.tool = state.tool;

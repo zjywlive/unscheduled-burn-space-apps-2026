@@ -38,6 +38,20 @@ export function readMission(storage) {
   } catch { return null; }
 }
 
+// The rover route being planned on the Map ({ points, maxSlopeDeg, selected }, map km): kept here as well as in the
+// page's hash, so it survives a trip to another page (the 3D globe, Finalise) and comes back with the Map. It goes
+// only when the user clears it or draws a new one (main.js persistRoutePlan).
+export const ROUTE_PLAN_KEY = 'lsn-route-plan';
+export function readRoutePlan(storage) {
+  try {
+    const r = JSON.parse(store(storage)?.getItem(ROUTE_PLAN_KEY) ?? 'null');
+    return r && Array.isArray(r.points) && r.points.length >= 2 ? r : null;
+  } catch { return null; }
+}
+export function writeRoutePlan(plan, storage) {
+  try { if (plan) store(storage)?.setItem(ROUTE_PLAN_KEY, JSON.stringify(plan)); else store(storage)?.removeItem(ROUTE_PLAN_KEY); } catch { /* storage blocked: the hash still carries it */ }
+}
+
 export function writeMission(patch, storage) {
   const next = { ...(readMission(storage) ?? {}), ...patch, updatedMs: Date.now() };
   try { store(storage)?.setItem(MISSION_KEY, JSON.stringify(next)); } catch { /* storage blocked: the links still carry the site */ }
