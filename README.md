@@ -3,9 +3,11 @@
 Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 
 - **Challenge:** [Lunar Landing Site Navigator](https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/)
-- **Overview (start here):** [`demo/overview.html`](demo/overview.html): why the tool exists, the process flow, how NASA data
+- **Overview (start here):** [`demo/overview.html`](https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/overview.html): why the tool exists, the process flow, how NASA data
   becomes a plan, and small interactive models of the algorithms and the contingency rules
-- **Demo:** _TBD_
+- **Demo:** https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/overview.html (overview), then
+  [the Map](https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/), [Finalise](https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/finalise.html)
+  and [Execute](https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/lander.html)
 - **Video (30 s):** _TBD (YouTube link)_
 - **Project page:** _TBD_
 - **User guide:** [docs/GUIDE.md](docs/GUIDE.md), with screenshots and worked use cases for every page; how NASA
