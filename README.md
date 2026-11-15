@@ -8,8 +8,7 @@ Team **Unscheduled Burn**, Bristol (UK) Local Event, 14–15 November 2026.
 - **Demo:** https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/overview.html (overview), then
   [the Map](https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/), [Finalise](https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/finalise.html)
   and [Execute](https://zjywlive.github.io/unscheduled-burn-space-apps-2026/demo/lander.html)
-- **Video (30 s):** _TBD (YouTube link)_
-- **Project page:** _TBD_
+- **Video (30 s):** [ (YouTube link)_](https://www.youtube.com/watch?v=FLRYPm9GKu8)
 - **User guide:** [docs/GUIDE.md](docs/GUIDE.md), with screenshots and worked use cases for every page; how NASA
   plans a lunar landing, mapped to the tool: [docs/NASA-MISSION-PLANNING.md](docs/NASA-MISSION-PLANNING.md)
 
@@ -38,9 +37,11 @@ To run the app locally: `python3 -m http.server 8731 --directory demo`, then ope
 
 | Name | Role | GitHub |
 |---|---|---|
-| _add name_ | _add role_ | [@zjywlive](https://github.com/zjywlive) |
-| _add name_ | _add role_ | [@PaperPlaneLSY](https://github.com/PaperPlaneLSY) |
-| _add name_ | _add role_ | [@Pro-Machine](https://github.com/Pro-Machine) |
+| Yinan Zhang | Developer | [@zjywlive](https://github.com/zjywlive) |
+| Shiyu Luo | Tester | [@PaperPlaneLSY](https://github.com/PaperPlaneLSY) |
+| Kaan Karadağ | Researcher | [@Pro-Machine](https://github.com/Pro-Machine) |
+| Rushi Vibhandik | Reviewer | [@saintbridgethefirst](https://github.com/saintbridgethefirst)) |
+| Wantong Wu | Tester | [@1984tkr](https://github.com/1984tkr)|
 
 ## What it does
 
