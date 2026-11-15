@@ -24827,8 +24827,10 @@ function start() {
           skylines.set(key, ctx.mask);
           globalSkyNote.set(key, ctx.skyline);
           ribbons.clear(); allEvents.clear();
+          // the figures, the dial and its tracks are cached by site and time: drop them so the terrain skyline replaces the flat one
+          computedKey = ''; dialCache = null;
           render();
-        }).catch(() => {});
+        }).catch((e) => console.warn('global skyline', e));
       }
     }
     return skylines.get(key);
