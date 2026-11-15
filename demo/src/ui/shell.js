@@ -118,8 +118,6 @@ export function createShell(root, { sites, state, onChange }) {
   }, siteOptions(sites), h('option', { value: 'custom' }, 'Custom site…'));
 
   const viewButtons = VIEWS.map(([id, label]) => h('a', { class: 'view-tab', 'data-view': id, href: `#view=${id}` }, label));
-  // "Where to land" (the planner, the Map's region level): in the top bar, reachable whatever panel is open
-  const landButton = h('button', { type: 'button', class: 'view-tab view-land', 'data-action': 'where-to-land', title: 'Where to land: landing ellipse scores and better spots around a point (Map, region level)' }, 'Where to land');
 
   // Phase 3: the guided tour and the Ask drawer open from the top bar (§4.9, §4.10).
   const tourButton = h('button', { type: 'button', class: 'top-action', 'data-action': 'tour' }, 'Tour');
@@ -134,7 +132,7 @@ export function createShell(root, { sites, state, onChange }) {
     // the mission's steps across the pages (mission-flow.js): this page is step 1, the Map
     h('div', { class: 'topbar-stages' }, typeof document !== 'undefined' ? stageBar(document, 'map', { compact: true }) : null),
     h('div', { class: 'topbar-nav' },
-      h('nav', { class: 'views', 'aria-label': 'Views' }, landButton, viewButtons),
+      h('nav', { class: 'views', 'aria-label': 'Views' }, viewButtons),
       topModes,
       h('div', { class: 'top-actions' }, tourButton, askButton, settingsButton)));
 
@@ -223,7 +221,7 @@ export function createShell(root, { sites, state, onChange }) {
   return {
     regions: { finding, panorama, elevation, compare, events, evidence, brief, mapTitle, mapFinding, mapCard, pointCard, filtersCard, regionCard, routeCard },
     sheetParts, mapSection,
-    tourButton, askButton, settingsButton, topModes, landButton,
+    tourButton, askButton, settingsButton, topModes,
     app, sidebar, sideToggle, sideReopen, topbar, mapTitleRow: mapSection.querySelector('.title-row'),
     sync,
   };

@@ -1971,80 +1971,6 @@ const southFrom = (pyramid) => () => pyramid.levels;
 
 return { MOON_R_KM, DN_TO_M, G0, G1, G2, TILED, NORTH, SOUTH_MAX_LAT, normLon, toXYNorth, deltaDecode, gunzip, decodePack, tileName, tileOf, tilesInBox, sampleG0, sampleTile, createGlobeTerrain, southFrom };
 })();
-__m['terrain-local.js'] = (() => {
-// Terrain around one site for the descent scene, finest first: the site's high-resolution LOLA patch (5, 10 or
-// 20 m, 10 × 10 km; demo/src/hires.js), then the 20 m and 40 m tiles listed in the box, then the finest plain
-// LOLA level that covers it. Data packs come from demo/data/js and load on demand (works from file://).
-const { createDem, createTiledDem, tilesIn, toXY } = __m['../terrain.js'];
-const { loadData } = __m['../data-loader.js'];
-
-// The high-resolution patch for a site from a hires set (createHiresSet): the site's own entry if it has one,
-// otherwise any patch that covers the ground within 1 km (a custom point near a listed site). → patch | null
-async function hiresPatchFor(hires, site) {
-  if (!hires) return null;
-  if (site.id && hires.entries.some((e) => e.id === site.id)) return hires.ensureSite(site.id);
-  const [x, y] = toXY(site.latDeg, site.lonDeg);
-  const got = (await hires.ensure({ x0: x - 1, x1: x + 1, y0: y - 1, y1: y + 1 })).filter(Boolean);
-  return got.filter((p) => !Number.isNaN(p.sample(x, y))).sort((a, b) => a.kmPerPixel - b.kmPerPixel)[0] ?? null;
-}
-
-// The square around the site (half-size in metres) that lies inside the patch: where the descent mesh can use
-// the patch's full resolution. Capped at maxCells cells across (vertex budget). → { stepM, halfM } | null
-function fineCore(patch, site, { maxCells = 400 } = {}) {
-  if (!patch) return null;
-  const [x, y] = toXY(site.latDeg, site.lonDeg);
-  const b = patch.bounds;
-  const insideKm = Math.min(x - b.x0, b.x1 - x, y - b.y0, b.y1 - y) - 2 * patch.kmPerPixel;
-  if (!(insideKm > 0)) return null;
-  const stepM = patch.kmPerPixel * 1000;
-  // the fine square sits in the map plane, the mesh in local east/north (rotated): keep it within the inscribed circle
-  const halfM = Math.min((maxCells / 2) * stepM, insideKm * 1000 * Math.SQRT1_2);
-  return { stepM, halfM: Math.floor(halfM / stepM) * stepM };
-}
-
-// meta: demo/data/terrain.json; halfKm: half-size of the box around the site; maxTiles per tiled level;
-// hires: a createHiresSet (or null for none).
-async function loadSiteTerrain(meta, site, { halfKm = 9, maxTiles = 25, hires = null, onProgress = () => {} } = {}) {
-  const [x, y] = toXY(site.latDeg, site.lonDeg);
-  const bounds = { x0: x - halfKm, x1: x + halfKm, y0: y - halfKm, y1: y + halfKm };
-  const reach = Math.max(Math.abs(bounds.x0), Math.abs(bounds.x1), Math.abs(bounds.y0), Math.abs(bounds.y1));
-  const chain = [];
-  let patch = null;
-  if (hires) {
-    const e = hires.entries.find((q) => q.id === site.id);
-    onProgress(`Loading ${e ? `${Math.round(e.kmPerPixel * 1000)} m ` : ''}high-resolution LOLA terrain`);
-    patch = await hiresPatchFor(hires, site);
-    if (patch) chain.push(patch);
-  }
-  const plain = (meta.levels ?? []).filter((l) => !l.tiled && l.kmPerPixel < 0.48 && reach < l.halfKm).sort((a, b) => a.kmPerPixel - b.kmPerPixel);
-  if (plain[0]) {
-    const lv = plain[0];
-    onProgress(`Loading LOLA ${Math.round(lv.kmPerPixel * 1000)} m terrain`);
-    const bytes = await loadData(lv.name);
-    chain.push(createDem({ data: new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 1), size: lv.size, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, halfKm: lv.halfKm }));
-  }
-  for (const lv of (meta.levels ?? []).filter((l) => l.tiled)) {
-    const tiles = tilesIn(lv, bounds).slice(0, maxTiles);
-    if (!tiles.length) continue;
-    const dem = createTiledDem({ name: lv.name, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, tilePx: lv.tilePx, apronPx: lv.apronPx, halfKm: lv.halfKm, tiles: lv.tiles });
-    onProgress(`Loading ${tiles.length} LOLA ${Math.round(lv.kmPerPixel * 1000)} m tiles`);
-    const loaded = await Promise.all(tiles.map((t) => loadData(t.pack).then((b) => [t, b], () => null)));
-    for (const it of loaded) if (it) dem.addTile(it[0], it[1]);
-    chain.push(dem);
-  }
-  chain.sort((a, b) => a.kmPerPixel - b.kmPerPixel);
-  const sample = (xKm, yKm) => {
-    for (const d of chain) { const v = d.sample(xKm, yKm); if (v === v) return v; }
-    return NaN;
-  };
-  // resolution (km per pixel) of the level that answers at a map point, or null
-  const resAt = (xKm, yKm) => { for (const d of chain) { if (d.sample(xKm, yKm) === d.sample(xKm, yKm)) return d.kmPerPixel; } return null; };
-  const hiresInfo = patch ? { id: patch.id, kmPerPixel: patch.kmPerPixel, bounds: patch.bounds, sizeKm: patch.n * patch.kmPerPixel } : null;
-  return { sample, resAt, levelsKm: chain.map((d) => d.kmPerPixel), finestKm: chain[0]?.kmPerPixel ?? null, bounds, hires: hiresInfo, fine: fineCore(patch, site) };
-}
-
-return { hiresPatchFor, fineCore, loadSiteTerrain };
-})();
 __m['vec.js'] = (() => {
 // Small 3-vector helpers for the lander modules (plain [x, y, z] arrays).
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -3380,6 +3306,80 @@ const GAZETTEER = Object.freeze([
 
 return { GAZETTEER_SOURCE, GAZETTEER };
 })();
+__m['terrain-local.js'] = (() => {
+// Terrain around one site for the descent scene, finest first: the site's high-resolution LOLA patch (5, 10 or
+// 20 m, 10 × 10 km; demo/src/hires.js), then the 20 m and 40 m tiles listed in the box, then the finest plain
+// LOLA level that covers it. Data packs come from demo/data/js and load on demand (works from file://).
+const { createDem, createTiledDem, tilesIn, toXY } = __m['../terrain.js'];
+const { loadData } = __m['../data-loader.js'];
+
+// The high-resolution patch for a site from a hires set (createHiresSet): the site's own entry if it has one,
+// otherwise any patch that covers the ground within 1 km (a custom point near a listed site). → patch | null
+async function hiresPatchFor(hires, site) {
+  if (!hires) return null;
+  if (site.id && hires.entries.some((e) => e.id === site.id)) return hires.ensureSite(site.id);
+  const [x, y] = toXY(site.latDeg, site.lonDeg);
+  const got = (await hires.ensure({ x0: x - 1, x1: x + 1, y0: y - 1, y1: y + 1 })).filter(Boolean);
+  return got.filter((p) => !Number.isNaN(p.sample(x, y))).sort((a, b) => a.kmPerPixel - b.kmPerPixel)[0] ?? null;
+}
+
+// The square around the site (half-size in metres) that lies inside the patch: where the descent mesh can use
+// the patch's full resolution. Capped at maxCells cells across (vertex budget). → { stepM, halfM } | null
+function fineCore(patch, site, { maxCells = 400 } = {}) {
+  if (!patch) return null;
+  const [x, y] = toXY(site.latDeg, site.lonDeg);
+  const b = patch.bounds;
+  const insideKm = Math.min(x - b.x0, b.x1 - x, y - b.y0, b.y1 - y) - 2 * patch.kmPerPixel;
+  if (!(insideKm > 0)) return null;
+  const stepM = patch.kmPerPixel * 1000;
+  // the fine square sits in the map plane, the mesh in local east/north (rotated): keep it within the inscribed circle
+  const halfM = Math.min((maxCells / 2) * stepM, insideKm * 1000 * Math.SQRT1_2);
+  return { stepM, halfM: Math.floor(halfM / stepM) * stepM };
+}
+
+// meta: demo/data/terrain.json; halfKm: half-size of the box around the site; maxTiles per tiled level;
+// hires: a createHiresSet (or null for none).
+async function loadSiteTerrain(meta, site, { halfKm = 9, maxTiles = 25, hires = null, onProgress = () => {} } = {}) {
+  const [x, y] = toXY(site.latDeg, site.lonDeg);
+  const bounds = { x0: x - halfKm, x1: x + halfKm, y0: y - halfKm, y1: y + halfKm };
+  const reach = Math.max(Math.abs(bounds.x0), Math.abs(bounds.x1), Math.abs(bounds.y0), Math.abs(bounds.y1));
+  const chain = [];
+  let patch = null;
+  if (hires) {
+    const e = hires.entries.find((q) => q.id === site.id);
+    onProgress(`Loading ${e ? `${Math.round(e.kmPerPixel * 1000)} m ` : ''}high-resolution LOLA terrain`);
+    patch = await hiresPatchFor(hires, site);
+    if (patch) chain.push(patch);
+  }
+  const plain = (meta.levels ?? []).filter((l) => !l.tiled && l.kmPerPixel < 0.48 && reach < l.halfKm).sort((a, b) => a.kmPerPixel - b.kmPerPixel);
+  if (plain[0]) {
+    const lv = plain[0];
+    onProgress(`Loading LOLA ${Math.round(lv.kmPerPixel * 1000)} m terrain`);
+    const bytes = await loadData(lv.name);
+    chain.push(createDem({ data: new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 1), size: lv.size, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, halfKm: lv.halfKm }));
+  }
+  for (const lv of (meta.levels ?? []).filter((l) => l.tiled)) {
+    const tiles = tilesIn(lv, bounds).slice(0, maxTiles);
+    if (!tiles.length) continue;
+    const dem = createTiledDem({ name: lv.name, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, tilePx: lv.tilePx, apronPx: lv.apronPx, halfKm: lv.halfKm, tiles: lv.tiles });
+    onProgress(`Loading ${tiles.length} LOLA ${Math.round(lv.kmPerPixel * 1000)} m tiles`);
+    const loaded = await Promise.all(tiles.map((t) => loadData(t.pack).then((b) => [t, b], () => null)));
+    for (const it of loaded) if (it) dem.addTile(it[0], it[1]);
+    chain.push(dem);
+  }
+  chain.sort((a, b) => a.kmPerPixel - b.kmPerPixel);
+  const sample = (xKm, yKm) => {
+    for (const d of chain) { const v = d.sample(xKm, yKm); if (v === v) return v; }
+    return NaN;
+  };
+  // resolution (km per pixel) of the level that answers at a map point, or null
+  const resAt = (xKm, yKm) => { for (const d of chain) { if (d.sample(xKm, yKm) === d.sample(xKm, yKm)) return d.kmPerPixel; } return null; };
+  const hiresInfo = patch ? { id: patch.id, kmPerPixel: patch.kmPerPixel, bounds: patch.bounds, sizeKm: patch.n * patch.kmPerPixel } : null;
+  return { sample, resAt, levelsKm: chain.map((d) => d.kmPerPixel), finestKm: chain[0]?.kmPerPixel ?? null, bounds, hires: hiresInfo, fine: fineCore(patch, site) };
+}
+
+return { hiresPatchFor, fineCore, loadSiteTerrain };
+})();
 __m['../score.js'] = (() => {
 // Per-cell filters and the suitability score (task book phase 3 §4.3, §4.4, §5.4).
 // All arrays are one value per heat-grid cell, indexed j × size + i like heat.js.
@@ -3640,6 +3640,171 @@ const mapXY = (latDeg, lonDeg) => toXY(latDeg, lonDeg);
 
 return { ELLIPSE, ellipsePoints, terrainStats, planeRms, skyDirections, skyStats, batteryHours, grade, figures, verdict, LANDABLE, landableClass, searchGrid, suitability, bestPoints, mapXY };
 })();
+__m['landeval.js'] = (() => {
+// Where to land, the computation (no DOM): score a proposed landing point and search around it for better spots.
+// Shared by the Map's Where to land panel (ui/landcard.js) and the standalone planner page (planner.js).
+//   stage 1: suitability on a grid around the point (1 km on the polar data, 2 km on the global terrain), the Sun
+//            and the Earth every 4 h over the stay above the skyline (480 m polar DEM, or computed from the global
+//            terrain), the navigator's slope and shadow grids
+//   stage 2: the point and the eight best that pass, in detail (siteplan.js: terrain in the landing ellipse, sky
+//            hourly over the stay, permanent shadow, Δv from the planned orbit); the fine figures re-rank the
+//            eight (fewest fails, then fewest near limits, then suitability) and five are kept
+// createLandingEvaluator(deps) → { L, loadLayers(), slopeAt, shadowAt, detail(c, opts), evaluate(lat, lon, hooks) }
+//   deps: { eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin? }
+//   evaluate → Promise<{ list: [pick, spot 1…5], grid, limit, battH, stayDays } | null (superseded by a newer call)>
+//   hooks: { onGrid(grid), onProgress(stage 1 | 2, fraction) }
+const { loadData } = __m['../data-loader.js'];
+const { createDem, toXY, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
+const { createPsr, PSR_PACK } = __m['../psr.js'];
+const { loadSiteTerrain } = __m['terrain-local.js'];
+const { pickLandingWindow, skyAt, mapScale, slopeDeg } = __m['landing.js'];
+const { distanceBearing } = __m['skyline.js'];
+const { planMission } = __m['mission.js'];
+const { ellipsePoints, terrainStats, skyDirections, skyStats, batteryHours, figures, verdict, searchGrid, suitability, bestPoints, landableClass } = __m['siteplan.js'];
+
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const fmtLat = (v) => `${Math.abs(v).toFixed(3)}°${v < 0 ? 'S' : 'N'}`;
+const fmtLon = (v) => `${(((v % 360) + 360) % 360).toFixed(3)}°E`;
+const SEARCH_RADIUS_KM = 15;
+
+function createLandingEvaluator({ eph, sites, meta, getDem, hires = null, siteCtx, getVehicle, getFromMs, getStayDays, getMargin = () => NaN }) {
+  // the layers: navigator 1 km and 2 km slope and shadow grids, the LOLA PSR map, the 120 m polar DEM; fine: the
+  // finest terrain loaded around the last point scored as "Your point" (the planner shades its relief with it)
+  const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null, slope2: null, shadow2: null };
+  let loading = null;
+  function loadLayers() {
+    if (loading) return loading;
+    const get = (n) => loadData(n, { timeoutMs: 90000 }).catch(() => null);
+    loading = (async () => {
+      const [sl, sh, psr, sl2, sh2] = await Promise.all([get('slope_1km'), get('shadow_1km'), get(PSR_PACK), get('slope_2km'), get('shadow_2km')]);
+      if (sl) L.slope = { bytes: sl, ...meta.slope?.find((x) => x.name === 'slope_1km') };
+      if (sh) L.shadow = { bytes: sh, ...meta.shadow?.find((x) => x.name === 'shadow_1km') };
+      if (sl2) L.slope2 = { bytes: sl2, ...meta.slope?.find((x) => x.name === 'slope_2km') };
+      if (sh2) L.shadow2 = { bytes: sh2, ...meta.shadow?.find((x) => x.name === 'shadow_2km') };
+      try { if (psr) L.psr = createPsr(psr, meta.psr); } catch { L.psr = null; }
+      const lv = meta.levels?.find((l) => l.name === 'dem_120m');
+      if (lv) {
+        const b = await get('dem_120m');
+        if (b) L.dem120 = createDem({ data: new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1), size: lv.size, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, halfKm: lv.halfKm });
+      }
+      return L;
+    })();
+    return loading;
+  }
+  // navigator 1 km grids (±320 km): slope bytes × 0.25 = deg (240 m baseline), shadow bytes = km to the nearest PSR (0 inside)
+  const cellOf = (g, x, y) => {
+    const size = g.size ?? 640, ck = g.cellKm ?? 1, half = (size * ck) / 2;
+    const i = Math.floor((x + half) / ck), j = Math.floor((half - y) / ck);
+    return i >= 0 && j >= 0 && i < size && j < size ? j * size + i : -1;
+  };
+  const slopeAt = (x, y) => { if (!L.slope) return NaN; const k = cellOf(L.slope, x, y); return k < 0 ? NaN : L.slope.bytes[k] * (L.slope.scale ?? 0.25); };
+  const shadowAt = (x, y) => { if (!L.shadow) return NaN; const k = cellOf(L.shadow, x, y); return k < 0 ? NaN : L.shadow.bytes[k]; };
+
+  // one place in detail: { site, landingMs, figs, verdict, resKm, polar, skyline, patch, distKm }
+  // from: the proposed point, for distKm; fine: keep this place's terrain as L.fine
+  async function detail(c, { vehicle, limit, battH, stayDays, fromMs, from = null, fine = false }) {
+    const dem = getDem();
+    const polar = c.latDeg <= TERRAIN_MAX_LAT;
+    const listed = sites.find((s) => distanceBearing(s, c).km < 0.2);
+    const site = { id: listed?.id ?? 'custom', name: listed?.name ?? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}`, latDeg: c.latDeg, lonDeg: c.lonDeg };
+    const xy = Number.isFinite(c.xKm) ? [c.xKm, c.yKm] : toXY(c.latDeg, c.lonDeg);
+    let sample, resKm, mask, heightM, psrShare, psrNote, skyline, patch = null;
+    const k = mapScale(c.latDeg);
+    if (polar) {
+      let terr = null;
+      try { terr = await loadSiteTerrain(meta, site, { halfKm: 0.6, hires }); } catch { terr = null; }
+      resKm = terr?.finestKm ?? 0.12;
+      if (fine) L.fine = terr?.sample ?? null;
+      sample = terr?.sample ?? ((x, y) => (L.dem120 ?? dem).sample(x, y));
+      mask = skylineFor(dem, site); heightM = dem.heightAt(site.latDeg, site.lonDeg) ?? 0; skyline = 'LOLA 480 m polar DEM';
+    } else {
+      // north of 80°S: the global LOLA terrain around the point, its skyline computed out to 180 km
+      const ctx = await siteCtx.context(site);
+      sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; patch = ctx.patch;
+    }
+    // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
+    const pts = ellipsePoints(xy[0], xy[1], { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
+    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
+    if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(xy[0], xy[1]) === 0 ? 1 : 0);
+    else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
+    else { psrShare = NaN; psrNote = 'unknown: no permanent-shadow map here (the page has the south polar one)'; }
+    const win = pickLandingWindow(eph, site, mask, fromMs);
+    const landingMs = win?.tMs ?? fromMs;
+    const sky = skyStats(skyDirections(eph, landingMs, stayDays, 1), site, mask, 1);
+    const at = skyAt(eph, site, landingMs, mask);
+    let budget = null;
+    try {
+      const plan = planMission({ eph, site, landingMs, vehicle, siteHeightKm: (heightM ?? 0) / 1000, mask });
+      if (plan.ok) budget = plan.budget;
+    } catch { budget = null; }
+    const figs = figures({ t, sky, psrShare, psrNote, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, earthWindow: win?.earth ?? true, battH, limitDeg: limit, resKm, stayDays });
+    return { site, landingMs, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, patch, distKm: from ? distanceBearing(from, c).km : 0 };
+  }
+
+  let token = 0;
+  async function evaluate(latDeg, lonDeg, { onGrid = () => {}, onProgress = () => {} } = {}) {
+    const my = ++token;
+    await loadLayers();
+    if (my !== token) return null;
+    const [x, y] = toXY(latDeg, lonDeg);
+    const pick0 = { latDeg, lonDeg, xKm: x, yKm: y };
+    const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
+    const fromMs = getFromMs();
+    const dem = getDem();
+    const polar = latDeg <= TERRAIN_MAX_LAT;
+    // stage 1
+    const ctx0 = polar ? null : await siteCtx.context(pick0);
+    if (my !== token) return null;
+    const mask0 = polar ? skylineFor(dem, pick0) : ctx0.mask;
+    const land0 = pickLandingWindow(eph, pick0, mask0, fromMs)?.tMs ?? fromMs;
+    const dirs4 = skyDirections(eph, land0, stayDays, 4);
+    const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
+    const grid = searchGrid(x, y, { radiusKm: SEARCH_RADIUS_KM * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
+    const hb = (SEARCH_RADIUS_KM + stepKm / 2) * k;
+    grid.box = { x0: x - hb, x1: x + hb, y0: y - hb, y1: y + hb };
+    grid.cellKm = stepKm * k;
+    onGrid(grid);
+    const margin = getMargin();
+    for (let n = 0; n < grid.length; n++) {
+      const p = grid[n];
+      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
+      // off the poles: slope over 1 km on the global terrain; no permanent shadow there
+      const slope = polar ? slopeAt(p.xKm, p.yKm) : slopeDeg(ctx0.sampleXY, p.xKm, p.yKm, 1, k);
+      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
+      if (n % 24 === 23 || n === grid.length - 1) {
+        const done = grid.slice(0, n + 1), s = suitability(done, { limitDeg: limit, battH });
+        done.forEach((q, i) => { q.score = s[i].score; q.ok = s[i].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
+        onProgress(1, (n + 1) / grid.length);
+        onGrid(grid);
+        await tick();
+        if (my !== token) return null;
+      }
+    }
+    // stage 2
+    const best = bestPoints(grid, { count: 8, minKm: 2 * k * (polar ? 1 : 1.5), avoid: [{ xKm: x, yKm: y }] });
+    const pick = { ...pick0, name: 'Your point' };
+    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score }));
+    const all = [pick, ...cands];
+    onProgress(2, 0);
+    for (let n = 0; n < all.length; n++) {
+      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs, from: pick0, fine: n === 0 }));
+      if (my !== token) return null;
+      onProgress(2, (n + 1) / all.length);
+      await tick();
+    }
+    const count = (c, g) => c.figs.filter((f) => f.grade === g).length;
+    cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
+    const list = [pick, ...cands.slice(0, 5)];
+    list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
+    return { list, grid, limit, battH, stayDays };
+  }
+  const cancel = () => { token++; };
+
+  return { L, loadLayers, slopeAt, shadowAt, detail, evaluate, cancel };
+}
+
+return { SEARCH_RADIUS_KM, createLandingEvaluator };
+})();
 __m['../heat.js'] = (() => {
 // Heat-map arithmetic over the precomputed terrain-skyline grid (spec phase 2 §2.4, §3.1–§3.2).
 // Cells are indexed j × size + i, i to the right (+x), j downwards (−y).
@@ -3845,15 +4010,14 @@ __m['planner.js'] = (() => {
 // (siteplan.js), a grid around it is searched for better spots (navigator suitability, score.js), the top five
 // are ranked on the map and in a table, and "Land here" hands the chosen point to the page (onLand).
 const { loadData } = __m['../data-loader.js'];
-const { createDem, toXY, fromXY, skylineFor, TERRAIN_MAX_LAT } = __m['../terrain.js'];
-const { createPsr, paintPsr, PSR_PACK } = __m['../psr.js'];
+const { toXY, fromXY, TERRAIN_MAX_LAT } = __m['../terrain.js'];
+const { paintPsr } = __m['../psr.js'];
 const { decodePack, G0, G2, sampleG0 } = __m['../globe-terrain.js'];
-const { loadSiteTerrain } = __m['terrain-local.js'];
-const { pickLandingWindow, skyAt, mapScale, slopeDeg } = __m['landing.js'];
+const { mapScale } = __m['landing.js'];
 const { distanceBearing, subPoint } = __m['skyline.js'];
 const { GAZETTEER, GAZETTEER_SOURCE } = __m['gazetteer.js'];
-const { planMission } = __m['mission.js'];
-const { ELLIPSE, ellipsePoints, terrainStats, skyDirections, skyStats, batteryHours, figures, verdict, searchGrid, suitability, bestPoints, landableClass, LANDABLE } = __m['siteplan.js'];
+const { createLandingEvaluator } = __m['landeval.js'];
+const { ELLIPSE, batteryHours, landableClass, LANDABLE } = __m['siteplan.js'];
 const { createHeatGrid, fractionJob } = __m['../heat.js'];
 
 const RAD = Math.PI / 180;
@@ -3905,7 +4069,9 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
   const S = { view: 'polar', cx: 0, cy: 0, kmPerPx: 0.8, w: 0, h: 0, pick: null, sel: 0, grid: null, results: null, token: 0, base: null, baseKey: '', g0: null, moonImg: null, mz: 0, mlon0: 0, mlat0: 0, names: true, lib: null };
   const readBox = root.querySelector('.pl-read');
   root.querySelector('.pl-names input').addEventListener('change', (e) => { S.names = e.target.checked; draw(); });
-  const L = { slope: null, shadow: null, psr: null, dem120: null, fine: null, slope2: null, shadow2: null };
+  // the scoring and the search are lander/landeval.js's (shared with the Map's Where to land panel); its layers too
+  const ev = createLandingEvaluator({ eph, sites, meta, getDem, hires, siteCtx, getVehicle, getFromMs, getStayDays, getMargin: () => siteMargins().min });
+  const L = ev.L;
   // where landing is possible over the whole region (2 km cells): navigator sky grid + its slope and shadow grids
   const R = { grid: null, job: null, cls: null, img: null, startMs: 0, endMs: 0, progress: 0, token: 0 };
   // the listed sites scored like a pick: id → { verdict, figs, landingMs, pending }
@@ -3914,30 +4080,11 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
 
   // ---------- data ----------
   async function loadLayers() {
-    const get = (n) => loadData(n, { timeoutMs: 90000 }).catch(() => null);
-    const [sl, sh, psr, sl2, sh2] = await Promise.all([get('slope_1km'), get('shadow_1km'), get(PSR_PACK), get('slope_2km'), get('shadow_2km')]);
-    if (sl) L.slope = { bytes: sl, ...meta.slope?.find((x) => x.name === 'slope_1km') };
-    if (sh) L.shadow = { bytes: sh, ...meta.shadow?.find((x) => x.name === 'shadow_1km') };
-    if (sl2) L.slope2 = { bytes: sl2, ...meta.slope?.find((x) => x.name === 'slope_2km') };
-    if (sh2) L.shadow2 = { bytes: sh2, ...meta.shadow?.find((x) => x.name === 'shadow_2km') };
+    await ev.loadLayers();
     startRegion();
     scoreSites();
-    try { if (psr) L.psr = createPsr(psr, meta.psr); } catch { L.psr = null; }
-    const lv = meta.levels?.find((l) => l.name === 'dem_120m');
-    if (lv) {
-      const b = await get('dem_120m');
-      if (b) L.dem120 = createDem({ data: new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1), size: lv.size, kmPerPixel: lv.kmPerPixel, dnToMeters: lv.dnToMeters, halfKm: lv.halfKm });
-    }
     S.baseKey = ''; draw();
   }
-  // navigator 1 km grids (±320 km): slope bytes × 0.25 = deg (240 m baseline), shadow bytes = km to the nearest PSR (0 inside)
-  const cellOf = (g, x, y) => {
-    const size = g.size ?? 640, ck = g.cellKm ?? 1, half = (size * ck) / 2;
-    const i = Math.floor((x + half) / ck), j = Math.floor((half - y) / ck);
-    return i >= 0 && j >= 0 && i < size && j < size ? j * size + i : -1;
-  };
-  const slopeAt = (x, y) => { if (!L.slope) return NaN; const k = cellOf(L.slope, x, y); return k < 0 ? NaN : L.slope.bytes[k] * (L.slope.scale ?? 0.25); };
-  const shadowAt = (x, y) => { if (!L.shadow) return NaN; const k = cellOf(L.shadow, x, y); return k < 0 ? NaN : L.shadow.bytes[k]; };
 
   async function startRegion() {
     const hb = await loadData('horizon_grid', { timeoutMs: 120000 }).catch(() => null);
@@ -4386,100 +4533,25 @@ function createPlanner({ doc = document, root, eph, sites, meta, getDem, hires, 
     draw();
     const token = ++S.token;
     renderActions();
-    const vehicle = getVehicle(), limit = vehicle.touchdown.maxSlopeDeg, battH = batteryHours(vehicle), stayDays = getStayDays();
-    const fromMs = getFromMs();
-    const dem = getDem();
     const polar = latDeg <= TERRAIN_MAX_LAT;
     setBody(`<p class="note">${polar ? '' : 'Loading the global LOLA terrain around the point and computing its skyline… '}Searching 15 km around the point for the best landing spots…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
-    // stage 1: suitability on a grid around the pick (1 km on the polar data, 2 km on the global terrain), Sun/Earth
-    // every 4 h over the stay above the skyline (480 m polar DEM, or computed from the global terrain)
-    const ctx0 = polar ? null : await siteCtx.context(S.pick);
-    if (token !== S.token) return;
-    const mask0 = polar ? skylineFor(dem, S.pick) : ctx0.mask;
-    const land0 = pickLandingWindow(eph, S.pick, mask0, fromMs)?.tMs ?? fromMs;
-    const dirs4 = skyDirections(eph, land0, stayDays, 4);
-    const k = mapScale(latDeg), stepKm = polar ? 1 : 2;   // ground km; map offsets × k
-    const grid = searchGrid(x, y, { radiusKm: 15 * k, stepKm: stepKm * k }).filter((p) => (polar ? p.latDeg <= TERRAIN_MAX_LAT : true));
-    const hb = (15 + stepKm / 2) * k;
-    grid.box = { x0: x - hb, x1: x + hb, y0: y - hb, y1: y + hb };
-    grid.cellKm = stepKm * k;
-    S.grid = grid;
-    const margin = siteMargins().min;
-    for (let n = 0; n < grid.length; n++) {
-      const p = grid[n];
-      const sky = skyStats(dirs4, p, polar ? skylineFor(dem, p) : siteCtx.quickMask(p), 4);
-      // off the poles: slope over 1 km on the global terrain; no permanent shadow there
-      const slope = polar ? slopeAt(p.xKm, p.yKm) : slopeDeg(ctx0.sampleXY, p.xKm, p.yKm, 1, k);
-      Object.assign(p, { sun: sky.sun, earth: sky.earth, darkH: sky.longestDarkH, slopeDeg: slope, shadowKm: polar ? shadowAt(p.xKm, p.yKm) : 99 });
-      const k2 = n;
-      if (k2 % 24 === 23 || k2 === grid.length - 1) {
-        const done = grid.slice(0, k2 + 1), s = suitability(done, { limitDeg: limit, battH });
-        done.forEach((q, n) => { q.score = s[n].score; q.ok = s[n].ok; q.done = true; q.cls = landableClass({ ...q, marginMs: Number.isFinite(margin) ? margin : 0 }, { limitDeg: limit, battH }); });
-        const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((k2 + 1) / grid.length) * 100)}%`;
-        draw();
-        await tick();
+    let stage = 1;
+    const res = await ev.evaluate(latDeg, lonDeg, {
+      onGrid: (grid) => { if (token === S.token) { S.grid = grid; draw(); } },
+      onProgress: (st, f) => {
         if (token !== S.token) return;
-      }
-    }
-    // stage 2: the pick and the eight best points that pass, in detail; the 1 km screen uses a 240 m slope, so the
-    // fine ellipse figures re-rank them (fewest fails, then fewest near limits, then suitability) and five are kept
-    const best = bestPoints(grid, { count: 8, minKm: 2 * k * (polar ? 1 : 1.5), avoid: [{ xKm: x, yKm: y }] });
-    setBody(`<p class="note">Scoring the point and the ${best.length} best spots in detail (terrain in the ellipse, sky over the stay, Δv)…</p><div class="pl-prog"><i style="width:0%"></i></div>`);
-    const pick = { ...S.pick, name: 'Your point' };
-    const cands = best.map((p) => ({ latDeg: p.latDeg, lonDeg: p.lonDeg, xKm: p.xKm, yKm: p.yKm, score: p.score }));
-    const all = [pick, ...cands];
-    for (let n = 0; n < all.length; n++) {
-      Object.assign(all[n], await detail(all[n], { vehicle, limit, battH, stayDays, fromMs }));
-      if (token !== S.token) return;
-      const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(((n + 1) / all.length) * 100)}%`;
-      await tick();
-    }
-    const count = (c, g) => c.figs.filter((f) => f.grade === g).length;
-    cands.sort((a, b) => count(a, 'fail') - count(b, 'fail') || count(a, 'near') - count(b, 'near') || b.score - a.score);
-    const list = [pick, ...cands.slice(0, 5)];
-    list.forEach((c, n) => { if (n) c.name = `Spot ${n}`; });
-    S.results = { list, limit, battH, stayDays };
+        if (st === 2 && stage === 1) { stage = 2; setBody('<p class="note">Scoring the point and the best spots in detail (terrain in the ellipse, sky over the stay, Δv)…</p><div class="pl-prog"><i style="width:0%"></i></div>'); }
+        const bar = body.querySelector('.pl-prog i'); if (bar) bar.style.width = `${Math.round(f * 100)}%`;
+      },
+    });
+    if (!res || token !== S.token) return;
+    S.results = { list: res.list, limit: res.limit, battH: res.battH, stayDays: res.stayDays };
     renderResults();
     draw();
   }
 
-  async function detail(c, { vehicle, limit, battH, stayDays, fromMs }) {
-    const dem = getDem();
-    const polar = c.latDeg <= TERRAIN_MAX_LAT;
-    const listed = sites.find((s) => distanceBearing(s, c).km < 0.2);
-    const site = { id: listed?.id ?? 'custom', name: listed?.name ?? `${fmtLat(c.latDeg)} ${fmtLon(c.lonDeg)}`, latDeg: c.latDeg, lonDeg: c.lonDeg };
-    let sample, resKm, mask, heightM, psrShare, psrNote, skyline;
-    const k = mapScale(c.latDeg);
-    if (polar) {
-      let terr = null;
-      try { terr = await loadSiteTerrain(meta, site, { halfKm: 0.6, hires }); } catch { terr = null; }
-      resKm = terr?.finestKm ?? 0.12;
-      if (c === S.results?.list?.[0] || c.name === 'Your point') L.fine = terr?.sample ?? null;
-      sample = terr?.sample ?? ((x, y) => (L.dem120 ?? dem).sample(x, y));
-      mask = skylineFor(dem, site); heightM = dem.heightAt(site.latDeg, site.lonDeg) ?? 0; skyline = 'LOLA 480 m polar DEM';
-    } else {
-      // north of 80°S: the global LOLA terrain around the point, its skyline computed out to 180 km
-      const ctx = await siteCtx.context(site);
-      sample = ctx.sampleXY; resKm = ctx.resKm; mask = ctx.mask; heightM = ctx.heightM; skyline = ctx.skyline; c.patch = ctx.patch;
-    }
-    // sample the ellipse at ≤ 30 m (the slopes still use a two-pixel baseline of the DEM), in ground metres
-    const pts = ellipsePoints(c.xKm, c.yKm, { stepM: Math.min(30, Math.max(5, resKm * 1000)), k });
-    const t = terrainStats(sample, pts, { baselineKm: Math.max(0.01, 2 * resKm), limitDeg: limit, k });
-    if (polar) psrShare = L.psr ? pts.filter(([x, y]) => L.psr.isPsr(x, y)).length / Math.max(1, pts.length) : (shadowAt(c.xKm, c.yKm) === 0 ? 1 : 0);
-    else if (Math.abs(c.latDeg) < 58) { psrShare = 0; psrNote = 'none: permanent shadow only occurs within about 30° of the poles'; }
-    else { psrShare = NaN; psrNote = 'unknown: no permanent-shadow map here (the page has the south polar one)'; }
-    const win = pickLandingWindow(eph, site, mask, fromMs);
-    const landingMs = win?.tMs ?? fromMs;
-    const sky = skyStats(skyDirections(eph, landingMs, stayDays, 1), site, mask, 1);
-    const at = skyAt(eph, site, landingMs, mask);
-    let budget = null;
-    try {
-      const plan = planMission({ eph, site, landingMs, vehicle, siteHeightKm: (heightM ?? 0) / 1000, mask });
-      if (plan.ok) budget = plan.budget;
-    } catch { budget = null; }
-    const figs = figures({ t, sky, psrShare, psrNote, budget, earthAtLanding: at ? at.earth.clearDeg > 0 : null, earthWindow: win?.earth ?? true, battH, limitDeg: limit, resKm, stayDays });
-    return { site, landingMs, figs, verdict: verdict(figs, { resKm }), resKm, polar, skyline, patch: c.patch ?? null, distKm: S.pick ? distanceBearing(S.pick, c).km : 0 };
-  }
+  // a listed site (or any place) in detail, as the Map's panel scores it (landeval.js)
+  const detail = (c, opts) => ev.detail(c, { ...opts, from: S.pick });
 
   function setBody(html) { body.innerHTML = html; }
   const G = { pass: 'pass', near: 'near', fail: 'fail' };

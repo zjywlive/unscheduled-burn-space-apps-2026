@@ -2,9 +2,13 @@
 // loads finer data on demand, and wires the command layer, the Ask panel and the tour (phase 3 §4).
 import { writeMission, readMission, landedFor, landFromHash, moonKm, stageUrl, readRoutePlan, writeRoutePlan } from './mission-flow.js';
 import { createGlobeMap } from './ui/globemap.js';
-import { createRegionLayer } from './ui/regionlayer.js';
 import { createLocalFrame, centreOf, localDem, mapPlan } from './localframe.js';
 import { createSiteContexts } from './lander/globalsite.js';
+import { createLandingEvaluator } from './lander/landeval.js';
+import { ELLIPSE, batteryHours } from './lander/siteplan.js';
+import { cleanVehicle, VEHICLE_DEFAULTS } from './lander/vehicle.js';
+import { createHiresSet } from './hires.js';
+import { createLandCard } from './ui/landcard.js';
 import { bootScreen } from './boot.js';
 import { createEphemeris, bodyAzEl } from './ephemeris.js';
 import { summarize, summarizePair, sampleSeries } from './windows.js';
@@ -177,7 +181,7 @@ function start() {
   const shell = createShell(root, { sites, state, onChange: (patch) => update(patch) });
   // the Map is one view of the whole Moon (ui/moonlayer.js): the globe when zoomed out, this page's polar map when
   // zoomed in over the south pole; made once the map exists (below)
-  let globeMap = null, regionLayer = null, pickedOnMap = false;
+  let globeMap = null, pickedOnMap = false;
 
   // ---------- data packs on demand (§4.1, §5.1) ----------
   const packs = {};   // name → 'loading' | 'ok' | 'error'
@@ -286,6 +290,8 @@ function start() {
 
   // a site or a point picked on the map, or typed in the Coordinates fold (fix L13): the same path
   function pickOnMap({ site, point }) {
+    // with Where to land open, a click proposes a landing point instead of choosing the site
+    if (kind === 'land') { proposeLanding(site ?? point); return; }
     kind = 'point';
     if (state.picking === 'alt') {
       if (site) update({ altSite: site.id === state.site.id ? 'same' : site.id });
@@ -335,7 +341,7 @@ function start() {
     onDial: (on) => settings.set('skyDial', !!on),
     onLivePref: () => renderMap(),
     onDetails: () => openSheet('overview'),
-    onLevel: () => regionLayer?.open(),
+    onLevel: () => openLanding(),   // Where to land, in the panel on this Moon
     onZoomOverride: (dir) => globeMap?.zoom(dir) ?? false,
     onFinalise: () => goFinalise(),
     onLandNow: () => landHereNow(),
@@ -362,6 +368,7 @@ function start() {
     globeMap.onRouteDrawn = (lls) => { setHandRoute(lls.map((p) => toXY(p.latDeg, p.lonDeg))); routePlanCard?.plan(); };
     // a rectangle, circle or polygon clicked out north of 80°S (georegion.js): into the current slot
     globeMap.onRegionDrawn = (shape) => { kind = 'region'; api.setRegion(state.slot, shape); };
+    globeMap.onLandSpot = (n) => selectLanding(n);
     // a click on a region's outline or on a route: the panel turns to it (a candidate route is chosen as well)
     globeMap.onFocus = (f) => {
       if (f.kind === 'region') { kind = 'region'; update({ slot: f.slot }); return; }
@@ -371,14 +378,7 @@ function start() {
     };
     globeMap.ready.then(() => redrawRoutes());   // a route from the link shows as soon as the globe exists
     globalThis.__globeMap = globeMap;   // for inspection from the console
-    regionLayer = createRegionLayer(document, {
-      topbar: shell.topbar, getMission: () => readMission(),
-      // the chosen site and time replace the plan's; the rover route (rp, rpsel) stays, so route planning carries on
-      onSite: (m) => {
-        const url = stageUrl('map', m), keep = location.hash.match(/(^|[#&])(rp|rpsel)=[^&]*/g) ?? [];
-        location.hash = url.slice(url.indexOf('#')) + keep.map((k) => `&${k.replace(/^[#&]/, '')}`).join('');
-      },
-    });
+    // (Where to land is the panel on this Moon, ui/landcard.js; the planner page's 2D map no longer opens here)
   }
   // a site chosen from a list, a link or Where to land: the camera goes to it (a click on the map does not move it)
   let globeSiteKey = null;
@@ -563,6 +563,82 @@ function start() {
     await runPlan(inp.points, maxSlopeDeg, { pick: inp.routeId ?? 'short' });
   }
   if (routePlanCard) mapView.mountFold('plan', routePlanCard.el);
+
+  // ---- Where to land in the Map's panel (ui/landcard.js; the planner's method, lander/landeval.js): a click on the
+  // Moon proposes a point while the panel is open; the point and the best spots within 15 km are scored; the globe
+  // shows the point, the search square and the numbered spots; Use this site makes one the mission's site ----
+  const landVehicle = () => cleanVehicle(readMission()?.vehicle ?? { ...VEHICLE_DEFAULTS });
+  const landEval = createLandingEvaluator({
+    eph, sites, meta, getDem: () => dem, siteCtx: globalSites,
+    hires: (() => { const m = readJson('data-hires'); return m ? createHiresSet(m, (name) => loadData(name, { timeoutMs: 60000 })) : null; })(),
+    getVehicle: landVehicle,
+    // as the planner page: the first lit window from two days before the planned landing (or from the playhead)
+    getFromMs: () => (state.windowOn && Number.isFinite(state.landingMs) ? state.landingMs - 2 * DAY_MS : state.cursorMs),
+    getStayDays: () => state.stayDays,
+  });
+  let land = { pick: null, busy: null, result: null, sel: 0, error: null };
+  const landCard = mapView ? createLandCard({ actionBar: mapView.actionBar }, {
+    onUse: (c) => useLanding(c),
+    onSearch: () => { if (land.pick) proposeLanding(land.pick); },
+    onSelect: (n) => selectLanding(n),
+  }) : null;
+  if (landCard) mapView.mountFold('land', landCard.el);
+  function landAssume() {
+    const v = landVehicle();
+    return `Assumed: 3σ landing ellipse ${ELLIPSE.downrangeM} m down-range × ${ELLIPSE.crossrangeM} m cross-range (terrain-relative navigation); slope limit ${v.touchdown.maxSlopeDeg}°; stay ${state.stayDays} days from the first lit window; battery ${v.batteryWh} Wh with ${Math.round(v.batteryMinSoc * 100)} % reserve on a ${v.loadsW.surface} W surface load = ${batteryHours(v).toFixed(1)} h of darkness.`;
+  }
+  function showLanding() {
+    landCard?.update({ ...land, assume: landAssume() });
+    mapView?.setFoldSummary('land', land.result ? land.result.list[land.sel]?.verdict.grade ?? '' : land.busy ? 'Searching…' : land.pick ? '' : 'Click the Moon');
+    landMarks();
+  }
+  // the point, the square and the spots on the globe, while the panel is open (globemap.js skips an unchanged set)
+  function landMarks() {
+    if (!globeMap) return;
+    if (kind !== 'land' || !land.pick) { globeMap.setLanding(null); return; }
+    const spots = (land.result?.list ?? []).slice(1).map((c, i) => ({ n: i + 1, latDeg: c.latDeg, lonDeg: c.lonDeg, grade: c.verdict.grade, title: `${c.name}: ${c.verdict.text}` }));
+    globeMap.setLanding({ pick: land.pick, box: land.box ?? null, spots, sel: land.sel });
+  }
+  function proposeLanding(p) {
+    const pick = { latDeg: +p.latDeg.toFixed(5), lonDeg: +(((p.lonDeg % 360) + 360) % 360).toFixed(5) };
+    land = { pick, busy: { stage: 1, f: 0 }, result: null, sel: 0, error: null, box: null };
+    showLanding();
+    landEval.evaluate(pick.latDeg, pick.lonDeg, {
+      onGrid: (g) => { if (land.pick === pick && land.box !== g.box) { land.box = g.box; showLanding(); } },
+      onProgress: (stage, f) => { if (land.pick !== pick) return; land.busy = { stage, f }; landCard?.update({ busy: land.busy }); },
+    }).then((res) => {
+      if (!res || land.pick !== pick) return;
+      land = { ...land, busy: null, result: res, sel: 0 };
+      showLanding();
+    }).catch((e) => {
+      if (land.pick !== pick) return;
+      land = { ...land, busy: null, error: `The search failed: ${e?.message ?? e}` };
+      showLanding();
+    });
+  }
+  function selectLanding(n) {
+    const c = land.result?.list[n];
+    if (!c) return;
+    land = { ...land, sel: n };
+    showLanding();
+    globeMap?.flyTo({ lat: c.latDeg, lon: c.lonDeg, dist: Math.min(globeMap.camera?.dist ?? 120, 120) });
+  }
+  // the chosen spot becomes the mission's site with its first lit landing time (as the planner page's Use this site:
+  // the mission and the hash; the rover route stays)
+  function useLanding(c) {
+    const listed = sites.find((s) => s.id === c.site.id);
+    const m = writeMission({ siteId: listed ? listed.id : null, siteName: listed ? listed.name : 'Map point', latDeg: c.latDeg, lonDeg: c.lonDeg, landingMs: c.landingMs, landed: null });
+    kind = 'point';
+    globeMap?.setLanding(null);
+    const url = stageUrl('map', m), keep = location.hash.match(/(^|[#&])(rp|rpsel|ra|rb)=[^&]*/g) ?? [];
+    location.hash = url.slice(url.indexOf('#')) + keep.map((k) => `&${k.replace(/^[#&]/, '')}`).join('');
+  }
+  function openLanding() {
+    kind = 'land';
+    update(state.view !== 'map' ? { view: 'map', tool: 'select' } : { tool: 'select' });
+    if (!land.pick && state.site) proposeLanding(state.site);
+    else showLanding();
+  }
   if (routePlanCard && rp.points) routePlanCard.update({ points: rp.points, ...(rp.maxSlopeDeg ? { maxSlopeDeg: rp.maxSlopeDeg } : {}) });
 
   function redrawRoutes() {
@@ -1497,6 +1573,7 @@ function start() {
   function render() {
     syncGlobeSite();
     globeMap?.update();
+    try { landMarks(); } catch { /* before Where to land exists */ }
     saveMission();
     syncLanded();
     derived = compute();
@@ -1856,7 +1933,6 @@ function start() {
     dialRadius: 150,
   }) : null;
   shell.tourButton.addEventListener('click', () => (storyMode ? storyMode.toggleMenu() : startTour()));
-  shell.landButton.addEventListener('click', () => { if (state.view !== 'map') update({ view: 'map' }); regionLayer?.open(); });
   // For tools/smoke.mjs and the timing scripts: the same commands the Ask panel uses.
   panel.setProvider(provider.label, provider.name !== 'mock');
 

@@ -1,0 +1,46 @@
+/* ---------- Where to land in the Map's panel (ui/landcard.js) and its spots on the globe (ui/globemap.js) ----------
+   Grades: pass green, near amber (the Sun's colour), fail --negative; the same three as the old planner page. */
+.card-land { --g-pass: #7fd18b; --g-near: var(--sun, #f2b33d); --g-fail: var(--negative, #e5484d); }
+.ld-assume { margin: 0 0 10px; color: var(--muted); font-size: var(--fs-small, 12px); line-height: 1.45; }
+.ld-note { margin: 8px 0; color: var(--muted); font-size: var(--fs-small, 12px); line-height: 1.45; }
+.ld-note.is-warn { color: var(--g-fail); }
+.ld-point { margin: 0 0 8px; line-height: 1.5; }
+.ld-badge { margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--g-pass); border-radius: 10px; color: var(--g-pass); font-size: 11px; line-height: 1.4; }
+.ld-badge.is-coarse { border-color: var(--g-near); color: var(--g-near); }
+.ld-verdict { margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; font-weight: 600; line-height: 1.4; background: rgba(255, 255, 255, 0.05); }
+.ld-verdict.g-pass { color: var(--g-pass); background: rgba(127, 209, 139, 0.12); }
+.ld-verdict.g-near { color: var(--g-near); background: rgba(242, 179, 61, 0.12); }
+.ld-verdict.g-fail { color: var(--g-fail); background: rgba(229, 72, 77, 0.14); }
+.ld-figs { list-style: none; margin: 0; padding: 0; }
+.ld-figs li { padding: 8px 0; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.12)); }
+.ld-f-h, .ld-f-v { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.ld-f-v b { font-variant-numeric: tabular-nums; }
+.ld-figs small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.ld-g { padding: 1px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.ld-figs li.g-pass :is(.ld-g, b), .ld-tbl .g-pass { color: var(--g-pass); }
+.ld-figs li.g-near :is(.ld-g, b), .ld-tbl .g-near { color: var(--g-near); }
+.ld-figs li.g-fail :is(.ld-g, b), .ld-tbl .g-fail { color: var(--g-fail); }
+.ld-h3 { margin: 14px 0 6px; font-size: var(--fs-label, 13px); }
+.ld-h3 small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; font-size: 11px; line-height: 1.4; }
+.ld-tbl { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ld-tbl th { color: var(--muted); font-weight: 400; text-align: left; padding: 4px 4px; }
+.ld-tbl td { padding: 5px 4px; border-top: 1px solid var(--hair, rgba(255, 255, 255, 0.12)); cursor: pointer; white-space: nowrap; }
+.ld-tbl .r { text-align: right; }
+.ld-tbl tr.on td { background: rgba(255, 255, 255, 0.08); }
+.ld-tbl tr:hover td { background: rgba(255, 255, 255, 0.05); }
+.ld-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--muted); vertical-align: 1px; }
+.ld-dot.g-pass { background: var(--g-pass); } .ld-dot.g-near { background: var(--g-near); } .ld-dot.g-fail { background: var(--g-fail); }
+.ld-prog { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.ld-prog i { display: block; height: 100%; background: var(--text, #fff); transition: width 200ms ease; }
+.is-bigmap .point-panel[data-kind="land"] > :not(.insp-head, .card-fold[data-fold="land"]) { display: none; }
+
+/* the numbered better spots on the globe: a click chooses one */
+.globe-land-spot {
+  position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; padding: 0; border-radius: 50%;
+  border: 1.5px solid #7fd18b; background: rgba(20, 22, 26, 0.85); color: #7fd18b; font: 600 11px/17px Inter, system-ui, sans-serif;
+  text-align: center; cursor: pointer; pointer-events: auto;
+}
+.globe-land-spot.g-near { border-color: #f2b33d; color: #f2b33d; }
+.globe-land-spot.g-fail { border-color: #e5484d; color: #e5484d; }
+.globe-land-spot.is-on { background: #7fd18b; color: #000; }
+.globe-land-spot.g-near.is-on { background: #f2b33d; } .globe-land-spot.g-fail.is-on { background: #e5484d; color: #fff; }

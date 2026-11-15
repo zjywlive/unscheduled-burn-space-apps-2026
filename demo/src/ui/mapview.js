@@ -356,7 +356,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   // fix L13: Coordinates (typed shapes and points, R's shape entry form) right after the selected point.
   // Phase 5: Energy and Relay link moved to the detail sheet's Power and Comms tabs; in the big layout the
   // inspector shows Coordinates with a region and Route plan with a route, open.
-  const FOLDS = [['coords', 'Coordinates'], ['plan', 'Route plan']];
+  const FOLDS = [['coords', 'Coordinates'], ['plan', 'Route plan'], ['land', 'Where to land']];
   const folds = Object.fromEntries(FOLDS.map(([name, title]) => {
     const summary = h('span', { class: 'filters-summary num' }, '');
     const toggle = h('button', { type: 'button', class: 'filters-toggle fold-toggle', 'aria-expanded': 'false', 'aria-controls': ids(`fold-${name}`), onclick: () => setFold(name, toggle.getAttribute('aria-expanded') !== 'true') },
@@ -381,6 +381,8 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
   // phase 5: with a point selected, Coordinates is where a point is typed (the site list's form is gone)
   folds.coords.summary.textContent = 'Type a point';
   routeCard.after(folds.plan.el);
+  folds.plan.el.after(folds.land.el);   // Where to land (ui/landcard.js): shown with the 'land' kind
+  folds.land.summary.textContent = 'Click the Moon';
 
   // ---------- regions and route ----------
   const regions = createRegionCard(regionCard, { onBest: (slot) => cb.onRegionBest(slot) });
@@ -419,7 +421,8 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       { id: 'details', label: 'Details', short: 'Details', icon: 'details', cls: 'details-btn', title: 'Open the site details: sky, elevation, rises and sets, power, comms, compare', attrs: { 'data-action': 'details', 'aria-haspopup': 'dialog' }, onClick: () => cb.onDetails?.() },
       { type: 'divider' },
       // planning tools at other levels, then step 2 of the mission (mission-flow.js)
-      // (Where to land is in the top bar, reachable from every panel: ui/shell.js)
+      // Where to land: the panel of that name (ui/landcard.js) on this same Moon
+      { id: 'next-region', label: 'Where to land', short: 'Land', icon: 'details', title: 'Score a landing point and find better spots nearby (click the Moon to propose one)', onClick: () => cb.onLevel?.('region') },
       { id: 'next-rover', label: 'Plan the rover route', short: 'Route', icon: 'route', title: 'Plan the rover route from the landing site (route card)', attrs: { 'data-stage': 'rover' }, href: () => stageUrl('rover', readMission()) },
       { id: 'next-3d', label: 'See it in 3D', short: '3D', icon: 'cube', title: 'The site (or the planned route) on the 3D Moon', attrs: { 'data-stage': '3d' }, href: () => stageUrl('3d', readMission(), { route: hasRoute() }) },
       { type: 'divider' },
@@ -581,7 +584,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
 
   // phase 5: the inspector follows the selected object. In the big layout only that object's sections show:
   // the point card; Route plan (open) with the route profile; or the region card with Coordinates (open).
-  const KIND_TITLE = { route: 'Route', region: 'Regions' };
+  const KIND_TITLE = { route: 'Route', region: 'Regions', land: 'Where to land' };
   const kindTitle = h('h2', { class: 'insp-kind-title' }, '');
   const kindClose = h('button', { type: 'button', class: 'insp-icon', 'aria-label': 'Close and go back to the selected point', title: 'Close and go back to the selected point', onclick: () => cb.onKind?.('point') }, closeIcon());
   const kindHead = h('div', { class: 'insp-head' }, kindTitle, kindClose);
@@ -596,6 +599,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
     kindTitle.textContent = KIND_TITLE[k] ?? '';
     if (layoutBig && k === 'route') setFold('plan', true);
     if (layoutBig && k === 'region') setFold('coords', true);
+    if (layoutBig && k === 'land') setFold('land', true);
   }
 
   // ---------- phase 4/5: the big-map layout (≥ 1101 px, Map view) ----------
@@ -730,7 +734,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       // the inspector: its head (route / region), then the point, Coordinates, the regions, Route plan and
       // the route profile (fix L2: the profile follows Route plan); CSS shows the selected object's
       pointCol.prepend(kindHead);
-      pointCol.append(regionCard, folds.plan.el);
+      pointCol.append(regionCard, folds.plan.el, folds.land.el);
       profileDock.append(routeCard);
       app?.append(profileDock);
       if (topModes) topModes.append(fieldModes, layersWrap);
@@ -747,6 +751,7 @@ export function createMapView({ mapCard, pointCard, filtersCard, regionCard, rou
       mapCol.append(regionCard);
       routeParent.append(routeCard);
       routeCard.after(folds.plan.el);
+      folds.plan.el.after(folds.land.el);
       profileDock.remove();
       frame.slots.tc.prepend(frame.loadingEl);
       // the read-out, legend, scale, hint and note go back to the frame's corners on the next update

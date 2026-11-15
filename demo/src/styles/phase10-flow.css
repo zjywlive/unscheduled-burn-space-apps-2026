@@ -26,12 +26,5 @@ button.globe-label { pointer-events: auto; cursor: pointer; }
 .map-frame .hover-card, #lsn-map-hover { z-index: 7; }
 .map-frame .skydial { z-index: 6; }
 
-/* "Where to land": the planner over the page under the top bar */
-.map-level-layer { position: fixed; left: 0; right: 0; top: var(--level-top, 56px); bottom: 0; z-index: 900; background: #000; }
-.map-level-layer[hidden] { display: none; }
-.map-level-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
-.map-level-frame[hidden] { display: none; }
-/* while a frame covers the map, the map's own floating chrome (action bar, dock, dial) stays under it */
-.map-level-open .ab-wrap { visibility: hidden; }
 /* narrow screens: the action bar sits just under the top bar (which wraps to three rows and scrolls away), not over it */
 @media (max-width: 1100px) { .app:not(.is-bigmap) .ab-wrap { top: calc(var(--level-top, 56px) + 8px); } }

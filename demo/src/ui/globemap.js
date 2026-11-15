@@ -425,6 +425,7 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     }
     taken = layerOn('labels') ? placed.slice() : [];
     placeGraticule();
+    placeLandSpots();
   }
 
   // ---- input: globe points → the polar map's own events ----
@@ -675,6 +676,46 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     return best;
   }
 
+  // ---- Where to land (ui/landcard.js, lander/landeval.js): the proposed point, the 30 km search square and the
+  // numbered better spots (buttons that choose one) ----
+  let landObj = null, landKey = '', landSpots = [];
+  function setLanding(d) {
+    if (!view) return;
+    const key = d ? JSON.stringify([d.pick, d.box, (d.spots ?? []).map((s) => [s.n, s.latDeg, s.lonDeg, s.grade]), d.sel]) : '';
+    if (key === landKey) return;
+    landKey = key;
+    clearObj(landObj); landObj = null;
+    for (const s of landSpots) s.el.remove();
+    landSpots = [];
+    if (!d) { schedule(30); return; }
+    const T = view.THREE, g = new T.Group();
+    if (d.box) {
+      const b = d.box, c = [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1], [b.x0, b.y0]], lls = [];
+      for (let i = 0; i < 4; i++) for (let k = 0; k < 12; k++) { const f = k / 12; lls.push(fromXY(c[i][0] + (c[i + 1][0] - c[i][0]) * f, c[i][1] + (c[i + 1][1] - c[i][1]) * f)); }
+      lls.push(lls[0]);
+      g.add(surfaceLine(lls, 0x7fd18b, { dashed: true, opacity: 0.7 }));
+    }
+    if (d.pick) g.add(surfaceDots([d.pick], 0xffffff, d.sel === 0 ? 12 : 9));
+    view.addObject(g); landObj = g;
+    for (const s of d.spots ?? []) {
+      const el = doc.createElement('button');
+      el.type = 'button'; el.className = `globe-land-spot g-${s.grade}${s.n === d.sel ? ' is-on' : ''}`; el.textContent = String(s.n);
+      el.title = s.title ?? `Spot ${s.n}`;
+      el.addEventListener('click', (e) => { e.stopPropagation(); api.onLandSpot?.(s.n); });
+      labels.appendChild(el);
+      landSpots.push({ ...s, el });
+    }
+    placeLandSpots();
+    schedule(30);
+  }
+  function placeLandSpots() {
+    for (const s of landSpots) {
+      const p = view.project(s.latDeg, s.lonDeg);
+      s.el.hidden = !p;
+      if (p) s.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+    }
+  }
+
   // the regions held in latitude and longitude, drawn on the globe (the polar ones are in the draped picture)
   function refreshGeoRegions() {
     if (!view) return;
@@ -803,7 +844,9 @@ export function createGlobeMap(doc, { frame, pyramid, eph, getState, onPickOutsi
     view: null, ready, el: layer,
     onRouteDrawn: null,
     onRegionDrawn: null,
-    onFocus: null,   // ({ kind: 'region', slot } | { kind: 'route', id }) an outline or a route clicked with the Select tool   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
+    onFocus: null,
+    onLandSpot: null,   // (n) a numbered Where to land spot clicked
+    setLanding: (d) => { ready.then(() => setLanding(d)); },   // ({ pick, box, spots: [{ n, latDeg, lonDeg, grade, title }], sel } | null)   // ({ kind: 'region', slot } | { kind: 'route', id }) an outline or a route clicked with the Select tool   // (geo shape) a rectangle, circle or polygon clicked out north of 80°S (georegion.js)
     setGlobalRoute: (d) => { ready.then(() => setGlobalRoute(d)); },
     // the global LOLA terrain: heights (m) anywhere, and its 474 m tiles over a box loaded on demand
     heightAt: (la, lo) => terrain.heightAt(la, lo),

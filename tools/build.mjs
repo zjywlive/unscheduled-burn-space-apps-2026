@@ -173,6 +173,8 @@ export function build(demo = join(dirname(fileURLToPath(import.meta.url)), '..',
     jsonScript('data-challenge', { url: 'https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/' }),
     jsonScript('data-terrain', data('data/terrain.json')),
     jsonScript('data-features', data('data/features.json')),
+    // the 5–20 m patch manifest around the listed sites (Where to land scores a point on them when present)
+    existsSync(join(demo, 'data', 'hires.json')) ? jsonScript('data-hires', data('data/hires.json')) : null,
     ...legacy,
     packScripts(packs.map((p) => p.name)),
   ].filter(Boolean).join('\n');

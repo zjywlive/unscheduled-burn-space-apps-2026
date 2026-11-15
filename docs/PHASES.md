@@ -270,7 +270,8 @@ becomes the Map and covers the whole Moon, and an explicit "Finalise mission con
 Workflow: Mission planning (Map) → Finalise → Launch → Spaceflight → Orbital manoeuvres → Lunar orbit insertion →
 Landing → Surface operations.
 
-- **Top bar** (15 Nov): one Map entry, the stage bar's step 1 (the view tab "Map" went); **Where to land** sits in the top bar beside Evidence and Brief, reachable from every panel (it left the point action bar); Evidence and Brief close on a second click.
+- **Top bar** (15 Nov): one Map entry, the stage bar's step 1 (the view tab "Map" went); Evidence and Brief close on a second click.
+- **Where to land in the Map** (15 Nov): the planner's method on the 3D Moon instead of its own page and 2D map. The point action bar's *Where to land* opens a panel (`ui/landcard.js`): a click on the Moon proposes a point; it and the five best spots within 15 km are scored by `lander/landeval.js` (the planner's computation, moved out of `planner.js`, which now uses it too): terrain in the 150 × 100 m ellipse, Sun and Earth over the stay, permanent shadow, battery, Δv. The globe draws the point, the 30 km search square and numbered spots (click one); *Use this site* makes one the site with its first lit landing time. The frame layer that showed `planner.html` over the Map is gone (`planner.html` still opens on its own). Not moved: the planner's region-wide landable shading (the Map's Suitability mode covers that ground).
 - **Stage bar** (`mission-flow.js`): *Plan* 1 Map (`index.html`) › 2 Finalise (`finalise.html`), *Fly* 3 Execute
   (`lander.html`). Execute is marked locked until a configuration is frozen. The six execution phases are named once
   (`EXEC_PHASES`, each with the lander phases it covers). The globe is no longer a step: it is the Map's whole-Moon
