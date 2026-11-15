@@ -128,10 +128,12 @@ export function createRelayCard(deps = {}, callbacks = {}) {
     h('details', { class: 'fold-more relay-notes' }, h('summary', null, 'Notes'),
       h('ul', { class: 'relay-foot fold-more-body' }, CAVEATS.map((t) => h('li', null, t)))));
 
+  // the field being typed in keeps its text (rewriting it ends a date typed segment by segment: 25 became 05)
   function fillInputs() {
-    for (const f of FIELDS) inputs[f.key].value = String(elements[f.key]);
-    inputs.epochMs.value = ok(elements.epochMs) ? toInput(elements.epochMs) : '';
-    inputs.minEl.value = String(minElDeg);
+    const set = (inp, v) => { if (inp !== document.activeElement) inp.value = v; };
+    for (const f of FIELDS) set(inputs[f.key], String(elements[f.key]));
+    set(inputs.epochMs, ok(elements.epochMs) ? toInput(elements.epochMs) : '');
+    set(inputs.minEl, String(minElDeg));
     select.value = presetId ?? 'custom';
   }
 

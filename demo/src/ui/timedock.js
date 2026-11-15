@@ -232,14 +232,25 @@ export function createTimeDock(opts) {
   const sumShort = h('span', { class: 'td-sum-short num' });
   const sumBtn = h('button', { type: 'button', class: 'td-btn td-line td-sum', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': `${id}-win`, title: 'Landing, stay, alternative' }, sumLong, sumShort, caret());
   const landInput = h('input', { id: `${id}-land`, type: 'datetime-local', class: 'td-input num', step: 3600, autocomplete: 'off' });
-  landInput.addEventListener('change', () => {
+  // a date typed segment by segment changes the value at every key ("2" of "25" already makes day 02): the new landing
+  // is applied once the typing pauses, on Enter or on leaving the field, not at each key (applying re-renders the dock,
+  // which ended the two-digit entry: typing 25 gave 05)
+  let landTimer = 0;
+  const landSoon = () => { clearTimeout(landTimer); landTimer = setTimeout(applyLand, 900); };
+  landInput.addEventListener('change', landSoon);
+  landInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); applyLand(); } else if (landTimer) landSoon();
+  });
+  landInput.addEventListener('blur', () => { if (landTimer) applyLand(); });
+  function applyLand() {
+    clearTimeout(landTimer); landTimer = 0;
     const t0 = fromInputValue(landInput.value), w = timeline.getState().window;
     if (t0 === null || !w) return;
     const t = Math.floor(t0 / HOUR_MS) * HOUR_MS;   // review 2 F4: landings are whole hours (the input's step)
     if (t !== t0) landInput.value = toInputValue(t);
     const stayMs = (data.stayDays ?? (w.outMs - w.inMs) / DAY_MS) * DAY_MS;
     if (onWindowRequest) requestWindow(t, stayMs); else applyWindow(t, t + stayMs);
-  });
+  }
   const stayBtns = stays.map((d) => h('button', { type: 'button', class: 'td-btn td-seg-btn num', 'data-days': d, 'aria-pressed': 'false', onclick: () => {
     const w = timeline.getState().window;
     if (!w) return;
@@ -464,8 +475,11 @@ export function createTimeDock(opts) {
       sumShort.textContent = fmtWindowSummary(wr, data.slipDays, { short: true });
       sumBtn.setAttribute('aria-label', `Mission window: landing ${fmtDateTime(w.inMs)}, stay ${fmtStay(wr.outMs - wr.inMs)}, ${fmtSlip(data.slipDays)}`);
       if (!winPopEl.hidden) {
-        if (document.activeElement !== landInput) landInput.value = toInputValue(w.inMs);
-        landInput.min = toInputValue(st.startMs); landInput.max = toInputValue(st.endMs - (onWindowRequest ? HOUR_MS : MIN_WINDOW_MS));
+        // (the field being typed in is left alone: rewriting its value or bounds ends the entry under way)
+        if (document.activeElement !== landInput) {
+          landInput.value = toInputValue(w.inMs);
+          landInput.min = toInputValue(st.startMs); landInput.max = toInputValue(st.endMs - (onWindowRequest ? HOUR_MS : MIN_WINDOW_MS));
+        }
         stayBtns.forEach((b) => b.setAttribute('aria-pressed', String(wr.outMs - wr.inMs === Number(b.dataset.days) * DAY_MS)));
         slipBtns.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.days) === data.slipDays)));
       }
