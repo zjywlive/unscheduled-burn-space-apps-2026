@@ -64,5 +64,5 @@ carries each one. Code references are to `demo/src/`.
   while the camera moves, newly uncovered polar ground shows the globe's own shading until the refresh.
 - Labels and arrows in the picture lie flat on the terrain: they read upright from above (the camera turns so 0°E is
   up near the pole, as on the old map) and lean with the ground when the view is tilted.
-- Outside 80°S the heat modes use a smooth horizon, and Suitability, regions and routes are not available.
+- Outside 80°S the heat modes use a smooth horizon, Suitability and regions are not available, and routes are planned on the global 474 m terrain without PSR or havens.
 - No pinch zoom on the globe yet (buttons and wheel zoom).
