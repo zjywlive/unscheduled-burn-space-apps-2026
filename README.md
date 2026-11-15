@@ -62,9 +62,9 @@ sunniest), then for the chosen one:
   every 2 km of the route, and a comms-denied heading using the Sun and Earth.
 
 **Plan before launch, then fly.** Every page carries the same stage bar: *Plan* 1 Map → 2 Finalise, then *Fly*
-3 Execute. Everything is decided on the Map: the site anywhere on the Moon (three levels of detail: the whole Moon in
-3D, a region with the landing-spot planner, the south-pole site analysis), the landing time and its slip, the rover
-route and its departure. Finalise (`demo/finalise.html`) checks go / no-go, takes the last change to the assumed
+3 Execute. Everything is decided on the Map: the site anywhere on the Moon (one view: zoomed out it is the whole Moon in 3D,
+click anywhere to choose a site; zoom in over the south pole and it becomes the detailed site map; Where to land
+scores landing spots near any point), the landing time and its slip, the rover route and its departure. Finalise (`demo/finalise.html`) checks go / no-go, takes the last change to the assumed
 vehicle and freezes the configuration; Execute (`demo/lander.html`) flies exactly that configuration: launch,
 spaceflight, orbital manoeuvres, lunar orbit insertion, landing, and surface operations (the planned rover drive).
 
